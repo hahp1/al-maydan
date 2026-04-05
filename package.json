@@ -9,12 +9,13 @@
   },
   "dependencies": {
     "expo": "~51.0.0",
+    "expo-font": "~12.0.10",
     "react": "18.2.0",
-    "react-native": "0.74.0",
+    "react-native": "0.74.5",
     "xlsx": "*",
-    "@expo/vector-icons": "^15.0.3",
+    "@expo/vector-icons": "^14.0.3",
     "react-native-paper": "4.9.2",
-    "expo-document-picker": "~14.0.8",
-    "@react-native-async-storage/async-storage": "2.2.0"
+    "expo-document-picker": "~12.0.2",
+    "@react-native-async-storage/async-storage": "1.23.1"
   }
 }

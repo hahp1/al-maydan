@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, TextInput, StatusBar, ScrollView, Image, Alert } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AddQuestionScreen from './AddQuestionScreen';
 import ImportScreen from './ImportScreen';
@@ -85,7 +84,6 @@ export default function AdminScreen({ onBack }) {
     );
   };
 
-  // ✅ مُصحَّح: يقبل newName و newEmoji من AddQuestionScreen
   const handleSaveQuestions = async (newQuestions, newName, newEmoji) => {
     const updated = categories.map(c =>
       c.id === selectedCategory.id
@@ -94,23 +92,6 @@ export default function AdminScreen({ onBack }) {
     );
     await saveCategories(updated);
     setSelectedCategory(null);
-  };
-
-  const handlePickImage = async (cat) => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled) {
-      const updated = categories.map(c =>
-        c.id === cat.id ? { ...c, image: result.assets[0].uri } : c
-      );
-      await saveCategories(updated);
-    }
   };
 
   if (!authenticated) {
@@ -159,7 +140,6 @@ export default function AdminScreen({ onBack }) {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
-
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <Text style={styles.backText}>→ رجوع</Text>
@@ -169,7 +149,6 @@ export default function AdminScreen({ onBack }) {
           <Text style={styles.logoutText}>خروج 🔒</Text>
         </TouchableOpacity>
       </View>
-
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{categories.length}</Text>
@@ -180,11 +159,9 @@ export default function AdminScreen({ onBack }) {
           <Text style={styles.statLabel}>سؤال</Text>
         </View>
       </View>
-
       <TouchableOpacity style={styles.importBtn} onPress={() => setShowImport(true)}>
         <Text style={styles.importBtnText}>📥 استيراد أسئلة من Excel</Text>
       </TouchableOpacity>
-
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>➕ إضافة فئة جديدة</Text>
         <View style={styles.addRow}>
@@ -209,7 +186,6 @@ export default function AdminScreen({ onBack }) {
           </TouchableOpacity>
         </View>
       </View>
-
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>📚 الفئات الحالية</Text>
         {loading ? (
@@ -219,16 +195,9 @@ export default function AdminScreen({ onBack }) {
         ) : (
           categories.map((cat) => (
             <View key={cat.id} style={styles.catRow}>
-              <TouchableOpacity onPress={() => handlePickImage(cat)}>
-                {cat.image ? (
-                  <Image source={{ uri: cat.image }} style={styles.catImage} />
-                ) : (
-                  <View style={styles.catImagePlaceholder}>
-                    <Text style={styles.catEmoji}>{cat.emoji}</Text>
-                    <Text style={styles.addImageText}>📷</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+              <View style={styles.catImagePlaceholder}>
+                <Text style={styles.catEmoji}>{cat.emoji}</Text>
+              </View>
               <View style={styles.catInfo}>
                 <Text style={styles.catName}>{cat.name}</Text>
                 <Text style={styles.catQuestions}>{cat.questions?.length || 0} سؤال</Text>
@@ -237,10 +206,7 @@ export default function AdminScreen({ onBack }) {
                 <TouchableOpacity style={styles.editBtn} onPress={() => setSelectedCategory(cat)}>
                   <Text style={styles.editBtnText}>✏️ أسئلة</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={() => handleDeleteCategory(cat.id, cat.name)}
-                >
+                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteCategory(cat.id, cat.name)}>
                   <Text style={styles.deleteBtnText}>🗑️</Text>
                 </TouchableOpacity>
               </View>
@@ -248,134 +214,47 @@ export default function AdminScreen({ onBack }) {
           ))
         )}
       </View>
-
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: '#0d0d2b',
-    paddingHorizontal: 24,
-    paddingVertical: 50,
-    gap: 24,
-  },
-  loginBox: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-    paddingHorizontal: 24,
-  },
+  container: { flexGrow: 1, backgroundColor: '#0d0d2b', paddingHorizontal: 24, paddingVertical: 50, gap: 24 },
+  loginBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 24 },
   lockIcon: { fontSize: 60 },
   loginTitle: { fontSize: 28, fontWeight: '900', color: '#f5c518' },
   loginSubtitle: { color: '#a09060', fontSize: 14 },
-  input: {
-    backgroundColor: '#1a1a3e',
-    borderWidth: 1.5,
-    borderColor: '#2a2a55',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    color: '#ffffff',
-    fontSize: 16,
-    width: '100%',
-  },
+  input: { backgroundColor: '#1a1a3e', borderWidth: 1.5, borderColor: '#2a2a55', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, color: '#ffffff', fontSize: 16, width: '100%' },
   error: { color: '#ff6666', fontSize: 14, fontWeight: '700' },
-  loginBtn: {
-    backgroundColor: '#f5c518',
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    width: '100%',
-    elevation: 8,
-  },
+  loginBtn: { backgroundColor: '#f5c518', paddingVertical: 16, borderRadius: 16, alignItems: 'center', width: '100%', elevation: 8 },
   loginBtnText: { color: '#0d0d2b', fontSize: 18, fontWeight: '800' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backBtn: { padding: 8 },
   backText: { color: '#f5c518', fontSize: 16, fontWeight: '700' },
   title: { fontSize: 20, fontWeight: '900', color: '#f5c518' },
   logoutBtn: { padding: 8 },
   logoutText: { color: '#ff6666', fontSize: 14, fontWeight: '700' },
   statsRow: { flexDirection: 'row', gap: 12 },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#1a1a3e',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#f5c51833',
-    gap: 4,
-  },
+  statCard: { flex: 1, backgroundColor: '#1a1a3e', borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#f5c51833', gap: 4 },
   statNum: { color: '#f5c518', fontSize: 32, fontWeight: '900' },
   statLabel: { color: '#a09060', fontSize: 14, fontWeight: '600' },
-  importBtn: {
-    backgroundColor: '#1a3a6e',
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#4a6aae',
-  },
+  importBtn: { backgroundColor: '#1a3a6e', paddingVertical: 14, borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: '#4a6aae' },
   importBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
   section: { gap: 12 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: '#f5c518' },
   addRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  addBtn: {
-    backgroundColor: '#f5c518',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
+  addBtn: { backgroundColor: '#f5c518', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, alignItems: 'center' },
   addBtnText: { color: '#0d0d2b', fontSize: 15, fontWeight: '800' },
   loadingText: { color: '#a09060', textAlign: 'center', fontSize: 15 },
-  catRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a3e',
-    borderRadius: 14,
-    padding: 14,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: '#2a2a55',
-  },
-  catImage: { width: 52, height: 52, borderRadius: 10 },
-  catImagePlaceholder: {
-    width: 52,
-    height: 52,
-    borderRadius: 10,
-    backgroundColor: '#0d0d2b',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#2a2a55',
-    borderStyle: 'dashed',
-  },
-  catEmoji: { fontSize: 22 },
-  addImageText: { fontSize: 10 },
+  catRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a3e', borderRadius: 14, padding: 14, gap: 12, borderWidth: 1, borderColor: '#2a2a55' },
+  catImagePlaceholder: { width: 52, height: 52, borderRadius: 10, backgroundColor: '#0d0d2b', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2a2a55' },
+  catEmoji: { fontSize: 26 },
   catInfo: { flex: 1, gap: 4 },
   catName: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
   catQuestions: { color: '#a09060', fontSize: 12 },
   catActions: { flexDirection: 'row', gap: 8 },
-  editBtn: {
-    backgroundColor: '#1a3a6e',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
+  editBtn: { backgroundColor: '#1a3a6e', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
   editBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
-  deleteBtn: {
-    backgroundColor: '#3a1a1a',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
+  deleteBtn: { backgroundColor: '#3a1a1a', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
   deleteBtnText: { fontSize: 16 },
 });

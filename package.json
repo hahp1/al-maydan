@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "xlsx": "*",
-    "expo-image-picker": "~17.0.10",
+    "expo-image-picker": "~16.0.6",
     "@expo/vector-icons": "^15.0.3",
     "react-native-paper": "4.9.2",
     "expo-document-picker": "~14.0.8",

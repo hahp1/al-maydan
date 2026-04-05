@@ -1,7 +1,7 @@
 {
   "name": "al-maydan",
   "version": "1.0.0",
-  "main": "node_modules/expo/AppEntry.js",
+  "main": "app.js",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",

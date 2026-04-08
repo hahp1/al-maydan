@@ -14,8 +14,8 @@ export default function LoginScreen({ onLogin, onGuest }) {
   const [loadingGoogle, setLoadingGoogle] = useState(false);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
-    androidClientId: 'YOUR_ANDROID_CLIENT_ID',
-    webClientId: 'YOUR_WEB_CLIENT_ID',
+    androidClientId: '961744403836-as5ilmqr28k91uso1bkvqeb4ss5h9gpl.apps.googleusercontent.com',
+    webClientId: '961744403836-as5ilmqr28k91uso1bkvqeb4ss5h9gpl.apps.googleusercontent.com',
   });
 
   const handleGoogle = async () => {

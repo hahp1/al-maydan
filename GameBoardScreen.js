@@ -13,9 +13,13 @@ const pointColors = {
   500: '#7a1a1a',
 };
 
+// level في JSON الجديد → نقاط اللعبة
+const LEVEL_TO_POINTS = { 1: 100, 2: 200, 3: 300, 4: 400, 5: 500 };
+const POINTS_TO_LEVEL = { 100: 1, 200: 2, 300: 3, 400: 4, 500: 5 };
+
 const POINTS = [500, 400, 300, 200, 100];
 
-export default function GameBoardScreen({ onGameEnd, team1, team2, selectedCategories }) {
+export default function GameBoardScreen({ onGameEnd, team1, team2, selectedCategories, gameMode = 'classic' }) {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
   const numCats = selectedCategories.length;
@@ -30,12 +34,19 @@ export default function GameBoardScreen({ onGameEnd, team1, team2, selectedCateg
 
   const handleOpenQuestion = (cat, pts, side) => {
     if (isUsed(cat.id, pts, side)) return;
+
     const questions = cat.questions || [];
     if (questions.length === 0) {
       Alert.alert('تنبيه', 'لا توجد أسئلة في هذه الفئة!');
       return;
     }
-    const q = questions[Math.floor(Math.random() * questions.length)];
+
+    // فلترة حسب المستوى إذا كان JSON بالصيغة الجديدة
+    const targetLevel = POINTS_TO_LEVEL[pts];
+    const levelQuestions = questions.filter(q => q.level === targetLevel);
+    const pool = levelQuestions.length > 0 ? levelQuestions : questions;
+    const q = pool[Math.floor(Math.random() * pool.length)];
+
     setActiveQuestion({ cat, pts, side, question: q });
   };
 
@@ -71,10 +82,12 @@ export default function GameBoardScreen({ onGameEnd, team1, team2, selectedCateg
   const colWidth = Math.max(idealColW, minColW);
 
   if (activeQuestion) {
+    const q = activeQuestion.question;
     return (
       <QuestionScreen
-        question={activeQuestion.question.text}
-        answer={activeQuestion.question.answer}
+        question={q.question ?? q.text}        // دعم الصيغتين
+        answer={q.correct ?? q.answer}         // دعم الصيغتين
+        wrong={q.wrong ?? []}                  // الإجابات الخاطئة
         points={activeQuestion.pts}
         category={activeQuestion.cat.name}
         team1={team1}
@@ -82,6 +95,7 @@ export default function GameBoardScreen({ onGameEnd, team1, team2, selectedCateg
         currentTeam={currentTeam}
         onAnswer={handleAnswer}
         onBack={() => setActiveQuestion(null)}
+        mode={gameMode}                        // 'classic' | 'mcq'
       />
     );
   }
@@ -96,7 +110,7 @@ export default function GameBoardScreen({ onGameEnd, team1, team2, selectedCateg
         <Text style={styles.endText}>إنهاء</Text>
       </TouchableOpacity>
 
-      {/* فريق 2 — ثابت */}
+      {/* فريق 2 */}
       <View style={styles.teamCard}>
         <Text style={styles.teamName} numberOfLines={1}>
           {scores.team2 > scores.team1 && scores.team2 > 0 ? '👑 ' : ''}{team2}
@@ -104,10 +118,9 @@ export default function GameBoardScreen({ onGameEnd, team1, team2, selectedCateg
         <Text style={styles.teamScore}>{scores.team2}</Text>
       </View>
 
-      {/* فراغ مرن في المنتصف */}
       <View style={styles.spacer} />
 
-      {/* فريق 1 — ثابت */}
+      {/* فريق 1 */}
       <View style={styles.teamCard}>
         <Text style={styles.teamName} numberOfLines={1}>
           {scores.team1 >= scores.team2 && scores.team1 > 0 ? '👑 ' : ''}{team1}
@@ -115,7 +128,7 @@ export default function GameBoardScreen({ onGameEnd, team1, team2, selectedCateg
         <Text style={styles.teamScore}>{scores.team1}</Text>
       </View>
 
-      {/* يمين: أيقونة الدور */}
+      {/* الدور */}
       <View style={styles.turnCard}>
         <Text style={styles.turnLabel}>دور</Text>
         <Text style={styles.turnName} numberOfLines={1}>
@@ -194,8 +207,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d0d2b',
     paddingTop: 46,
   },
-
-  // ── الشريط العلوي ──
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -206,11 +217,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#1a1a3e',
     gap: 8,
   },
-
-  // فراغ مرن
   spacer: { flex: 1 },
-
-  // بطاقة الفريق (ثابتة)
   teamCard: {
     alignItems: 'center',
     backgroundColor: '#1a1a3e',
@@ -233,8 +240,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
   },
-
-  // أيقونة الدور — يمين
   turnCard: {
     alignItems: 'center',
     backgroundColor: '#f5c518',
@@ -243,11 +248,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     minWidth: 75,
   },
-  turnLabel: {
-    color: '#0d0d2b',
-    fontSize: 10,
-    fontWeight: '700',
-  },
+  turnLabel: { color: '#0d0d2b', fontSize: 10, fontWeight: '700' },
   turnName: {
     color: '#0d0d2b',
     fontSize: 12,
@@ -255,8 +256,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 90,
   },
-
-  // زر إنهاء — يسار
   endBtn: {
     alignItems: 'center',
     backgroundColor: '#1a1a3e',
@@ -269,8 +268,6 @@ const styles = StyleSheet.create({
   },
   endIcon: { fontSize: 16 },
   endText: { color: '#ff6666', fontSize: 10, fontWeight: '700' },
-
-  // رؤوس الفئات
   catHeader: {
     backgroundColor: '#1a1a3e',
     borderRadius: 10,
@@ -288,8 +285,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 2,
   },
-
-  // خلايا النقاط
   cellPair: {
     flexDirection: 'row',
     borderRadius: 8,

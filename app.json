@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "almaydan",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -23,7 +24,7 @@
         "backgroundColor": "#0d0d2b"
       },
       "package": "com.almaydan.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [],
       "googleServicesFile": "./google-services.json"
     },
@@ -31,7 +32,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@react-native-google-signin/google-signin"
+      "expo-auth-session"
     ],
     "extra": {
       "eas": {

@@ -183,6 +183,8 @@ function LocalSetup({ onStart, onBack }) {
 // ══════════════════════════════════════════
 // شاشة اللعبة المحلية
 // ══════════════════════════════════════════
+const TURN_DURATION = 15; // ثواني
+
 function LocalGame({ name1, name2, xPlayer, onBack }) {
   // xPlayer=1 يعني اللاعب1 هو X في الجولة التي يبدأها
   // كل جولة: من يبدأ = X، الثاني = O
@@ -196,6 +198,10 @@ function LocalGame({ name1, name2, xPlayer, onBack }) {
   const [lastResult, setLastResult] = useState(null);
   const [gameOver, setGameOver] = useState(false);
   const [winLine, setWinLine] = useState([]);
+  const [timeLeft, setTimeLeft] = useState(TURN_DURATION);
+  const timerBarAnim = useRef(new Animated.Value(1)).current;
+  const timerRef = useRef(null);
+  const timerAnimRef = useRef(null);
 
   // من يبدأ هذه الجولة؟
   // جولة 1,3,5,7 → xPlayer يبدأ (أي هو X)
@@ -203,6 +209,44 @@ function LocalGame({ name1, name2, xPlayer, onBack }) {
   const starterThisRound = round % 2 === 1 ? xPlayer : (xPlayer === 1 ? 2 : 1);
   // اللاعب الحالي في الجولة (من يتحرك الآن)
   const [currentMover, setCurrentMover] = useState(starterThisRound);
+
+  const startTimer = (mover, currentBoard, currentRound, currentScores, currentRoundResults) => {
+    // إيقاف أي مؤقت سابق
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (timerAnimRef.current) timerAnimRef.current.stop();
+
+    setTimeLeft(TURN_DURATION);
+    timerBarAnim.setValue(1);
+
+    timerAnimRef.current = Animated.timing(timerBarAnim, {
+      toValue: 0,
+      duration: TURN_DURATION * 1000,
+      useNativeDriver: false,
+    });
+    timerAnimRef.current.start();
+
+    let remaining = TURN_DURATION;
+    timerRef.current = setInterval(() => {
+      remaining -= 1;
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+        // فقدان الدور — ننتقل للاعب الآخر
+        const nextMover = mover === 1 ? 2 : 1;
+        setCurrentMover(nextMover);
+        // نشغّل المؤقت للاعب التالي بعد تأخير بسيط
+        setTimeout(() => {
+          startTimer(nextMover, currentBoard, currentRound, currentScores, currentRoundResults);
+        }, 100);
+      }
+    }, 1000);
+  };
+
+  const stopTimer = () => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (timerAnimRef.current) timerAnimRef.current.stop();
+  };
 
   // عند بداية جولة جديدة نعيد currentMover
   useEffect(() => {
@@ -212,6 +256,14 @@ function LocalGame({ name1, name2, xPlayer, onBack }) {
     setWinLine([]);
   }, [round]);
 
+  // نشغّل المؤقت عند تغيير currentMover أو board (بداية دور جديد)
+  useEffect(() => {
+    if (showResult || gameOver) { stopTimer(); return; }
+    startTimer(currentMover, board, round, scores, roundResults);
+    return () => stopTimer();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMover, showResult, gameOver, round]);
+
   // من يبدأ الجولة الحالية = X
   const getSymbol = (mover) => {
     const starter = round % 2 === 1 ? xPlayer : (xPlayer === 1 ? 2 : 1);
@@ -220,6 +272,7 @@ function LocalGame({ name1, name2, xPlayer, onBack }) {
 
   const handleCell = (i) => {
     if (board[i] || showResult) return;
+    stopTimer();
     const symbol = getSymbol(currentMover);
     const newBoard = [...board];
     newBoard[i] = symbol;
@@ -316,6 +369,23 @@ function LocalGame({ name1, name2, xPlayer, onBack }) {
             : `دور ${currentName} (${currentSymbol})`}
         </Text>
       </View>
+
+      {/* شريط المؤقت */}
+      {!showResult && (
+        <View style={styles.timerBarWrap}>
+          <Animated.View style={[
+            styles.timerBarFill,
+            {
+              width: timerBarAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+              backgroundColor: timerBarAnim.interpolate({
+                inputRange: [0, 0.3, 1],
+                outputRange: ['#ef4444', '#f59e0b', '#34d399'],
+              }),
+            },
+          ]} />
+          <Text style={styles.timerBarText}>{timeLeft}s</Text>
+        </View>
+      )}
 
       {/* الشبكة */}
       <BoardGrid board={board} onPress={handleCell} disabled={showResult} winLine={winLine} />
@@ -830,6 +900,23 @@ const styles = StyleSheet.create({
   },
   startBtnDisabled: { opacity: 0.4 },
   startBtnText: { color: '#06061a', fontSize: 16, fontWeight: '900' },
+
+  // شريط المؤقت
+  timerBarWrap: {
+    marginHorizontal: 20, marginBottom: 16,
+    height: 10, backgroundColor: '#0f0f2e',
+    borderRadius: 8, overflow: 'hidden',
+    borderWidth: 1, borderColor: '#ffffff10',
+    flexDirection: 'row', alignItems: 'center',
+  },
+  timerBarFill: {
+    height: '100%', borderRadius: 8,
+    position: 'absolute', left: 0, top: 0,
+  },
+  timerBarText: {
+    position: 'absolute', right: 8,
+    color: '#ffffff60', fontSize: 9, fontWeight: '700',
+  },
 
   // لوحة النقاط
   scoreboard: {

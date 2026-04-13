@@ -20,6 +20,7 @@ import HomeScreen from './HomeScreen';
 import KnowledgeArenaScreen from './KnowledgeArenaScreen';
 import GamesArenaScreen from './GamesArenaScreen';
 import FriendsScreen from './FriendsScreen';
+import XOGameScreen from './XOGameScreen';
 
 const HIGHSCORE_KEY = 'almaydan_highscore';
 
@@ -124,6 +125,16 @@ export default function App() {
       categories={categories}
       onBack={() => setScreen('knowledge')}
       currentUser={user}
+    />
+  );
+
+  // ── ألعاب الميدان ──
+  if (screen === 'xo') return (
+    <XOGameScreen
+      onBack={() => setScreen('games')}
+      currentUser={user}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
     />
   );
 

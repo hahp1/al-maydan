@@ -391,6 +391,8 @@ export default function BullshitGameScreen({ onBack, currentUser, tokens, onSpen
       currentRank={roomData?.currentRank} turnStartedAt={roomData?.turnStartedAt}
       onPlay={playCards} onBullshit={callBullshit} onLeave={leaveRoom}
       onTimeout={handleTimeout} animPile={animPile}
+      roomId={roomId} myName={myName}
+      messages={roomData?.messages || []}
     />
   );
 
@@ -575,18 +577,135 @@ function LobbyScreen({ roomData, roomId, myUid, isHost, friendSearch, friendResu
 }
 
 // ══════════════════════════════════════
+// مكوّن الجات
+// ══════════════════════════════════════
+function ChatOverlay({ messages, myUid, myName, roomId, onClose }) {
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  }, [messages]);
+
+  async function sendMessage() {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+    setSending(true);
+    try {
+      await updateDoc(doc(db, 'bullshit_rooms', roomId), {
+        messages: arrayUnion({
+          uid: myUid,
+          name: myName,
+          text: trimmed,
+          time: Date.now(),
+        }),
+      });
+      setText('');
+    } catch (e) { Alert.alert('خطأ', e.message); }
+    setSending(false);
+  }
+
+  return (
+    <View style={chat.overlay}>
+      {/* هيدر الجات */}
+      <View style={chat.header}>
+        <TouchableOpacity onPress={onClose} style={chat.closeBtn}>
+          <Text style={chat.closeText}>✕</Text>
+        </TouchableOpacity>
+        <Text style={chat.headerTitle}>💬 جات الغرفة</Text>
+        <View style={{ width: 36 }} />
+      </View>
+
+      {/* الرسائل */}
+      <ScrollView
+        ref={scrollRef}
+        style={chat.msgList}
+        contentContainerStyle={chat.msgListContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {messages.length === 0 && (
+          <Text style={chat.emptyText}>لا رسائل بعد — قل شيئاً! 👋</Text>
+        )}
+        {messages.map((m, i) => {
+          const isMe = m.uid === myUid;
+          return (
+            <View key={i} style={[chat.msgRow, isMe && chat.msgRowMe]}>
+              {!isMe && <Text style={chat.msgName}>{m.name}</Text>}
+              <View style={[chat.bubble, isMe ? chat.bubbleMe : chat.bubbleOther]}>
+                <Text style={[chat.bubbleText, isMe && chat.bubbleTextMe]}>{m.text}</Text>
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+
+      {/* حقل الإدخال */}
+      <View style={chat.inputRow}>
+        <TextInput
+          style={chat.input}
+          placeholder="اكتب رسالة..."
+          placeholderTextColor="#555577"
+          value={text}
+          onChangeText={setText}
+          maxLength={120}
+          textAlign="right"
+          onSubmitEditing={sendMessage}
+          returnKeyType="send"
+        />
+        <TouchableOpacity
+          style={[chat.sendBtn, (!text.trim() || sending) && chat.sendBtnDisabled]}
+          onPress={sendMessage}
+          disabled={!text.trim() || sending}
+        >
+          <Text style={chat.sendIcon}>➤</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+const chat = StyleSheet.create({
+  overlay:      { position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'#06061af5', zIndex:100, flexDirection:'column' },
+  header:       { flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingHorizontal:16, paddingTop:52, paddingBottom:12, borderBottomWidth:1, borderBottomColor:'#1a1a3e' },
+  headerTitle:  { color:'#ef4444', fontSize:17, fontWeight:'900' },
+  closeBtn:     { width:36, height:36, borderRadius:10, backgroundColor:'#1a1a3e', alignItems:'center', justifyContent:'center' },
+  closeText:    { color:'#ef4444', fontSize:16, fontWeight:'900' },
+  msgList:      { flex:1 },
+  msgListContent:{ padding:16, gap:10 },
+  emptyText:    { color:'#555577', fontSize:14, textAlign:'center', marginTop:40 },
+  msgRow:       { alignItems:'flex-start', gap:2 },
+  msgRowMe:     { alignItems:'flex-end' },
+  msgName:      { color:'#a09060', fontSize:11, fontWeight:'700', paddingHorizontal:4 },
+  bubble:       { maxWidth:'78%', borderRadius:14, paddingHorizontal:14, paddingVertical:8 },
+  bubbleOther:  { backgroundColor:'#1a1a3e', borderBottomLeftRadius:4 },
+  bubbleMe:     { backgroundColor:'#ef4444', borderBottomRightRadius:4 },
+  bubbleText:   { color:'#e0e0ff', fontSize:14, lineHeight:20 },
+  bubbleTextMe: { color:'#fff' },
+  inputRow:     { flexDirection:'row', gap:10, padding:12, borderTopWidth:1, borderTopColor:'#1a1a3e', alignItems:'center' },
+  input:        { flex:1, backgroundColor:'#1a1a3e', color:'#fff', borderRadius:12, paddingHorizontal:14, paddingVertical:11, fontSize:14, borderWidth:1, borderColor:'#2a2a55' },
+  sendBtn:      { width:44, height:44, borderRadius:12, backgroundColor:'#ef4444', alignItems:'center', justifyContent:'center' },
+  sendBtnDisabled:{ opacity:0.4 },
+  sendIcon:     { color:'#fff', fontSize:18, fontWeight:'900' },
+});
+
+// ══════════════════════════════════════
 // شاشة اللعبة
 // ══════════════════════════════════════
-function GameScreen({ roomData, myUid, myPlayer, isMyTurn, selectedCards, setSelectedCards, currentRank, turnStartedAt, onPlay, onBullshit, onLeave, onTimeout, animPile }) {
+function GameScreen({ roomData, myUid, myPlayer, isMyTurn, selectedCards, setSelectedCards, currentRank, turnStartedAt, onPlay, onBullshit, onLeave, onTimeout, animPile, roomId, myName, messages }) {
   const pile     = roomData?.pile || [];
   const lastPlay = roomData?.lastPlay;
   const players  = roomData?.players || [];
   const myHand   = myPlayer?.hand || [];
+  const [chatOpen, setChatOpen] = useState(false);
+  const [lastSeenCount, setLastSeenCount] = useState(0);
+  const unread = chatOpen ? 0 : Math.max(0, messages.length - lastSeenCount);
 
   function toggleCard(id) {
     if (!isMyTurn) return;
     setSelectedCards(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
   }
+
+  function openChat() { setLastSeenCount(messages.length); setChatOpen(true); }
 
   return (
     <View style={s.container}>
@@ -679,6 +798,27 @@ function GameScreen({ roomData, myUid, myPlayer, isMyTurn, selectedCards, setSel
             🃏 العب {selectedCards.length>0?`${selectedCards.length} × `:''}{RANK_AR[currentRank]||currentRank}
           </Text>
         </TouchableOpacity>
+      )}
+
+      {/* زر الجات العائم */}
+      <TouchableOpacity style={s.chatFab} onPress={openChat} activeOpacity={0.85}>
+        <Text style={s.chatFabIcon}>💬</Text>
+        {unread > 0 && (
+          <View style={s.chatBadge}>
+            <Text style={s.chatBadgeText}>{unread > 9 ? '9+' : unread}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+
+      {/* overlay الجات */}
+      {chatOpen && (
+        <ChatOverlay
+          messages={messages}
+          myUid={myUid}
+          myName={myName}
+          roomId={roomId}
+          onClose={() => { setLastSeenCount(messages.length); setChatOpen(false); }}
+        />
       )}
     </View>
   );
@@ -826,6 +966,17 @@ const s = StyleSheet.create({
   cardSuit:    { fontSize:14 },
   playBtn:     { backgroundColor:'#ef4444', margin:10, borderRadius:16, paddingVertical:14, alignItems:'center' },
   playBtnText: { color:'#fff', fontSize:16, fontWeight:'900' },
+
+  chatFab: {
+    position:'absolute', bottom:80, right:16,
+    width:52, height:52, borderRadius:26,
+    backgroundColor:'#ef4444', alignItems:'center', justifyContent:'center',
+    shadowColor:'#ef4444', shadowOpacity:0.5, shadowRadius:8, shadowOffset:{width:0,height:4},
+    elevation:8,
+  },
+  chatFabIcon:  { fontSize:24 },
+  chatBadge:    { position:'absolute', top:-4, right:-4, backgroundColor:'#f5c518', borderRadius:10, minWidth:20, height:20, alignItems:'center', justifyContent:'center', paddingHorizontal:4 },
+  chatBadgeText:{ color:'#06061a', fontSize:11, fontWeight:'900' },
 
   resultContent:      { flex:1, alignItems:'center', justifyContent:'center', padding:24, gap:16 },
   resultEmoji:        { fontSize:80 },

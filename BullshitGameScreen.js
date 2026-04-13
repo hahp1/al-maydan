@@ -20,7 +20,7 @@ const RANK_AR = { A:'آس','2':'٢','3':'٣','4':'٤','5':'٥','6':'٦','7':'٧'
 const SUIT_COLOR = { '♠':'#e0e0ff','♣':'#e0e0ff','♥':'#ff6b6b','♦':'#ff6b6b' };
 const MIN_PLAYERS = 3;
 const MAX_PLAYERS = 6;
-const COST = 5;
+const COST = 10;
 const TURN_SECONDS = 30;
 
 function buildDeck() {
@@ -354,6 +354,8 @@ export default function BullshitGameScreen({ onBack, currentUser, tokens, onSpen
           const snap = await getDoc(doc(db,'bullshit_rooms',roomId));
           if (snap.exists()) {
             const d = snap.data();
+            // استرداد الرصيد إذا لم تبدأ اللعبة بعد
+            if (d.phase === 'lobby') onSpendTokens(-COST);
             if (d.hostUid===uid && d.players.length<=1) await deleteDoc(doc(db,'bullshit_rooms',roomId));
             else await updateDoc(doc(db,'bullshit_rooms',roomId), { players: d.players.filter(p=>p.uid!==uid) });
           }

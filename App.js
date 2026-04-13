@@ -28,7 +28,6 @@ export default function App() {
   const [highScore, setHighScore] = useState(0);
 
   useEffect(() => {
-    // تحميل الفئات من Firestore realtime
     const unsub = onSnapshot(collection(db, 'categories'), async (snapshot) => {
       const cats = [];
       for (const d of snapshot.docs) {
@@ -174,10 +173,11 @@ export default function App() {
       )}
 
       <View style={styles.buttons}>
+
         {/* فريقين */}
         <TouchableOpacity style={styles.btnPrimary} onPress={() => setScreen('setup')}>
           <Text style={styles.btnPrimaryText}>⚔️ فريقين</Text>
-          <Text style={styles.btnPrimarySubtitle}>تنافس بين فريقين • 🪙 20-30</Text>
+          <Text style={styles.btnPrimarySubtitle}>تنافس بين فريقين</Text>
         </TouchableOpacity>
 
         {/* فردي */}
@@ -194,11 +194,11 @@ export default function App() {
         >
           <Text style={styles.btnSoloText}>🎮 فردي</Text>
           <Text style={styles.btnSoloSubtitle}>
-            {tokens < SOLO_COST ? '❌ رصيد غير كافٍ' : `العب منفرداً واكسر رقمك • 🪙 ${SOLO_COST}`}
+            {tokens < SOLO_COST ? '❌ رصيد غير كافٍ' : 'العب منفرداً واكسر الأرقام القياسية'}
           </Text>
         </TouchableOpacity>
 
-        {/* أونلاين */}
+        {/* تحدي عن بُعد */}
         <TouchableOpacity
           style={[styles.btnOnline, tokens < 10 && styles.btnDisabled]}
           onPress={() => {
@@ -210,9 +210,12 @@ export default function App() {
             }
           }}
         >
-          <Text style={styles.btnOnlineText}>🌐 أونلاين</Text>
-          <Text style={styles.btnOnlineSubtitle}>العب ضد لاعب عشوائي • 🪙 10</Text>
+          <Text style={styles.btnOnlineText}>🌐 تحدي عن بُعد</Text>
+          <Text style={styles.btnOnlineSubtitle}>
+            {tokens < 10 ? '❌ رصيد غير كافٍ' : 'العب ضد لاعب عشوائي'}
+          </Text>
         </TouchableOpacity>
+
       </View>
 
       {/* لوحة الإدارة */}

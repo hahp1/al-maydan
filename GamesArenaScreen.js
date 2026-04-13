@@ -24,7 +24,7 @@ const GAMES = [
     color: '#ef4444',
     border: '#ef444440',
     bg: '#ef444412',
-    ready: false,
+    ready: true,
     players: '3–6 لاعبين',
   },
   {

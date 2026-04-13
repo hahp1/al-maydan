@@ -21,6 +21,7 @@ import KnowledgeArenaScreen from './KnowledgeArenaScreen';
 import GamesArenaScreen from './GamesArenaScreen';
 import FriendsScreen from './FriendsScreen';
 import XOGameScreen from './XOGameScreen';
+import BullshitGameScreen from './BullshitGameScreen';
 
 const HIGHSCORE_KEY = 'almaydan_highscore';
 
@@ -131,6 +132,15 @@ export default function App() {
   // ── ألعاب الميدان ──
   if (screen === 'xo') return (
     <XOGameScreen
+      onBack={() => setScreen('games')}
+      currentUser={user}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
+    />
+  );
+
+  if (screen === 'bullshit') return (
+    <BullshitGameScreen
       onBack={() => setScreen('games')}
       currentUser={user}
       tokens={tokens}

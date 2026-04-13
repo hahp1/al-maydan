@@ -19,10 +19,9 @@ import OnlineGameScreen from './OnlineGameScreen';
 import HomeScreen from './HomeScreen';
 import KnowledgeArenaScreen from './KnowledgeArenaScreen';
 import GamesArenaScreen from './GamesArenaScreen';
-// import FriendsScreen from './FriendsScreen'; // قادمًا
+import FriendsScreen from './FriendsScreen';
 
 const HIGHSCORE_KEY = 'almaydan_highscore';
-const SOLO_COST = 10;
 
 export default function App() {
   const [screen, setScreen] = useState('login');
@@ -49,28 +48,23 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const sharedProps = { tokens, setTokens, setScreen, showTokenModal, setShowTokenModal, highScore, user };
+  const sharedProps = { user, tokens, setTokens, setScreen, showTokenModal, setShowTokenModal, highScore };
 
-  // ── شاشات ──
-
+  // ── تسجيل الدخول ──
   if (screen === 'login') return (
     <LoginScreen
-      onLogin={(userData) => { setUser({ ...userData, type: 'google' }); setScreen('home'); }}
+      onLogin={(userData) => { setUser(userData); setTokens(userData.tokens ?? 30); setScreen('home'); }}
       onGuest={() => { setUser({ type: 'guest', name: 'ضيف' }); setScreen('home'); }}
     />
   );
 
+  // ── الشاشات الرئيسية ──
   if (screen === 'home') return <HomeScreen {...sharedProps} />;
-
   if (screen === 'knowledge') return <KnowledgeArenaScreen {...sharedProps} />;
-
   if (screen === 'games') return <GamesArenaScreen {...sharedProps} />;
+  if (screen === 'friends') return <FriendsScreen user={user} setScreen={setScreen} />;
 
-  if (screen === 'friends') return (
-    // placeholder — FriendsScreen قادم
-    <GamesArenaScreen {...sharedProps} />
-  );
-
+  // ── ميدان المعلومات ──
   if (screen === 'setup') return (
     <>
       <GameSetupScreen
@@ -116,14 +110,12 @@ export default function App() {
     />
   );
 
-  if (screen === 'admin') return <AdminScreen onBack={() => setScreen('home')} />;
-
-  if (screen === 'settings') return (
-    <SettingsScreen
-      onBack={() => setScreen('home')}
-      user={user}
-      tokens={tokens}
-      onLogout={() => { setUser(null); setTokens(30); setScreen('login'); }}
+  if (screen === 'solo') return (
+    <SoloGameScreen
+      categories={categories}
+      onBack={() => setScreen('knowledge')}
+      playerName={user?.name || 'لاعب'}
+      onHighScoreUpdate={(s) => setHighScore(s)}
     />
   );
 
@@ -135,12 +127,15 @@ export default function App() {
     />
   );
 
-  if (screen === 'solo') return (
-    <SoloGameScreen
-      categories={categories}
-      onBack={() => setScreen('knowledge')}
-      playerName={user?.name || 'لاعب'}
-      onHighScoreUpdate={(newScore) => setHighScore(newScore)}
+  // ── أخرى ──
+  if (screen === 'admin') return <AdminScreen onBack={() => setScreen('home')} />;
+
+  if (screen === 'settings') return (
+    <SettingsScreen
+      onBack={() => setScreen('home')}
+      user={user}
+      tokens={tokens}
+      onLogout={() => { setUser(null); setTokens(30); setScreen('login'); }}
     />
   );
 

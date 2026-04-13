@@ -28,6 +28,17 @@ const GAMES = [
     players: '3–6 لاعبين',
   },
   {
+    id: 'mafia',
+    emoji: '🎭',
+    title: 'المافيا',
+    desc: 'ادعِ البراءة أو اكشف المجرم',
+    color: '#a855f7',
+    border: '#a855f740',
+    bg: '#a855f712',
+    ready: true,
+    players: '4–12 لاعبين',
+  },
+  {
     id: 'kout',
     emoji: '🂡',
     title: 'كوت بو 6',
@@ -120,9 +131,7 @@ export default function GamesArenaScreen({ setScreen, user }) {
           >
             <TouchableOpacity
               style={[styles.gameCard, { borderColor: game.border, backgroundColor: '#0f0f2e' }]}
-              onPress={() => {
-                if (game.ready) setScreen(game.id);
-              }}
+              onPress={() => { if (game.ready) setScreen(game.id); }}
               activeOpacity={game.ready ? 0.8 : 0.95}
             >
               {/* أيقونة */}

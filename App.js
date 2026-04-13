@@ -22,6 +22,7 @@ import GamesArenaScreen from './GamesArenaScreen';
 import FriendsScreen from './FriendsScreen';
 import XOGameScreen from './XOGameScreen';
 import BullshitGameScreen from './BullshitGameScreen';
+import MafiaGameScreen from './MafiaGameScreen';
 
 const HIGHSCORE_KEY = 'almaydan_highscore';
 
@@ -141,6 +142,15 @@ export default function App() {
 
   if (screen === 'bullshit') return (
     <BullshitGameScreen
+      onBack={() => setScreen('games')}
+      currentUser={user}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
+    />
+  );
+
+  if (screen === 'mafia') return (
+    <MafiaGameScreen
       onBack={() => setScreen('games')}
       currentUser={user}
       tokens={tokens}

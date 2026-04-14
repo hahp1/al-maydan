@@ -46,8 +46,8 @@ const GAMES = [
     color: '#8b5cf6',
     border: '#8b5cf640',
     bg: '#8b5cf612',
-    ready: false,
-    players: '4 لاعبين',
+    ready: true,
+    players: '4–6 لاعبين',
   },
   {
     id: 'dominoes',

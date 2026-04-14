@@ -24,6 +24,7 @@ import XOGameScreen from './XOGameScreen';
 import BullshitGameScreen from './BullshitGameScreen';
 import MafiaGameScreen from './MafiaGameScreen';
 import CodenamesGameScreen from './CodenamesGameScreen';
+import KoutGameScreen from './KoutGameScreen';
 
 const HIGHSCORE_KEY = 'almaydan_highscore';
 
@@ -161,6 +162,15 @@ export default function App() {
 
   if (screen === 'codenames') return (
     <CodenamesGameScreen
+      onBack={() => setScreen('games')}
+      currentUser={user}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
+    />
+  );
+
+  if (screen === 'kout') return (
+    <KoutGameScreen
       onBack={() => setScreen('games')}
       currentUser={user}
       tokens={tokens}

@@ -95,7 +95,7 @@ const TEAM1_TOTAL   = 9;
 const TEAM2_TOTAL   = 8;
 const NEUTRAL_TOTAL = 7;
 const KILLER_TOTAL  = 1;
-const COST          = 5;
+const COST          = 10;
 
 function shuffle(arr) {
   const a = [...arr];

@@ -60,10 +60,8 @@ export const searchUsers = async (query_text, currentUid) => {
   snap.forEach(d => {
     if (d.id !== currentUid) results.push(d.data());
   });
-
   return results;
 };
-
 // تحديث رصيد التوكن
 export const updateTokens = async (uid, tokens) => {
   await updateDoc(doc(db, 'users', uid), { tokens });

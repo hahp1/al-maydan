@@ -121,16 +121,22 @@ export default function BullshitGameScreen({ onBack, currentUser, tokens, onSpen
   const [searching,      setSearching]      = useState(false);
   const [selectedCards,  setSelectedCards]  = useState([]);
   const [desiredCount,   setDesiredCount]   = useState(4);
-  const animPile = useRef(new Animated.Value(1)).current;
-  const unsubRef = useRef(null);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [botWaitSecs,    setBotWaitSecs]    = useState(60);
+  const animPile   = useRef(new Animated.Value(1)).current;
+  const unsubRef   = useRef(null);
+  const fadeAnim   = useRef(new Animated.Value(0)).current;
+  const botTimerRef = useRef(null);
+  const roomIdRef  = useRef(null);
 
   useEffect(() => {
     const uid = getUid();
     setMyUid(uid);
     setMyName(currentUser?.name || auth.currentUser?.displayName || 'لاعب');
     Animated.timing(fadeAnim, { toValue:1, duration:400, useNativeDriver:true }).start();
-    return () => { if (unsubRef.current) unsubRef.current(); };
+    return () => {
+      if (unsubRef.current) unsubRef.current();
+      if (botTimerRef.current) clearTimeout(botTimerRef.current);
+    };
   }, []);
 
   // ─── مراقبة الغرفة + تشغيل تلقائي ───
@@ -143,13 +149,65 @@ export default function BullshitGameScreen({ onBack, currentUser, tokens, onSpen
 
       if (data.phase === 'lobby') {
         setPhase('lobby');
-        // الهوست يبدأ تلقائياً عند اكتمال الغرفة
         const uid = getUid();
         if (data.hostUid === uid && data.players.length >= data.maxPlayers) {
           await doStartGame(data, id);
         }
-      } else if (data.phase === 'game')   setPhase('game');
-      else if (data.phase === 'result')  setPhase('result');
+      } else if (data.phase === 'game') {
+        setPhase('game');
+
+        // ── حركة البوت التلقائية ──────────────────────────
+        const currentPlayer = data.players.find(p => p.uid === data.currentTurnUid);
+        if (currentPlayer?.isBot && data.phase === 'game') {
+          setTimeout(async () => {
+            // أعد قراءة الغرفة للتأكد من أن الدور لم يتغير
+            const freshSnap = await getDoc(doc(db,'bullshit_rooms',id));
+            if (!freshSnap.exists()) return;
+            const fresh = freshSnap.data();
+            if (fresh.currentTurnUid !== currentPlayer.uid || fresh.phase !== 'game') return;
+
+            const bot = fresh.players.find(p => p.uid === currentPlayer.uid);
+            if (!bot || !bot.hand || bot.hand.length === 0) return;
+
+            const currentRank = fresh.currentRank;
+
+            // البوت يلعب الورق المطلوب إذا كان عنده، وإلا يكذب بورقة عشوائية
+            const matchingCards = bot.hand.filter(c => c.rank === currentRank);
+            const cardsToPlay = matchingCards.length > 0
+              ? matchingCards.slice(0, Math.min(matchingCards.length, 2)) // يلعب 1-2 ورقة مطابقة
+              : [bot.hand[Math.floor(Math.random() * bot.hand.length)]];  // كذب بورقة عشوائية
+
+            const playedIds = cardsToPlay.map(c => c.id);
+            const newHand = bot.hand.filter(c => !playedIds.includes(c.id));
+            const newPile = [...(fresh.pile||[]), ...cardsToPlay.map(c => ({
+              ...c, playedBy: bot.uid, claimedRank: currentRank,
+            }))];
+            const nextIdx = (fresh.players.findIndex(p => p.uid === bot.uid) + 1) % fresh.players.length;
+            const nextRankIdx = (fresh.rankIndex + 1) % RANKS.length;
+            const updatedPlayers = fresh.players.map(p =>
+              p.uid === bot.uid ? {...p, hand: newHand, cardCount: newHand.length} : p
+            );
+            const winner = newHand.length === 0 ? bot.uid : null;
+
+            await updateDoc(doc(db,'bullshit_rooms',id), {
+              pile: newPile,
+              players: updatedPlayers,
+              currentTurnUid: fresh.players[nextIdx].uid,
+              rankIndex: nextRankIdx,
+              currentRank: RANKS[nextRankIdx],
+              lastPlay: {
+                playerUid: bot.uid, playerName: bot.name,
+                count: cardsToPlay.length, claimedRank: currentRank, cards: cardsToPlay,
+              },
+              winner,
+              phase: winner ? 'result' : 'game',
+              turnStartedAt: Date.now(),
+            });
+          }, 1500); // تأخير 1.5 ث ليبدو طبيعياً
+        }
+        // ─────────────────────────────────────────────────
+
+      } else if (data.phase === 'result') setPhase('result');
     });
   }
 
@@ -190,9 +248,45 @@ export default function BullshitGameScreen({ onBack, currentUser, tokens, onSpen
       });
       onSpendTokens(COST);
       setRoomId(code);
+      roomIdRef.current = code;
       subscribeRoom(code);
+      startBotTimer(code);
     } catch(e) { Alert.alert('خطأ',e.message); }
     setLoading(false);
+  }
+
+  // ─── بدء عداد البوت ───
+  function startBotTimer(code) {
+    setBotWaitSecs(60);
+    const iv = setInterval(() => {
+      setBotWaitSecs(s => { if (s <= 1) { clearInterval(iv); return 0; } return s - 1; });
+    }, 1000);
+    botTimerRef.current = setTimeout(async () => {
+      clearInterval(iv);
+      const rSnap = await getDoc(doc(db,'bullshit_rooms',code));
+      if (!rSnap.exists()) return;
+      const rd = rSnap.data();
+      if (rd.phase !== 'lobby') return;
+      const needed = rd.maxPlayers - rd.players.length;
+      if (needed <= 0) return;
+      const bots = Array.from({length: needed}, (_,i) => ({
+        uid: `bot_bs_${i}`, name: `🤖 بوت ${i+1}`,
+        isHost: false, isReady: true, hand: [], cardCount: 0, isBot: true,
+      }));
+      const allPlayers = [...rd.players, ...bots];
+      // إذا اكتملت الغرفة ابدأ اللعبة
+      if (allPlayers.length >= rd.minPlayers) {
+        const hands = dealCards(allPlayers.length);
+        const withHands = allPlayers.map((p,i) => ({...p, hand:hands[i], cardCount:hands[i].length}));
+        await updateDoc(doc(db,'bullshit_rooms',code), {
+          players: withHands, phase:'game', pile:[],
+          currentTurnUid: withHands[0].uid, rankIndex:0, currentRank:RANKS[0],
+          lastPlay:null, winner:null, turnStartedAt:Date.now(),
+        });
+      } else {
+        await updateDoc(doc(db,'bullshit_rooms',code), { players: allPlayers });
+      }
+    }, 60000);
   }
 
   // ─── انضمام بكود ───
@@ -401,7 +495,7 @@ export default function BullshitGameScreen({ onBack, currentUser, tokens, onSpen
       roomData={roomData} roomId={roomId} myUid={myUid} isHost={isHost}
       friendSearch={friendSearch} friendResults={friendResults} searching={searching}
       onSearch={searchFriend} onInvite={inviteFriend} onLeave={leaveRoom}
-      desiredCount={desiredCount}
+      desiredCount={desiredCount} botWaitSecs={botWaitSecs}
     />
   );
 
@@ -493,7 +587,7 @@ function MenuScreen({ fadeAnim, desiredCount, setDesiredCount, onCreatePrivate, 
 // ══════════════════════════════════════
 // شاشة اللوبي
 // ══════════════════════════════════════
-function LobbyScreen({ roomData, roomId, myUid, isHost, friendSearch, friendResults, searching, onSearch, onInvite, onLeave, desiredCount }) {
+function LobbyScreen({ roomData, roomId, myUid, isHost, friendSearch, friendResults, searching, onSearch, onInvite, onLeave, desiredCount, botWaitSecs }) {
   const players   = roomData?.players || [];
   const maxPlayers = roomData?.maxPlayers || desiredCount;
   const filled    = players.length;
@@ -570,6 +664,11 @@ function LobbyScreen({ roomData, roomId, myUid, isHost, friendSearch, friendResu
           <Text style={s.waitingText}>
             {filled >= maxPlayers ? '🚀 تبدأ اللعبة الآن...' : `انتظار ${maxPlayers - filled} لاعبين إضافيين`}
           </Text>
+          {botWaitSecs != null && botWaitSecs <= 30 && filled < maxPlayers && (
+            <Text style={{color:'#ef444499',fontSize:12,marginTop:4,textAlign:'center'}}>
+              🤖 سيُضاف بوت خلال {botWaitSecs} ثانية
+            </Text>
+          )}
         </View>
       </ScrollView>
     </View>

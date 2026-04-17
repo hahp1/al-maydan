@@ -232,7 +232,7 @@ const ONLINE_GAMES = [
 ];
 
 // ── المكوّن الرئيسي ─────────────────────────────────────────
-export default function GamesArenaScreen({ setScreen, user, setGameMode }) {
+export default function GamesArenaScreen({ setScreen, user, setGameMode, tokens = 0, setShowTokenModal }) {
   const [activeTab, setActiveTab] = useState('jalsa'); // 'jalsa' | 'online'
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const tabIndicator = useRef(new Animated.Value(0)).current;
@@ -275,7 +275,13 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode }) {
           <Text style={styles.headerEmoji}>🎲</Text>
           <Text style={styles.headerTitle}>ميدان الألعاب</Text>
         </View>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          style={styles.tokenChip}
+          onPress={() => setShowTokenModal && setShowTokenModal(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.tokenChipText}>{tokens} 🪙</Text>
+        </TouchableOpacity>
       </Animated.View>
 
       {/* تابين جلسة / أونلاين */}
@@ -419,4 +425,11 @@ const styles = StyleSheet.create({
   },
   comingSoonEmoji: { fontSize: 24 },
   comingSoonText: { color: '#3a3a60', fontSize: 14, fontWeight: '600' },
+  tokenChip: {
+    backgroundColor: '#f59e0b20',
+    borderRadius: 10, borderWidth: 1,
+    borderColor: '#f59e0b50',
+    paddingHorizontal: 10, paddingVertical: 6,
+  },
+  tokenChipText: { color: '#f59e0b', fontWeight: '800', fontSize: 13 },
 });

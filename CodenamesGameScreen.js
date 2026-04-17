@@ -399,9 +399,10 @@ function FriendsLobby({ roomData, roomId, myUid, isHost, onLeave, onSearch, onIn
 // ══════════════════════════════════════════════════════════════
 // لوبي العشوائيين
 // ══════════════════════════════════════════════════════════════
-function RandomLobby({ roomData, myUid, onLeave }) {
+function RandomLobby({ roomData, myUid, onLeave, botWaitSecs }) {
   const players    = roomData?.players || [];
   const maxPlayers = roomData?.maxPlayers || 4;
+  const timedOut   = botWaitSecs === -1;
 
   return (
     <View style={s.container}>
@@ -413,29 +414,56 @@ function RandomLobby({ roomData, myUid, onLeave }) {
       </View>
 
       <View style={s.randomBody}>
-        <ActivityIndicator size="large" color="#3b82f6" />
-        <View style={s.randomCountRow}>
-          <Text style={[s.randomCountNum, { color: '#3b82f6' }]}>{players.length}</Text>
-          <Text style={s.randomCountSep}> / </Text>
-          <Text style={s.randomCountNum}>{maxPlayers}</Text>
-        </View>
-        <Text style={s.randomCountLabel}>لاعبين انضموا</Text>
+        {timedOut ? (
+          // ── رسالة لا يوجد لاعبون ────────────────────────────
+          <>
+            <Text style={{ fontSize: 48, marginBottom: 12 }}>😔</Text>
+            <Text style={{ color: '#f5c518', fontSize: 18, fontWeight: '800', textAlign: 'center', marginBottom: 8 }}>
+              لا يوجد لاعبون نشطون الآن
+            </Text>
+            <Text style={{ color: '#5a5a80', fontSize: 13, textAlign: 'center', marginBottom: 28 }}>
+              جرّب العب مع أصدقائك عبر غرفة خاصة
+            </Text>
+            <TouchableOpacity
+              onPress={onLeave}
+              style={{ backgroundColor: '#3b82f6', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32 }}
+            >
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>العب مع الأصدقاء 🔒</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          // ── الانتظار الاعتيادي ──────────────────────────────
+          <>
+            <ActivityIndicator size="large" color="#3b82f6" />
+            <View style={s.randomCountRow}>
+              <Text style={[s.randomCountNum, { color: '#3b82f6' }]}>{players.length}</Text>
+              <Text style={s.randomCountSep}> / </Text>
+              <Text style={s.randomCountNum}>{maxPlayers}</Text>
+            </View>
+            <Text style={s.randomCountLabel}>لاعبين انضموا</Text>
 
-        <View style={s.randomList}>
-          {players.map((p, i) => (
-            <View key={p.uid} style={[s.randomChip, p.uid === myUid && s.randomChipMe]}>
-              <Text style={s.randomChipNum}>{i + 1}</Text>
-              <Text style={s.randomChipName}>{p.name}</Text>
-              {p.uid === myUid && <View style={s.meTag}><Text style={s.meTagText}>أنا</Text></View>}
+            <View style={s.randomList}>
+              {players.map((p, i) => (
+                <View key={p.uid} style={[s.randomChip, p.uid === myUid && s.randomChipMe]}>
+                  <Text style={s.randomChipNum}>{i + 1}</Text>
+                  <Text style={s.randomChipName}>{p.name}</Text>
+                  {p.uid === myUid && <View style={s.meTag}><Text style={s.meTagText}>أنا</Text></View>}
+                </View>
+              ))}
+              {Array(maxPlayers - players.length).fill(0).map((_, i) => (
+                <View key={`e${i}`} style={s.randomEmpty}>
+                  <Text style={s.randomEmptyText}>انتظار...</Text>
+                </View>
+              ))}
             </View>
-          ))}
-          {Array(maxPlayers - players.length).fill(0).map((_, i) => (
-            <View key={`e${i}`} style={s.randomEmpty}>
-              <Text style={s.randomEmptyText}>انتظار...</Text>
-            </View>
-          ))}
-        </View>
-        <Text style={s.randomHint}>ستبدأ اللعبة تلقائياً عند اكتمال اللاعبين</Text>
+            <Text style={s.randomHint}>ستبدأ اللعبة تلقائياً عند اكتمال اللاعبين</Text>
+            {botWaitSecs != null && botWaitSecs <= 30 && botWaitSecs > 0 && (
+              <Text style={{ color: '#3b82f699', fontSize: 12, marginTop: 6, textAlign: 'center' }}>
+                ⏳ ينتهي البحث خلال {botWaitSecs} ثانية
+              </Text>
+            )}
+          </>
+        )}
       </View>
     </View>
   );
@@ -700,14 +728,20 @@ export default function CodenamesGameScreen({ onBack, currentUser, tokens, onSpe
   const [friendResults, setFriendResults] = useState([]);
   const [searching,     setSearching]     = useState(false);
   const [randomCount,   setRandomCount]   = useState(4);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const unsubRef = useRef(null);
+  const [botWaitSecs,   setBotWaitSecs]   = useState(60);
+  const fadeAnim   = useRef(new Animated.Value(0)).current;
+  const unsubRef   = useRef(null);
+  const botTimerRef = useRef(null);
+  const roomIdRef  = useRef(null);
 
   useEffect(() => {
     setMyUid(getUid());
     setMyName(currentUser?.name || auth.currentUser?.displayName || 'لاعب');
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-    return () => { if (unsubRef.current) unsubRef.current(); };
+    return () => {
+      if (unsubRef.current) unsubRef.current();
+      if (botTimerRef.current) clearTimeout(botTimerRef.current);
+    };
   }, []);
 
   function subscribeRoom(id) {
@@ -768,21 +802,33 @@ export default function CodenamesGameScreen({ onBack, currentUser, tokens, onSpe
     setLoading(false);
   }
 
+  // ─── عداد الانتظار — رسالة "لا يوجد لاعبون" بعد 60 ثانية ──
+  function startNoPlayersTimer(code) {
+    setBotWaitSecs(60);
+    const iv = setInterval(() => {
+      setBotWaitSecs(s => { if (s <= 1) { clearInterval(iv); return 0; } return s - 1; });
+    }, 1000);
+    botTimerRef.current = setTimeout(() => {
+      clearInterval(iv);
+      setBotWaitSecs(-1); // -1 = انتهى الوقت، أظهر الرسالة
+    }, 60000);
+  }
+
   async function createOrJoinRandom() {
     if ((tokens ?? 0) < COST) { Alert.alert('رصيد غير كافٍ', `تحتاج ${COST} رصيد`); return; }
     setLoading(true);
     try {
-      const uid = getUid();
-      const q   = query(collection(db, 'codenames_rooms'),
+      const uid   = getUid();
+      const q     = query(collection(db, 'codenames_rooms'),
         where('phase', '==', 'lobby_random'), where('isRandom', '==', true),
         where('maxPlayers', '==', randomCount));
-      const snap = await getDocs(q);
-      let joined = false;
+      const snap  = await getDocs(q);
+      let joined  = false;
       for (const d of snap.docs) {
         const data = d.data();
         if (data.players.length < data.maxPlayers && !data.players.some(p => p.uid === uid)) {
           await updateDoc(d.ref, { players: arrayUnion({ uid, name: myName, isHost: false, team: null, isSpymaster: false }) });
-          onSpendTokens?.(COST); setRoomId(d.id); subscribeRoom(d.id); joined = true; break;
+          onSpendTokens?.(COST); setRoomId(d.id); roomIdRef.current = d.id; subscribeRoom(d.id); joined = true; break;
         }
       }
       if (!joined) {
@@ -794,7 +840,8 @@ export default function CodenamesGameScreen({ onBack, currentUser, tokens, onSpe
           board: [], currentTeam: null, currentClue: null, currentClueNum: 0,
           guessesLeft: 0, winner: null, winReason: null,
         });
-        onSpendTokens?.(COST); setRoomId(code); subscribeRoom(code);
+        onSpendTokens?.(COST); setRoomId(code); roomIdRef.current = code; subscribeRoom(code);
+        startNoPlayersTimer(code);
       }
     } catch (e) { Alert.alert('خطأ', e.message); }
     setLoading(false);
@@ -966,7 +1013,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, tokens, onSpe
       onResignSpymaster={resignSpymaster}
     />
   );
-  if (phase === 'lobby_random') return <RandomLobby roomData={roomData} myUid={myUid} onLeave={leaveRoom} />;
+  if (phase === 'lobby_random') return <RandomLobby roomData={roomData} myUid={myUid} onLeave={leaveRoom} botWaitSecs={botWaitSecs} />;
 
   return (
     <MenuScreen

@@ -3,31 +3,37 @@ import {
   doc, getDoc, setDoc, updateDoc, deleteDoc,
   collection, query, where, getDocs,
   onSnapshot, orderBy, limit,
-  serverTimestamp, arrayUnion, arrayRemove,
+  serverTimestamp, arrayUnion,
 } from 'firebase/firestore';
-import { searchUsers as searchUsersFromService } from './UserService';
 
-// ── إعادة تصدير searchUsers من UserService ──
-export { searchUsersFromService as searchUsers };
+// ══════════════════════════════
+// البحث عن مستخدمين
+// ══════════════════════════════
+export const searchUsers = async (query_text, currentUid) => {
+  const results = [];
+  const lower = query_text.toLowerCase();
+  const q = query(
+    collection(db, 'users'),
+    where('username', '>=', lower),
+    where('username', '<=', lower + '\uf8ff')
+  );
+  const snap = await getDocs(q);
+  snap.forEach(d => {
+    if (d.id !== currentUid) results.push(d.data());
+  });
+  return results;
+};
 
 // ══════════════════════════════
 // طلبات الصداقة
 // ══════════════════════════════
-
-// إرسال طلب صداقة
 export const sendFriendRequest = async (fromUid, toUid) => {
   try {
     if (!fromUid || !toUid || fromUid === toUid) return { error: 'invalid' };
-
-    // تحقق من أنهم ليسوا أصدقاء بالفعل
-    const toRef = doc(db, 'users', toUid);
-    const toSnap = await getDoc(toRef);
+    const toSnap = await getDoc(doc(db, 'users', toUid));
     if (!toSnap.exists()) return { error: 'user_not_found' };
-
     const toData = toSnap.data();
     if (toData.friends?.includes(fromUid)) return { error: 'already_friends' };
-
-    // إنشاء طلب الصداقة
     const reqId = `${fromUid}_${toUid}`;
     await setDoc(doc(db, 'friendRequests', reqId), {
       from: fromUid,
@@ -35,24 +41,19 @@ export const sendFriendRequest = async (fromUid, toUid) => {
       status: 'pending',
       createdAt: serverTimestamp(),
     });
-
     return { success: true };
   } catch (e) {
-    console.error('sendFriendRequest error:', e);
     return { error: e.message };
   }
 };
 
-// الاستماع لطلبات الصداقة الواردة
 export const listenIncomingRequests = (uid, callback) => {
   if (!uid) return () => {};
-
   const q = query(
     collection(db, 'friendRequests'),
     where('to', '==', uid),
     where('status', '==', 'pending')
   );
-
   return onSnapshot(q, async (snap) => {
     const requests = await Promise.all(
       snap.docs.map(async (d) => {
@@ -69,14 +70,10 @@ export const listenIncomingRequests = (uid, callback) => {
   });
 };
 
-// قبول طلب صداقة
 export const acceptFriendRequest = async (requestId, fromUid, toUid) => {
   try {
-    // إضافة كل منهما لقائمة أصدقاء الآخر
     await updateDoc(doc(db, 'users', toUid), { friends: arrayUnion(fromUid) });
     await updateDoc(doc(db, 'users', fromUid), { friends: arrayUnion(toUid) });
-
-    // إنشاء محادثة DM
     const convId = [fromUid, toUid].sort().join('_');
     const convRef = doc(db, 'conversations', convId);
     const convSnap = await getDoc(convRef);
@@ -89,24 +86,18 @@ export const acceptFriendRequest = async (requestId, fromUid, toUid) => {
         lastMessageAt: serverTimestamp(),
       });
     }
-
-    // حذف طلب الصداقة
     await deleteDoc(doc(db, 'friendRequests', requestId));
-
     return { success: true };
   } catch (e) {
-    console.error('acceptFriendRequest error:', e);
     return { error: e.message };
   }
 };
 
-// رفض طلب صداقة
 export const declineFriendRequest = async (requestId) => {
   try {
     await deleteDoc(doc(db, 'friendRequests', requestId));
     return { success: true };
   } catch (e) {
-    console.error('declineFriendRequest error:', e);
     return { error: e.message };
   }
 };
@@ -114,44 +105,35 @@ export const declineFriendRequest = async (requestId) => {
 // ══════════════════════════════
 // المحادثات
 // ══════════════════════════════
-
-// الاستماع لمحادثات المستخدم
 export const listenConversations = (uid, callback) => {
   if (!uid) return () => {};
-
   const q = query(
     collection(db, 'conversations'),
     where('members', 'array-contains', uid),
     orderBy('lastMessageAt', 'desc')
   );
-
   return onSnapshot(q, (snap) => {
     const convs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     callback(convs);
   });
 };
 
-// الاستماع لرسائل محادثة
 export const listenMessages = (convId, callback) => {
   if (!convId) return () => {};
-
   const q = query(
     collection(db, 'conversations', convId, 'messages'),
     orderBy('createdAt', 'asc'),
     limit(100)
   );
-
   return onSnapshot(q, (snap) => {
     const msgs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     callback(msgs);
   });
 };
 
-// إرسال رسالة
 export const sendMessage = async (convId, senderUid, senderName, text) => {
   try {
     if (!text?.trim()) return;
-
     const msgRef = doc(collection(db, 'conversations', convId, 'messages'));
     await setDoc(msgRef, {
       text: text.trim(),
@@ -159,16 +141,12 @@ export const sendMessage = async (convId, senderUid, senderName, text) => {
       senderName,
       createdAt: serverTimestamp(),
     });
-
-    // تحديث آخر رسالة
     await updateDoc(doc(db, 'conversations', convId), {
       lastMessage: text.trim(),
       lastMessageAt: serverTimestamp(),
     });
-
     return { success: true };
   } catch (e) {
-    console.error('sendMessage error:', e);
     return { error: e.message };
   }
 };
@@ -176,12 +154,9 @@ export const sendMessage = async (convId, senderUid, senderName, text) => {
 // ══════════════════════════════
 // المجموعات
 // ══════════════════════════════
-
-// إنشاء مجموعة
 export const createGroup = async (creatorUid, groupName, memberUids) => {
   try {
     const allMembers = [creatorUid, ...memberUids.filter(u => u !== creatorUid)];
-
     const convRef = doc(collection(db, 'conversations'));
     await setDoc(convRef, {
       type: 'group',
@@ -192,10 +167,8 @@ export const createGroup = async (creatorUid, groupName, memberUids) => {
       lastMessage: '',
       lastMessageAt: serverTimestamp(),
     });
-
     return { success: true, convId: convRef.id };
   } catch (e) {
-    console.error('createGroup error:', e);
     return { error: e.message };
   }
 };

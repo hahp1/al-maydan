@@ -2,12 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
   StatusBar, Animated, Alert, ActivityIndicator, Image,
+  TextInput, ScrollView, Clipboard,
 } from 'react-native';
 import { db, auth } from './firebaseConfig';
 import {
   collection, doc, setDoc, getDoc, getDocs,
   onSnapshot, updateDoc, query, where,
-  serverTimestamp, deleteDoc,
+  serverTimestamp, deleteDoc, arrayUnion,
 } from 'firebase/firestore';
 
 // ── ثوابت ──
@@ -48,20 +49,26 @@ function pickQuestion(category, level) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// ── توليد uid مؤقت للضيف ──
 function getOrCreateUid() {
   const fromAuth = auth.currentUser?.uid;
   if (fromAuth) return fromAuth;
-  // ضيف: نولد id عشوائي ونحتفظ به في الجلسة
   if (!global._guestUid) {
     global._guestUid = 'guest_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now();
   }
   return global._guestUid;
 }
 
+function generateRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
 // ══════════════════════════════════════════
 export default function OnlineGameScreen({ onBack, categories = [], currentUser }) {
-  const [phase, setPhase] = useState('searching');
+  const [mode, setMode] = useState(null);
+  const [phase, setPhase] = useState('menu');
   const [roomId, setRoomId] = useState(null);
   const [roomData, setRoomData] = useState(null);
   const [isPlayer1, setIsPlayer1] = useState(false);
@@ -73,36 +80,130 @@ export default function OnlineGameScreen({ onBack, categories = [], currentUser 
   const timerAnim = useRef(new Animated.Value(1)).current;
   const unsubRef = useRef(null);
 
-  // ← الإصلاح: نستخدم uid مضمون دائماً
+  const [friendCode, setFriendCode] = useState('');
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [friendSearch, setFriendSearch] = useState('');
+  const [friendResults, setFriendResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   const myUid = getOrCreateUid();
   const myDisplayName = currentUser?.name || 'لاعب';
 
   useEffect(() => {
-    findOrCreateRoom();
     return () => {
       clearInterval(timerRef.current);
       if (unsubRef.current) unsubRef.current();
     };
   }, []);
 
+  const startRandomMatch = () => {
+    setMode('random');
+    setPhase('searching');
+    findOrCreateRoom();
+  };
+
+  const createFriendRoom = async () => {
+    try {
+      const code = generateRoomCode();
+      const rId = `private_${code}`;
+      await setDoc(doc(db, 'rooms', rId), {
+        status: 'waiting',
+        roomType: 'private',
+        roomCode: code,
+        player1: { uid: myUid, name: myDisplayName, score: 0, answer: null, answeredAt: null },
+        player2: { uid: null, name: null, score: 0, answer: null, answeredAt: null },
+        currentRound: 1,
+        threeCategories: [],
+        currentQuestion: null,
+        pickStartTime: null,
+        questionStartTime: null,
+        winner: null,
+        createdAt: serverTimestamp(),
+      });
+      setFriendCode(code);
+      setRoomId(rId);
+      setIsPlayer1(true);
+      setMode('friend');
+      setPhase('lobby');
+      listenToRoom(rId);
+    } catch (e) { Alert.alert('خطأ', e.message); }
+  };
+
+  const joinByCode = async () => {
+    const code = joinCodeInput.trim().toUpperCase();
+    if (code.length < 4) { Alert.alert('', 'أدخل كود الغرفة'); return; }
+    try {
+      const rId = `private_${code}`;
+      const snap = await getDoc(doc(db, 'rooms', rId));
+      if (!snap.exists()) { Alert.alert('', 'لم يُعثر على غرفة بهذا الكود'); return; }
+      const data = snap.data();
+      if (data.status !== 'waiting' || data.player2?.uid) {
+        Alert.alert('', 'الغرفة ممتلئة أو بدأت اللعبة بالفعل'); return;
+      }
+      await updateDoc(doc(db, 'rooms', rId), {
+        'player2.uid': myUid,
+        'player2.name': myDisplayName,
+        status: 'picking',
+      });
+      setFriendCode(code);
+      setRoomId(rId);
+      setIsPlayer1(false);
+      setMode('friend');
+      setPhase('lobby');
+      listenToRoom(rId);
+    } catch (e) { Alert.alert('خطأ', e.message); }
+  };
+
+  const searchFriend = async (text) => {
+    setFriendSearch(text);
+    if (text.length < 2) { setFriendResults([]); return; }
+    setSearching(true);
+    try {
+      const q = query(
+        collection(db, 'users'),
+        where('nameLower', '>=', text.toLowerCase()),
+        where('nameLower', '<=', text.toLowerCase() + '\uf8ff')
+      );
+      const snap = await getDocs(q);
+      setFriendResults(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.uid !== myUid).slice(0, 5));
+    } catch { setFriendResults([]); }
+    setSearching(false);
+  };
+
+  const inviteFriend = async (friend) => {
+    if (!roomId || !friendCode) return;
+    try {
+      await setDoc(doc(db, 'invites', `${roomId}_${friend.uid}`), {
+        roomId, fromName: myDisplayName, fromUid: myUid,
+        toUid: friend.uid, code: friendCode, game: 'trivia',
+        createdAt: serverTimestamp(),
+      });
+      Alert.alert('✅ تم إرسال الدعوة', `دُعي ${friend.name || friend.displayName || friend.uid}`);
+    } catch (e) { Alert.alert('خطأ', e.message); }
+  };
+
+  const copyCode = () => {
+    Clipboard.setString(friendCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const findOrCreateRoom = async () => {
     try {
       const q = query(
         collection(db, 'rooms'),
         where('status', '==', 'waiting'),
-        where('player2.uid', '==', null)
+        where('player2.uid', '==', null),
+        where('roomType', '==', 'public')
       );
       const snap = await getDocs(q);
-
       if (!snap.empty) {
         const roomDoc = snap.docs[0];
         const rId = roomDoc.id;
         await updateDoc(doc(db, 'rooms', rId), {
-          'player2.uid': myUid,
-          'player2.name': myDisplayName,
-          'player2.score': 0,
-          'player2.answer': null,
-          'player2.answeredAt': null,
+          'player2.uid': myUid, 'player2.name': myDisplayName,
+          'player2.score': 0, 'player2.answer': null, 'player2.answeredAt': null,
           status: 'picking',
         });
         setRoomId(rId);
@@ -111,27 +212,11 @@ export default function OnlineGameScreen({ onBack, categories = [], currentUser 
       } else {
         const rId = `room_${Date.now()}_${myUid.slice(0, 8)}`;
         await setDoc(doc(db, 'rooms', rId), {
-          status: 'waiting',
-          player1: {
-            uid: myUid,
-            name: myDisplayName,
-            score: 0,
-            answer: null,
-            answeredAt: null,
-          },
-          player2: {
-            uid: null,
-            name: null,
-            score: 0,
-            answer: null,
-            answeredAt: null,
-          },
-          currentRound: 1,
-          threeCategories: [],
-          currentQuestion: null,
-          pickStartTime: null,
-          questionStartTime: null,
-          winner: null,
+          status: 'waiting', roomType: 'public',
+          player1: { uid: myUid, name: myDisplayName, score: 0, answer: null, answeredAt: null },
+          player2: { uid: null, name: null, score: 0, answer: null, answeredAt: null },
+          currentRound: 1, threeCategories: [], currentQuestion: null,
+          pickStartTime: null, questionStartTime: null, winner: null,
           createdAt: serverTimestamp(),
         });
         setRoomId(rId);
@@ -139,9 +224,7 @@ export default function OnlineGameScreen({ onBack, categories = [], currentUser 
         setPhase('waiting');
         listenToRoom(rId);
       }
-    } catch (e) {
-      Alert.alert('خطأ', e.message);
-    }
+    } catch (e) { Alert.alert('خطأ', e.message); }
   };
 
   const listenToRoom = (rId) => {
@@ -157,7 +240,10 @@ export default function OnlineGameScreen({ onBack, categories = [], currentUser 
   const handleRoomUpdate = (data, rId) => {
     const amP1 = data.player1?.uid === myUid;
 
-    if (data.status === 'waiting') { setPhase('waiting'); return; }
+    if (data.status === 'waiting') {
+      if (data.roomType === 'private') { setPhase('lobby'); return; }
+      setPhase('waiting'); return;
+    }
 
     if (data.status === 'picking') {
       clearInterval(timerRef.current);
@@ -334,6 +420,172 @@ export default function OnlineGameScreen({ onBack, categories = [], currentUser 
     inputRange: [0, 0.3, 1],
     outputRange: ['#ff4444', '#ffaa00', '#4aff4a'],
   });
+
+  // ══ شاشة الاختيار ══
+  if (phase === 'menu') {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
+        <TouchableOpacity style={styles.backBtn} onPress={onBack}>
+          <Text style={styles.backText}>← رجوع</Text>
+        </TouchableOpacity>
+        <View style={styles.menuBox}>
+          <Text style={styles.menuEmoji}>🌐</Text>
+          <Text style={styles.menuTitle}>تحدي عن بُعد</Text>
+          <Text style={styles.menuSub}>اختر نوع التحدي</Text>
+
+          <TouchableOpacity style={styles.menuCard} onPress={startRandomMatch} activeOpacity={0.85}>
+            <View style={styles.menuCardLeft}>
+              <Text style={styles.menuCardEmoji}>🎲</Text>
+              <View>
+                <Text style={styles.menuCardTitle}>خصم عشوائي</Text>
+                <Text style={styles.menuCardSub}>نظام المطابقة التلقائية</Text>
+              </View>
+            </View>
+            <Text style={styles.menuCardArrow}>←</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.menuCard, { borderColor: '#a855f740' }]}
+            onPress={() => setPhase('friendMenu')}
+            activeOpacity={0.85}
+          >
+            <View style={styles.menuCardLeft}>
+              <Text style={styles.menuCardEmoji}>👥</Text>
+              <View>
+                <Text style={[styles.menuCardTitle, { color: '#c084fc' }]}>تحدي صديق</Text>
+                <Text style={styles.menuCardSub}>أنشئ غرفة أو انضم بكود</Text>
+              </View>
+            </View>
+            <Text style={[styles.menuCardArrow, { color: '#a855f7' }]}>←</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ══ شاشة تحدي الصديق ══
+  if (phase === 'friendMenu') {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
+        <TouchableOpacity style={styles.backBtn} onPress={() => setPhase('menu')}>
+          <Text style={styles.backText}>← رجوع</Text>
+        </TouchableOpacity>
+        <View style={styles.menuBox}>
+          <Text style={styles.menuEmoji}>👥</Text>
+          <Text style={styles.menuTitle}>تحدي صديق</Text>
+
+          <TouchableOpacity
+            style={[styles.menuCard, { borderColor: '#a855f740' }]}
+            onPress={createFriendRoom}
+            activeOpacity={0.85}
+          >
+            <View style={styles.menuCardLeft}>
+              <Text style={styles.menuCardEmoji}>➕</Text>
+              <View>
+                <Text style={[styles.menuCardTitle, { color: '#c084fc' }]}>إنشاء غرفة</Text>
+                <Text style={styles.menuCardSub}>احصل على كود وادعُ صديقك</Text>
+              </View>
+            </View>
+            <Text style={[styles.menuCardArrow, { color: '#a855f7' }]}>←</Text>
+          </TouchableOpacity>
+
+          <View style={[styles.menuCard, { borderColor: '#3b82f640', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+            <Text style={[styles.menuCardTitle, { color: '#93c5fd', textAlign: 'center' }]}>🔑 الانضمام بكود</Text>
+            <View style={styles.codeInputRow}>
+              <TextInput
+                style={styles.codeInput}
+                placeholder="أدخل الكود هنا..."
+                placeholderTextColor="#3a3a60"
+                value={joinCodeInput}
+                onChangeText={t => setJoinCodeInput(t.toUpperCase())}
+                autoCapitalize="characters"
+                maxLength={6}
+              />
+              <TouchableOpacity style={styles.codeJoinBtn} onPress={joinByCode}>
+                <Text style={styles.codeJoinBtnText}>انضم</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // ══ لوبي الغرفة الخاصة ══
+  if (phase === 'lobby') {
+    const player2Joined = roomData?.player2?.uid !== null && roomData?.player2?.uid !== undefined;
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
+        <TouchableOpacity style={styles.backBtn} onPress={async () => {
+          if (roomId) await deleteDoc(doc(db, 'rooms', roomId));
+          if (unsubRef.current) unsubRef.current();
+          onBack();
+        }}>
+          <Text style={styles.backText}>← خروج</Text>
+        </TouchableOpacity>
+
+        <ScrollView contentContainerStyle={styles.lobbyContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.codeBox}>
+            <Text style={styles.codeLabel}>كود الغرفة</Text>
+            <Text style={styles.codeValue}>{friendCode}</Text>
+            <TouchableOpacity style={styles.copyBtn} onPress={copyCode}>
+              <Text style={styles.copyBtnText}>{copied ? '✅ تم النسخ' : '📋 نسخ الكود'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.playersRow}>
+            <View style={styles.playerSlot}>
+              <Text style={styles.playerSlotEmoji}>👤</Text>
+              <Text style={styles.playerSlotName}>{myDisplayName}</Text>
+              <View style={styles.readyBadge}><Text style={styles.readyBadgeText}>جاهز ✓</Text></View>
+            </View>
+            <Text style={styles.vsSmall}>VS</Text>
+            <View style={[styles.playerSlot, !player2Joined && styles.playerSlotEmpty]}>
+              <Text style={styles.playerSlotEmoji}>{player2Joined ? '👤' : '⏳'}</Text>
+              <Text style={styles.playerSlotName}>
+                {player2Joined ? (roomData?.player2?.name || 'خصم') : 'في انتظار الصديق...'}
+              </Text>
+              {player2Joined && <View style={styles.readyBadge}><Text style={styles.readyBadgeText}>جاهز ✓</Text></View>}
+            </View>
+          </View>
+
+          {player2Joined && (
+            <View style={styles.bothReadyBox}>
+              <ActivityIndicator color="#4aff4a" size="small" />
+              <Text style={styles.bothReadyText}>كلاكما جاهز! تبدأ اللعبة الآن...</Text>
+            </View>
+          )}
+
+          {isPlayer1 && !player2Joined && (
+            <View style={styles.inviteSection}>
+              <Text style={styles.inviteTitle}>📨 دعوة صديق مباشرة</Text>
+              <View style={styles.searchRow}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="ابحث عن صديق..."
+                  placeholderTextColor="#3a3a60"
+                  value={friendSearch}
+                  onChangeText={searchFriend}
+                />
+                {searching && <ActivityIndicator color="#a855f7" size="small" />}
+              </View>
+              {friendResults.map(f => (
+                <View key={f.uid} style={styles.friendRow}>
+                  <Text style={styles.friendName}>{f.name || f.displayName || f.uid}</Text>
+                  <TouchableOpacity style={styles.inviteBtn} onPress={() => inviteFriend(f)}>
+                    <Text style={styles.inviteBtnText}>دعوة</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
 
   // ══ شاشة البحث / الانتظار ══
   if (phase === 'searching' || phase === 'waiting') {
@@ -535,8 +787,11 @@ export default function OnlineGameScreen({ onBack, categories = [], currentUser 
         </View>
         <TouchableOpacity style={styles.playAgainBtn} onPress={() => {
           if (unsubRef.current) unsubRef.current();
-          findOrCreateRoom();
-          setPhase('searching');
+          setPhase('menu');
+          setMode(null);
+          setRoomId(null);
+          setRoomData(null);
+          setFriendCode('');
         }}>
           <Text style={styles.playAgainText}>🔄 لعبة جديدة</Text>
         </TouchableOpacity>
@@ -559,6 +814,78 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0d0d2b', paddingTop: 50, paddingHorizontal: 20, gap: 14 },
   backBtn: { padding: 8 },
   backText: { color: '#f5c518', fontSize: 16, fontWeight: '700' },
+
+  menuBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 18 },
+  menuEmoji: { fontSize: 70 },
+  menuTitle: { color: '#f5c518', fontSize: 24, fontWeight: '900' },
+  menuSub: { color: '#a09060', fontSize: 14 },
+  menuCard: {
+    width: '100%', flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', backgroundColor: '#1a1a3e',
+    borderRadius: 18, borderWidth: 1.5, borderColor: '#f5c51840', padding: 18,
+  },
+  menuCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  menuCardEmoji: { fontSize: 30 },
+  menuCardTitle: { color: '#f5c518', fontSize: 16, fontWeight: '800' },
+  menuCardSub: { color: '#5a5a80', fontSize: 12, marginTop: 2 },
+  menuCardArrow: { color: '#f5c518', fontSize: 20, fontWeight: '900' },
+
+  codeInputRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  codeInput: {
+    flex: 1, backgroundColor: '#0d0d2b', color: '#fff',
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+    borderWidth: 1.5, borderColor: '#2a2a55', fontSize: 16,
+    textAlign: 'center', letterSpacing: 4, fontWeight: '900',
+  },
+  codeJoinBtn: { backgroundColor: '#3b82f6', borderRadius: 12, paddingHorizontal: 18, paddingVertical: 13 },
+  codeJoinBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+
+  lobbyContent: { gap: 16, paddingBottom: 30 },
+  codeBox: {
+    backgroundColor: '#1a1a3e', borderRadius: 20, padding: 24,
+    alignItems: 'center', gap: 8, borderWidth: 1.5, borderColor: '#a855f740',
+  },
+  codeLabel: { color: '#a09060', fontSize: 13 },
+  codeValue: { color: '#c084fc', fontSize: 44, fontWeight: '900', letterSpacing: 8 },
+  copyBtn: {
+    backgroundColor: '#a855f720', borderRadius: 12,
+    paddingHorizontal: 20, paddingVertical: 10, borderWidth: 1, borderColor: '#a855f740',
+  },
+  copyBtnText: { color: '#c084fc', fontWeight: '800', fontSize: 14 },
+  playersRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  playerSlot: {
+    flex: 1, backgroundColor: '#1a1a3e', borderRadius: 16, padding: 14,
+    alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: '#2a2a55',
+  },
+  playerSlotEmpty: { borderColor: '#ffffff10', opacity: 0.6 },
+  playerSlotEmoji: { fontSize: 26 },
+  playerSlotName: { color: '#e0e0ff', fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  vsSmall: { color: '#555577', fontSize: 16, fontWeight: '900' },
+  readyBadge: { backgroundColor: '#1a3a1a', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  readyBadgeText: { color: '#4aff4a', fontSize: 11, fontWeight: '700' },
+  bothReadyBox: {
+    flexDirection: 'row', gap: 10, alignItems: 'center',
+    backgroundColor: '#1a3a1a', borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: '#4aff4a30',
+  },
+  bothReadyText: { color: '#4aff4a', fontSize: 14, fontWeight: '700' },
+  inviteSection: { gap: 10 },
+  inviteTitle: { color: '#a09060', fontSize: 14, fontWeight: '700' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  searchInput: {
+    flex: 1, backgroundColor: '#1a1a3e', color: '#fff',
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
+    borderWidth: 1.5, borderColor: '#2a2a55', fontSize: 14,
+  },
+  friendRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#1a1a3e', borderRadius: 12, padding: 12,
+    borderWidth: 1, borderColor: '#2a2a55',
+  },
+  friendName: { color: '#e0e0ff', fontSize: 14, fontWeight: '600' },
+  inviteBtn: { backgroundColor: '#a855f7', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8 },
+  inviteBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+
   searchBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   searchEmoji: { fontSize: 80 },
   searchTitle: { color: '#f5c518', fontSize: 22, fontWeight: '900', textAlign: 'center' },

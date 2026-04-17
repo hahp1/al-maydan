@@ -126,7 +126,7 @@ const cv = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════
 // ── وضع الجلسة (LOCAL) ─────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════
-function LocalMode({ onBack }) {
+function LocalMode({ onBack, tokens = 0, onSpendTokens }) {
   const [phase, setPhase] = useState('setup'); // setup | draw | guess | roundEnd | end
   const [playerName, setPlayerName] = useState('');
   const [players, setPlayers] = useState([]);
@@ -163,6 +163,8 @@ function LocalMode({ onBack }) {
 
   function startGame() {
     if (players.length < 2) return Alert.alert('', 'أضف لاعبين على الأقل');
+    if (tokens < 10) return Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 عملات للعب\nاشحن رصيدك من قائمة العملات');
+    onSpendTokens && onSpendTokens(10);
     const order = [];
     for (let r = 0; r < totalRounds; r++) {
       shuffle(players).forEach(p => order.push(p.id));
@@ -319,6 +321,11 @@ function LocalMode({ onBack }) {
             ))}
           </View>
 
+          <View style={styles.tokenBadge}>
+            <Text style={styles.tokenBadgeText}>🪙 10 عملات للجولة</Text>
+            <Text style={styles.tokenBalance}>رصيدك: {tokens} 🪙</Text>
+          </View>
+
           {players.length >= 2 && (
             <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#3b82f6' }]} onPress={startGame}>
               <Text style={styles.startBtnText}>🎨 ابدأ اللعبة</Text>
@@ -458,7 +465,7 @@ function LocalMode({ onBack }) {
 // ═══════════════════════════════════════════════════════════════
 // ── وضع الأونلاين ───────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════
-function OnlineMode({ onBack, currentUser }) {
+function OnlineMode({ onBack, currentUser, tokens = 0, onSpendTokens }) {
   const [phase, setPhase] = useState('lobby'); // lobby | waiting | game | end
   const [roomCode, setRoomCode] = useState('');
   const [inputCode, setInputCode] = useState('');
@@ -482,6 +489,8 @@ function OnlineMode({ onBack, currentUser }) {
   }, []);
 
   async function createRoom() {
+    if (tokens < 10) return Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 عملات للعب\nاشحن رصيدك من قائمة العملات');
+    onSpendTokens && onSpendTokens(10);
     const code = generateRoomCode();
     setRoomCode(code);
     const ref = doc(db, 'drawguess_rooms', code);
@@ -508,6 +517,8 @@ function OnlineMode({ onBack, currentUser }) {
   async function joinRoom() {
     const code = inputCode.trim();
     if (code.length !== 6) return Alert.alert('', 'أدخل كود صحيح من 6 أرقام');
+    if (tokens < 10) return Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 عملات للعب\nاشحن رصيدك من قائمة العملات');
+    onSpendTokens && onSpendTokens(10);
     const ref = doc(db, 'drawguess_rooms', code);
     const snap = await getDoc(ref);
     if (!snap.exists()) return Alert.alert('', 'الغرفة غير موجودة');
@@ -606,6 +617,10 @@ function OnlineMode({ onBack, currentUser }) {
         <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#a855f7' }]} onPress={createRoom}>
           <Text style={styles.startBtnText}>🏠 أنشئ غرفة جديدة</Text>
         </TouchableOpacity>
+        <View style={[styles.tokenBadge, { borderColor: '#a855f740', backgroundColor: '#a855f715' }]}>
+          <Text style={[styles.tokenBadgeText, { color: '#a855f7' }]}>🪙 10 عملات للدخول</Text>
+          <Text style={styles.tokenBalance}>رصيدك: {tokens} 🪙</Text>
+        </View>
         <Text style={styles.orText}>أو</Text>
         <TextInput
           style={[styles.input, { borderColor: '#a855f730', textAlign: 'center', fontSize: 22, letterSpacing: 6 }]}
@@ -774,7 +789,7 @@ function OnlineMode({ onBack, currentUser }) {
 // ═══════════════════════════════════════════════════════════════
 // ── الشاشة الرئيسية: اختيار النمط ──────────────────────────────
 // ═══════════════════════════════════════════════════════════════
-export default function DrawGuessScreen({ onBack, currentUser, mode }) {
+export default function DrawGuessScreen({ onBack, currentUser, mode, tokens = 0, onSpendTokens }) {
   const [selectedMode, setSelectedMode] = useState(mode || null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -782,8 +797,8 @@ export default function DrawGuessScreen({ onBack, currentUser, mode }) {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, []);
 
-  if (selectedMode === 'local') return <LocalMode onBack={() => setSelectedMode(null)} />;
-  if (selectedMode === 'online') return <OnlineMode onBack={() => setSelectedMode(null)} currentUser={currentUser} />;
+  if (selectedMode === 'local') return <LocalMode onBack={() => setSelectedMode(null)} tokens={tokens} onSpendTokens={onSpendTokens} />;
+  if (selectedMode === 'online') return <OnlineMode onBack={() => setSelectedMode(null)} currentUser={currentUser} tokens={tokens} onSpendTokens={onSpendTokens} />;
 
   return (
     <View style={styles.container}>
@@ -887,6 +902,14 @@ const styles = StyleSheet.create({
   startBtnText: { color: '#000', fontWeight: '900', fontSize: 16 },
   outlineBtn: { backgroundColor: 'transparent', borderWidth: 1.5 },
   outlineBtnText: { fontWeight: '900', fontSize: 16 },
+  tokenBadge: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#3b82f615', borderRadius: 12,
+    borderWidth: 1, borderColor: '#3b82f640',
+    paddingHorizontal: 16, paddingVertical: 10,
+  },
+  tokenBadgeText: { color: '#3b82f6', fontWeight: '700', fontSize: 14 },
+  tokenBalance: { color: '#8080aa', fontSize: 13 },
 
   // اختيار كلمة
   centerContent: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center', gap: 16 },

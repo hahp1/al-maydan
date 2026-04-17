@@ -25,6 +25,16 @@ import BullshitGameScreen from './BullshitGameScreen';
 import MafiaGameScreen from './MafiaGameScreen';
 import CodenamesGameScreen from './CodenamesGameScreen';
 import KoutGameScreen from './KoutGameScreen';
+import ManAnaScreen from './ManAnaScreen';
+import ActItOutScreen from './ActItOutScreen';
+import TruthDareScreen from './TruthDareScreen';
+import DominoGameScreen from './DominoGameScreen';
+import BilootGameScreen from './BilootGameScreen';
+
+// ألعاب جديدة
+import RankFriendsScreen from './RankFriendsScreen';
+import NeverHaveIEverScreen from './NeverHaveIEverScreen';
+import DrawGuessScreen from './DrawGuessScreen';
 
 const HIGHSCORE_KEY = 'almaydan_highscore';
 
@@ -37,6 +47,7 @@ export default function App() {
   const [categories, setCategories] = useState([]);
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [highScore, setHighScore] = useState(0);
+  const [gameMode, setGameMode] = useState('local'); // 'local' | 'online'
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'categories'), async (snapshot) => {
@@ -66,7 +77,9 @@ export default function App() {
   // ── الشاشات الرئيسية ──
   if (screen === 'home') return <HomeScreen {...sharedProps} />;
   if (screen === 'knowledge') return <KnowledgeArenaScreen {...sharedProps} />;
-  if (screen === 'games') return <GamesArenaScreen {...sharedProps} />;
+  if (screen === 'games') return (
+    <GamesArenaScreen {...sharedProps} setGameMode={setGameMode} />
+  );
   if (screen === 'friends') return <FriendsScreen user={user} setScreen={setScreen} />;
 
   // ── ميدان المعلومات ──
@@ -148,6 +161,7 @@ export default function App() {
       currentUser={user}
       tokens={tokens}
       onSpendTokens={(amount) => setTokens(t => t - amount)}
+      mode={gameMode}
     />
   );
 
@@ -157,6 +171,7 @@ export default function App() {
       currentUser={user}
       tokens={tokens}
       onSpendTokens={(amount) => setTokens(t => t - amount)}
+      mode={gameMode}
     />
   );
 
@@ -166,6 +181,7 @@ export default function App() {
       currentUser={user}
       tokens={tokens}
       onSpendTokens={(amount) => setTokens(t => t - amount)}
+      mode={gameMode}
     />
   );
 
@@ -175,6 +191,54 @@ export default function App() {
       currentUser={user}
       tokens={tokens}
       onSpendTokens={(amount) => setTokens(t => t - amount)}
+    />
+  );
+
+  // ── ألعاب جلسة ──
+  if (screen === 'manana') return (
+    <ManAnaScreen onBack={() => setScreen('games')} />
+  );
+
+  if (screen === 'actitout') return (
+    <ActItOutScreen onBack={() => setScreen('games')} />
+  );
+
+  if (screen === 'truthdare') return (
+    <TruthDareScreen onBack={() => setScreen('games')} />
+  );
+
+  if (screen === 'dominoes') return (
+    <DominoGameScreen
+      onBack={() => setScreen('games')}
+      currentUser={user}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
+    />
+  );
+
+  if (screen === 'biloot') return (
+    <BilootGameScreen
+      onBack={() => setScreen('games')}
+      currentUser={user}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
+    />
+  );
+
+  // ── ألعاب جديدة ──
+  if (screen === 'rankfriends') return (
+    <RankFriendsScreen onBack={() => setScreen('games')} />
+  );
+
+  if (screen === 'neverhaveiever') return (
+    <NeverHaveIEverScreen onBack={() => setScreen('games')} />
+  );
+
+  if (screen === 'drawguess') return (
+    <DrawGuessScreen
+      onBack={() => setScreen('games')}
+      currentUser={user}
+      mode={gameMode}
     />
   );
 

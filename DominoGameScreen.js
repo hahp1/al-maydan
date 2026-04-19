@@ -170,7 +170,7 @@ function getUid() {
 // ══════════════════════════════════════════════════════════════
 // المكوّن الرئيسي
 // ══════════════════════════════════════════════════════════════
-export default function DominoGameScreen({ onBack, currentUser, tokens, onSpendTokens }) {
+export default function DominoGameScreen({ onBack, currentUser, tokens, onSpendTokens, onOpenTokenModal }) {
   const [phase, setPhase] = useState('lobby'); // lobby | waiting | playing | gameOver
   const [roomCode, setRoomCode]   = useState('');
   const [joinCode, setJoinCode]   = useState('');
@@ -179,8 +179,9 @@ export default function DominoGameScreen({ onBack, currentUser, tokens, onSpendT
   const [waitSec, setWaitSec]     = useState(LOBBY_WAIT);
   const [selectedTile, setSelectedTile] = useState(null);
   const [msg, setMsg]             = useState('');
-  const [scores, setScores]       = useState([0, 0]); // [فريق0, فريق1]
-  const [gameOver, setGameOver]   = useState(null);   // { winner: 0|1 }
+  const [scores, setScores]       = useState([0, 0]);
+  const [gameOver, setGameOver]   = useState(null);
+  const [showHowTo, setShowHowTo] = useState(false);
 
   const unsubRef  = useRef(null);
   const botTimerRef = useRef(null);
@@ -518,20 +519,62 @@ export default function DominoGameScreen({ onBack, currentUser, tokens, onSpendT
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
+          <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>🁣 دومينو</Text>
-        <View style={{ width: 40 }} />
+        <View style={styles.tokenBadge}>
+          <Text style={styles.tokenBadgeText}>🪙 {tokens ?? 0}</Text>
+        </View>
       </View>
-      <View style={styles.lobbyCenter}>
-        <Text style={styles.lobbyEmoji}>🁣</Text>
-        <Text style={styles.lobbyTitle}>دومينو الفريقين</Text>
-        <Text style={styles.lobbyDesc}>الفوز بـ 151 نقطة | 4 لاعبين</Text>
 
-        <TouchableOpacity style={styles.bigBtn} onPress={handleCreate}>
-          <Text style={styles.bigBtnText}>إنشاء غرفة</Text>
+      <ScrollView contentContainerStyle={styles.lobbyCenterScroll}>
+        {/* بطاقة المعلومات */}
+        <View style={styles.lobbyInfoCard}>
+          <Text style={styles.lobbyEmoji}>🁣</Text>
+          <Text style={styles.lobbyTitle}>دومينو الفريقين</Text>
+          <Text style={styles.lobbyDesc}>الفوز بـ 151 نقطة | 4 لاعبين</Text>
+        </View>
+
+        {/* طريقة اللعب */}
+        <TouchableOpacity style={styles.howToBtn} onPress={() => setShowHowTo(true)} activeOpacity={0.8}>
+          <Text style={styles.howToBtnText}>📖 طريقة اللعب</Text>
         </TouchableOpacity>
 
+        {/* لعب عشوائي */}
+        <TouchableOpacity
+          style={[styles.bigBtn, { backgroundColor: '#06b6d4' }]}
+          onPress={() => {
+            if ((tokens ?? 0) < 10) {
+              Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز', [
+                { text: 'إلغاء', style: 'cancel' },
+              ]);
+              return;
+            }
+            onSpendTokens && onSpendTokens(10);
+            handleCreate();
+          }}
+        >
+          <Text style={styles.bigBtnText}>🌐 لعب عشوائي  🪙 10</Text>
+        </TouchableOpacity>
+
+        {/* إنشاء غرفة */}
+        <TouchableOpacity
+          style={styles.bigBtn}
+          onPress={() => {
+            if ((tokens ?? 0) < 10) {
+              Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز', [
+                { text: 'إلغاء', style: 'cancel' },
+              ]);
+              return;
+            }
+            onSpendTokens && onSpendTokens(10);
+            handleCreate();
+          }}
+        >
+          <Text style={styles.bigBtnText}>🔒 إنشاء غرفة خاصة  🪙 10</Text>
+        </TouchableOpacity>
+
+        {/* انضمام بكود */}
         <View style={styles.joinRow}>
           <TextInput
             style={styles.codeInput}
@@ -546,7 +589,26 @@ export default function DominoGameScreen({ onBack, currentUser, tokens, onSpendT
             <Text style={styles.bigBtnText}>انضم</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
+
+      {/* Modal طريقة اللعب */}
+      {showHowTo && (
+        <View style={styles.howToOverlay}>
+          <View style={styles.howToCard}>
+            <Text style={styles.howToTitle}>📖 طريقة لعب الدومينو</Text>
+            <Text style={styles.howToText}>• فريقان: الأزرق (مقاعد 0+2) والأحمر (مقاعد 1+3)</Text>
+            <Text style={styles.howToText}>• كل لاعب يحصل على 7 قطع</Text>
+            <Text style={styles.howToText}>• يبدأ من لديه أثقل زوج مزدوج</Text>
+            <Text style={styles.howToText}>• ضع قطعة تطابق أحد الطرفين المفتوحين</Text>
+            <Text style={styles.howToText}>• إذا لم تجد قطعة تمر</Text>
+            <Text style={styles.howToText}>• الفريق الذي يفرغ يده أو يوقف اللعبة يفوز بالجولة</Text>
+            <Text style={styles.howToText}>• الفوز عند الوصول لـ 151 نقطة</Text>
+            <TouchableOpacity style={styles.bigBtn} onPress={() => setShowHowTo(false)}>
+              <Text style={styles.bigBtnText}>فهمت ✓</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 
@@ -556,7 +618,7 @@ export default function DominoGameScreen({ onBack, currentUser, tokens, onSpendT
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => { setPhase('lobby'); setRoomCode(''); }} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
+          <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>🁣 انتظار</Text>
         <View style={{ width: 40 }} />
@@ -633,7 +695,7 @@ export default function DominoGameScreen({ onBack, currentUser, tokens, onSpendT
       {/* هيدر */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
+          <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
           <Text style={styles.headerTitle}>🁣 دومينو</Text>
@@ -785,9 +847,40 @@ const styles = StyleSheet.create({
 
   // لوبي
   lobbyCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 14 },
-  lobbyEmoji: { fontSize: 64 },
+  lobbyCenterScroll: { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 40, paddingTop: 16, gap: 14 },
+  lobbyInfoCard: {
+    alignItems: 'center', backgroundColor: '#0f0f2e',
+    borderRadius: 20, borderWidth: 1.5, borderColor: '#06b6d430',
+    padding: 24, width: '100%', gap: 8,
+  },
+  lobbyEmoji: { fontSize: 56 },
   lobbyTitle: { color: '#fff', fontSize: 24, fontWeight: '900' },
   lobbyDesc: { color: '#5a5a80', fontSize: 14 },
+  tokenBadge: {
+    backgroundColor: '#f59e0b22', borderWidth: 1,
+    borderColor: '#f59e0b50', borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  tokenBadgeText: { color: '#f59e0b', fontSize: 13, fontWeight: '700' },
+  howToBtn: {
+    backgroundColor: '#0f0f2e', borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#06b6d430',
+    paddingVertical: 12, paddingHorizontal: 24,
+    alignSelf: 'stretch', alignItems: 'center',
+  },
+  howToBtnText: { color: '#06b6d4', fontSize: 15, fontWeight: '700' },
+  howToOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: '#000000bb', alignItems: 'center', justifyContent: 'center',
+    padding: 24,
+  },
+  howToCard: {
+    backgroundColor: '#0f0f2e', borderRadius: 20,
+    borderWidth: 1.5, borderColor: '#06b6d440',
+    padding: 24, width: '100%', gap: 10,
+  },
+  howToTitle: { color: '#06b6d4', fontSize: 18, fontWeight: '900', marginBottom: 4 },
+  howToText: { color: '#a0a0c0', fontSize: 14, lineHeight: 22 },
   bigBtn: {
     backgroundColor: '#06b6d4', borderRadius: 14,
     paddingVertical: 14, paddingHorizontal: 40, alignSelf: 'stretch', alignItems: 'center',

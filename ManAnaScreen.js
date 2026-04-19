@@ -346,19 +346,38 @@ function PlayScreen({ playerCount, timeLimit, onBack }) {
 }
 
 // ── المكوّن الرئيسي ─────────────────────────────────────────
-export default function ManAnaScreen({ onBack }) {
+export default function ManAnaScreen({ onBack, tokens = 0, onSpendTokens, onOpenTokenModal }) {
   const [gameStarted, setGameStarted] = useState(false);
   const [config, setConfig] = useState(null);
+
+  function handleStart(cfg) {
+    if (tokens < 10) {
+      Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز لبدء اللعبة', [
+        { text: 'اذهب إلى السوق', onPress: () => onOpenTokenModal && onOpenTokenModal() },
+        { text: 'إلغاء', style: 'cancel' },
+      ]);
+      return;
+    }
+    onSpendTokens && onSpendTokens(10);
+    setConfig(cfg);
+    setGameStarted(true);
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: '#06061a' }}>
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <TouchableOpacity style={topBar.backBtn} onPress={onBack}>
-        <Text style={topBar.backText}>→ رجوع</Text>
-      </TouchableOpacity>
+      <View style={topBar.header}>
+        <TouchableOpacity style={topBar.backBtn} onPress={onBack}>
+          <Text style={topBar.backText}>←</Text>
+        </TouchableOpacity>
+        <Text style={topBar.title}>🤔 من أنا؟</Text>
+        <View style={topBar.tokenBadge}>
+          <Text style={topBar.tokenText}>🪙 {tokens}</Text>
+        </View>
+      </View>
 
       {!gameStarted ? (
-        <SetupScreen onStart={(cfg) => { setConfig(cfg); setGameStarted(true); }} />
+        <SetupScreen onStart={handleStart} />
       ) : (
         <PlayScreen
           playerCount={config.playerCount}
@@ -372,8 +391,24 @@ export default function ManAnaScreen({ onBack }) {
 
 // ── الستايلات ────────────────────────────────────────────────
 const topBar = StyleSheet.create({
-  backBtn: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 8 },
-  backText: { color: '#a78bfa', fontSize: 16, fontWeight: '700' },
+  header: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: 56, paddingBottom: 8,
+  },
+  backBtn: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: '#0f0f2e', borderWidth: 1,
+    borderColor: '#a78bfa30', alignItems: 'center', justifyContent: 'center',
+  },
+  backText: { color: '#a78bfa', fontSize: 20, fontWeight: '700' },
+  title: { color: '#a78bfa', fontSize: 17, fontWeight: '900' },
+  tokenBadge: {
+    backgroundColor: '#f59e0b22', borderWidth: 1,
+    borderColor: '#f59e0b50', borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  tokenText: { color: '#f59e0b', fontSize: 13, fontWeight: '700' },
 });
 
 const setup = StyleSheet.create({

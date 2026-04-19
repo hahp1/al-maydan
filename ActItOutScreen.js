@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Animated, StatusBar, ScrollView,
+  Animated, StatusBar, ScrollView, Alert, TextInput,
 } from 'react-native';
 
 // ─────────────────────────────────────────────────────────────
@@ -215,11 +215,39 @@ function buildRounds() {
 // ── شاشة الإعداد ─────────────────────────────────────────────
 function SetupScreen({ onStart }) {
   const [timeLimit, setTimeLimit] = useState(60);
+  const [team1Name, setTeam1Name] = useState('الفريق الأول');
+  const [team2Name, setTeam2Name] = useState('الفريق الثاني');
 
   return (
     <ScrollView style={s.setupContainer} contentContainerStyle={s.setupContent}>
-      <Text style={s.title}>🕺 بدون كلام</Text>
       <Text style={s.subtitle}>مثّل الكلمة وفريقك يخمّن قبل انتهاء الوقت</Text>
+
+      {/* أسماء الفرق */}
+      <View style={s.section}>
+        <Text style={s.label}>أسماء الفرق</Text>
+        <View style={s.teamRow}>
+          <View style={[s.teamInputWrap, { borderColor: '#ec489950' }]}>
+            <Text style={[s.teamInputLabel, { color: '#ec4899' }]}>🔴 الفريق الأول</Text>
+            <TextInput
+              style={s.teamInput}
+              value={team1Name}
+              onChangeText={setTeam1Name}
+              maxLength={20}
+              textAlign="right"
+            />
+          </View>
+          <View style={[s.teamInputWrap, { borderColor: '#3b82f650' }]}>
+            <Text style={[s.teamInputLabel, { color: '#3b82f6' }]}>🔵 الفريق الثاني</Text>
+            <TextInput
+              style={s.teamInput}
+              value={team2Name}
+              onChangeText={setTeam2Name}
+              maxLength={20}
+              textAlign="right"
+            />
+          </View>
+        </View>
+      </View>
 
       <View style={s.section}>
         <Text style={s.label}>وقت كل جولة للتمثيل</Text>
@@ -244,26 +272,15 @@ function SetupScreen({ onStart }) {
         <Text style={s.infoNote}>كل جولة = 10 نقاط • السرقة = 10 نقاط</Text>
       </View>
 
-      <View style={s.statsCard}>
-        <Text style={s.statsTitle}>📊 بنك الكلمات</Text>
-        <Text style={s.statsRow}>👤 {PERSONS.length} شخصية مشهورة</Text>
-        <Text style={s.statsRow}>🐾 {ANIMALS.length} حيوان</Text>
-        <Text style={s.statsRow}>🎬 {MOVIES.length} فيلم ومسلسل</Text>
-        <Text style={s.statsRow}>🌍 {PLACES.length} دولة ومكان</Text>
-        <Text style={s.statsRow}>💬 {AMTHAL.length} مثل شعبي</Text>
-        <Text style={s.statsRow}>📜 {ASHAAR.length} بيت شعر</Text>
-        <Text style={s.statsTotal}>المجموع: {NORMAL_WORDS.length + AMTHAL.length + ASHAAR.length} عنصر</Text>
-      </View>
-
-      <TouchableOpacity style={s.startBtn} onPress={() => onStart({ timeLimit })}>
-        <Text style={s.startText}>ابدأ اللعبة ←</Text>
+      <TouchableOpacity style={s.startBtn} onPress={() => onStart({ timeLimit, team1Name: team1Name.trim() || 'الفريق الأول', team2Name: team2Name.trim() || 'الفريق الثاني' })}>
+        <Text style={s.startText}>ابدأ اللعبة ←  🪙 10</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
 // ── شاشة اللعب ───────────────────────────────────────────────
-function PlayScreen({ timeLimit, onBack }) {
+function PlayScreen({ timeLimit, onBack, team1Name = 'الفريق الأول', team2Name = 'الفريق الثاني' }) {
   const rounds = useRef(buildRounds()).current;
   const [roundIndex, setRoundIndex] = useState(0);
   const [scores, setScores] = useState([0, 0]);
@@ -346,7 +363,7 @@ function PlayScreen({ timeLimit, onBack }) {
       <View style={s.centerContainer}>
         <Text style={s.bigEmoji}>⏰</Text>
         <Text style={s.phaseTitle}>انتهى الوقت!</Text>
-        <Text style={s.stealPrompt}>فرصة الفريق {other === 0 ? 'الأول' : 'الثاني'} للسرقة 🔥</Text>
+        <Text style={s.stealPrompt}>فرصة {other === 0 ? team1Name : team2Name} للسرقة 🔥</Text>
         <Text style={s.stealHint}>جواب واحد فقط</Text>
         <View style={s.stealBtns}>
           <TouchableOpacity style={s.stealFailBtn} onPress={stealFailed}>
@@ -368,11 +385,11 @@ function PlayScreen({ timeLimit, onBack }) {
       <View style={s.centerContainer}>
         <View style={s.scoreboard}>
           <View style={[s.scoreTeam, actingTeam === 0 && s.scoreTeamActive]}>
-            <Text style={s.scoreTeamName}>الفريق الأول</Text>
+            <Text style={s.scoreTeamName}>{team1Name}</Text>
             <Text style={s.scoreTeamScore}>{scores[0]}</Text>
           </View>
           <View style={[s.scoreTeam, actingTeam === 1 && s.scoreTeamActive]}>
-            <Text style={s.scoreTeamName}>الفريق الثاني</Text>
+            <Text style={s.scoreTeamName}>{team2Name}</Text>
             <Text style={s.scoreTeamScore}>{scores[1]}</Text>
           </View>
         </View>
@@ -419,19 +436,38 @@ function PlayScreen({ timeLimit, onBack }) {
 }
 
 // ── المكوّن الرئيسي ─────────────────────────────────────────
-export default function ActItOutScreen({ onBack }) {
+export default function ActItOutScreen({ onBack, tokens = 0, onSpendTokens, onOpenTokenModal }) {
   const [gameStarted, setGameStarted] = useState(false);
   const [config, setConfig] = useState(null);
+
+  function handleStart(cfg) {
+    if (tokens < 10) {
+      Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز لبدء اللعبة', [
+        { text: 'اذهب إلى السوق', onPress: () => onOpenTokenModal && onOpenTokenModal() },
+        { text: 'إلغاء', style: 'cancel' },
+      ]);
+      return;
+    }
+    onSpendTokens && onSpendTokens(10);
+    setConfig(cfg);
+    setGameStarted(true);
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: '#06061a' }}>
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <TouchableOpacity style={s.backBtn} onPress={onBack}>
-        <Text style={s.backText}>→ رجوع</Text>
-      </TouchableOpacity>
+      <View style={s.headerRow}>
+        <TouchableOpacity style={s.backBtn} onPress={onBack}>
+          <Text style={s.backText}>←</Text>
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>🕺 بدون كلام</Text>
+        <View style={s.tokenBadge}>
+          <Text style={s.tokenText}>🪙 {tokens}</Text>
+        </View>
+      </View>
       {!gameStarted
-        ? <SetupScreen onStart={cfg => { setConfig(cfg); setGameStarted(true); }} />
-        : <PlayScreen timeLimit={config.timeLimit} onBack={onBack} />
+        ? <SetupScreen onStart={handleStart} />
+        : <PlayScreen timeLimit={config.timeLimit} team1Name={config.team1Name} team2Name={config.team2Name} onBack={onBack} />
       }
     </View>
   );
@@ -439,8 +475,24 @@ export default function ActItOutScreen({ onBack }) {
 
 // ── الستايلات ────────────────────────────────────────────────
 const s = StyleSheet.create({
-  backBtn: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 8 },
-  backText: { color: '#ec4899', fontSize: 16, fontWeight: '700' },
+  headerRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: 56, paddingBottom: 8,
+  },
+  backBtn: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: '#0f0f2e', borderWidth: 1,
+    borderColor: '#ec489930', alignItems: 'center', justifyContent: 'center',
+  },
+  backText: { color: '#ec4899', fontSize: 20, fontWeight: '700' },
+  headerTitle: { color: '#ec4899', fontSize: 17, fontWeight: '900' },
+  tokenBadge: {
+    backgroundColor: '#f59e0b22', borderWidth: 1,
+    borderColor: '#f59e0b50', borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  tokenText: { color: '#f59e0b', fontSize: 13, fontWeight: '700' },
   setupContainer: { flex: 1, backgroundColor: '#06061a' },
   setupContent: { padding: 24, paddingBottom: 60, alignItems: 'center', gap: 20 },
   title: { color: '#fff', fontSize: 32, fontWeight: '900', marginTop: 8 },
@@ -458,6 +510,17 @@ const s = StyleSheet.create({
   infoCard: {
     width: '100%', backgroundColor: '#0f0f2e',
     borderRadius: 16, borderWidth: 1.5, borderColor: '#ec489930', padding: 16, gap: 6,
+  },
+  teamRow: { flexDirection: 'row', gap: 10 },
+  teamInputWrap: {
+    flex: 1, backgroundColor: '#0f0f2e', borderRadius: 14,
+    borderWidth: 1.5, padding: 12, gap: 6,
+  },
+  teamInputLabel: { fontSize: 12, fontWeight: '700' },
+  teamInput: {
+    color: '#fff', fontSize: 15, fontWeight: '600',
+    borderBottomWidth: 1, borderBottomColor: '#ffffff20',
+    paddingBottom: 4,
   },
   infoTitle: { color: '#ec4899', fontSize: 15, fontWeight: '800', marginBottom: 4 },
   infoRow: { color: '#a0a0c0', fontSize: 13 },

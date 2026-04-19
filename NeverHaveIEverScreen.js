@@ -90,7 +90,7 @@ const ps = StyleSheet.create({
 });
 
 // ── المكوّن الرئيسي ──────────────────────────────────────────
-export default function NeverHaveIEverScreen({ onBack }) {
+export default function NeverHaveIEverScreen({ onBack, tokens = 0, onSpendTokens, onOpenTokenModal }) {
   const [phase, setPhase] = useState('setup');
   const [playerName, setPlayerName] = useState('');
   const [players, setPlayers] = useState([]);
@@ -129,6 +129,14 @@ export default function NeverHaveIEverScreen({ onBack }) {
 
   function startGame() {
     if (players.length < 2) return Alert.alert('', 'أضف لاعبين على الأقل');
+    if (tokens < 10) {
+      Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز لبدء اللعبة', [
+        { text: 'اذهب إلى السوق', onPress: () => onOpenTokenModal && onOpenTokenModal() },
+        { text: 'إلغاء', style: 'cancel' },
+      ]);
+      return;
+    }
+    onSpendTokens && onSpendTokens(10);
     const stmts = shuffle(STATEMENTS).slice(0, 20);
     setStatements(stmts);
     setSIndex(0);
@@ -173,13 +181,15 @@ export default function NeverHaveIEverScreen({ onBack }) {
 
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
           <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-            <Text style={styles.backText}>→</Text>
+            <Text style={styles.backText}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerEmoji}>☝️</Text>
             <Text style={styles.headerTitle}>أنا لم أفعل</Text>
           </View>
-          <View style={{ width: 40 }} />
+          <View style={styles.tokenBadge}>
+            <Text style={styles.tokenText}>🪙 {tokens}</Text>
+          </View>
         </Animated.View>
 
         <ScrollView contentContainerStyle={styles.setupContent} keyboardShouldPersistTaps="handled">
@@ -223,7 +233,7 @@ export default function NeverHaveIEverScreen({ onBack }) {
 
           {players.length >= 2 && (
             <TouchableOpacity style={styles.startBtn} onPress={startGame}>
-              <Text style={styles.startBtnText}>☝️ ابدأ اللعبة</Text>
+              <Text style={styles.startBtnText}>☝️ ابدأ اللعبة  🪙 10</Text>
             </TouchableOpacity>
           )}
         </ScrollView>
@@ -244,7 +254,7 @@ export default function NeverHaveIEverScreen({ onBack }) {
           <TouchableOpacity onPress={() => Alert.alert('خروج', 'تريد الخروج؟', [
             { text: 'لا' }, { text: 'نعم', onPress: () => setPhase('setup') }
           ])} style={styles.backBtn}>
-            <Text style={styles.backText}>→</Text>
+            <Text style={styles.backText}>←</Text>
           </TouchableOpacity>
           <View style={styles.progressWrap}>
             <Text style={styles.progressText}>{sIndex + 1} / {statements.length}</Text>
@@ -313,7 +323,7 @@ export default function NeverHaveIEverScreen({ onBack }) {
         <StatusBar barStyle="light-content" backgroundColor="#06061a" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setPhase('setup')} style={styles.backBtn}>
-            <Text style={styles.backText}>→</Text>
+            <Text style={styles.backText}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerEmoji}>🏆</Text>
@@ -376,6 +386,12 @@ const styles = StyleSheet.create({
   headerCenter: { alignItems: 'center', gap: 2 },
   headerEmoji: { fontSize: 24 },
   headerTitle: { color: '#10b981', fontSize: 18, fontWeight: '900' },
+  tokenBadge: {
+    backgroundColor: '#f59e0b22', borderWidth: 1,
+    borderColor: '#f59e0b50', borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  tokenText: { color: '#f59e0b', fontSize: 13, fontWeight: '700' },
 
   setupContent: { paddingHorizontal: 20, paddingBottom: 60, gap: 14 },
   rulesCard: {

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { StatusBar } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { StatusBar, BackHandler, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from './firebaseConfig';
 import { collection, getDocs, onSnapshot } from 'firebase/firestore';
@@ -63,6 +63,37 @@ export default function App() {
     AsyncStorage.getItem(HIGHSCORE_KEY).then(v => { if (v) setHighScore(parseInt(v)); });
     return () => unsub();
   }, []);
+
+  const GAME_SCREENS = ['xo','bullshit','mafia','codenames','kout','manana','actitout',
+    'truthdare','dominoes','biloot','rankfriends','neverhaveiever','drawguess',
+    'board','solo','online'];
+  const HOME_SCREENS = ['home','knowledge','games','friends','settings'];
+
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (screen === 'login') return false; // يغلق التطبيق
+      if (GAME_SCREENS.includes(screen)) {
+        Alert.alert('مغادرة اللعبة 🚪', 'هل تريد مغادرة اللعبة؟', [
+          { text: 'إلغاء', style: 'cancel' },
+          { text: 'مغادرة', style: 'destructive', onPress: () => setScreen('games') },
+        ]);
+        return true;
+      }
+      if (screen === 'games' || screen === 'knowledge' || screen === 'friends' || screen === 'settings') {
+        setScreen('home');
+        return true;
+      }
+      if (screen === 'home') {
+        Alert.alert('خروج', 'هل تريد إغلاق التطبيق؟', [
+          { text: 'إلغاء', style: 'cancel' },
+          { text: 'خروج', style: 'destructive', onPress: () => BackHandler.exitApp() },
+        ]);
+        return true;
+      }
+      return false;
+    });
+    return () => handler.remove();
+  }, [screen]);
 
   const sharedProps = { user, tokens, setTokens, setScreen, showTokenModal, setShowTokenModal, highScore };
 
@@ -196,15 +227,30 @@ export default function App() {
 
   // ── ألعاب جلسة ──
   if (screen === 'manana') return (
-    <ManAnaScreen onBack={() => setScreen('games')} />
+    <ManAnaScreen
+      onBack={() => setScreen('games')}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
+      onOpenTokenModal={() => setShowTokenModal(true)}
+    />
   );
 
   if (screen === 'actitout') return (
-    <ActItOutScreen onBack={() => setScreen('games')} />
+    <ActItOutScreen
+      onBack={() => setScreen('games')}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
+      onOpenTokenModal={() => setShowTokenModal(true)}
+    />
   );
 
   if (screen === 'truthdare') return (
-    <TruthDareScreen onBack={() => setScreen('games')} />
+    <TruthDareScreen
+      onBack={() => setScreen('games')}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
+      onOpenTokenModal={() => setShowTokenModal(true)}
+    />
   );
 
   if (screen === 'dominoes') return (
@@ -213,6 +259,7 @@ export default function App() {
       currentUser={user}
       tokens={tokens}
       onSpendTokens={(amount) => setTokens(t => t - amount)}
+      onOpenTokenModal={() => setShowTokenModal(true)}
     />
   );
 
@@ -222,16 +269,27 @@ export default function App() {
       currentUser={user}
       tokens={tokens}
       onSpendTokens={(amount) => setTokens(t => t - amount)}
+      onOpenTokenModal={() => setShowTokenModal(true)}
     />
   );
 
   // ── ألعاب جديدة ──
   if (screen === 'rankfriends') return (
-    <RankFriendsScreen onBack={() => setScreen('games')} />
+    <RankFriendsScreen
+      onBack={() => setScreen('games')}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
+      onOpenTokenModal={() => setShowTokenModal(true)}
+    />
   );
 
   if (screen === 'neverhaveiever') return (
-    <NeverHaveIEverScreen onBack={() => setScreen('games')} />
+    <NeverHaveIEverScreen
+      onBack={() => setScreen('games')}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
+      onOpenTokenModal={() => setShowTokenModal(true)}
+    />
   );
 
   if (screen === 'drawguess') return (
@@ -239,6 +297,9 @@ export default function App() {
       onBack={() => setScreen('games')}
       currentUser={user}
       mode={gameMode}
+      tokens={tokens}
+      onSpendTokens={(amount) => setTokens(t => t - amount)}
+      onOpenTokenModal={() => setShowTokenModal(true)}
     />
   );
 

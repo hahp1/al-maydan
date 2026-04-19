@@ -5,6 +5,7 @@ import {
   Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
 } from 'react-native';
 import { db, auth } from './firebaseConfig';
+import LeaveModal from './LeaveModal';
 import {
   doc, setDoc, onSnapshot, updateDoc, deleteDoc,
   collection, query, where, getDocs, serverTimestamp,
@@ -138,7 +139,7 @@ function MenuScreen({ onBack, onCreatePrivate, onCreateRandom, onJoin, tokens, f
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
       <Animated.View style={[s.header, { opacity: fadeAnim }]}>
         <TouchableOpacity onPress={onBack} style={s.backBtn}>
-          <Text style={s.backText}>→</Text>
+          <Text style={s.backText}>←</Text>
         </TouchableOpacity>
         <View style={s.headerCenter}>
           <Text style={s.headerEmoji}>🔤</Text>
@@ -290,7 +291,7 @@ function FriendsLobby({ roomData, roomId, myUid, isHost, onLeave, onSearch, onIn
     <View style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
       <View style={s.header}>
-        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>→</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
         <View style={s.headerCenter}><Text style={s.headerTitle}>غرفة الأصدقاء 🔒</Text></View>
         <View style={{ width: 40 }} />
       </View>
@@ -408,7 +409,7 @@ function RandomLobby({ roomData, myUid, onLeave, botWaitSecs }) {
     <View style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
       <View style={s.header}>
-        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>→</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
         <View style={s.headerCenter}><Text style={s.headerTitle}>بحث عن لاعبين 🌍</Text></View>
         <View style={{ width: 40 }} />
       </View>
@@ -589,7 +590,7 @@ function GameScreen({ roomData, myUid, onAction, onEndTurn, onLeave }) {
 
       {/* شريط أعلى */}
       <View style={s.gameTopBar}>
-        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>→</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
         <View style={[s.turnBadge, { borderColor: teamColor + '80', backgroundColor: teamColor + '15' }]}>
           <Text style={[s.turnBadgeText, { color: teamColor }]}>
             {currentTeam === 'team1' ? '🔴 دور الأحمر' : '🔵 دور الأزرق'}
@@ -729,6 +730,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, tokens, onSpe
   const [searching,     setSearching]     = useState(false);
   const [randomCount,   setRandomCount]   = useState(4);
   const [botWaitSecs,   setBotWaitSecs]   = useState(60);
+  const [showLeave,     setShowLeave]     = useState(false);
   const fadeAnim   = useRef(new Animated.Value(0)).current;
   const unsubRef   = useRef(null);
   const botTimerRef = useRef(null);
@@ -966,26 +968,24 @@ export default function CodenamesGameScreen({ onBack, currentUser, tokens, onSpe
     await updateDoc(doc(db, 'codenames_rooms', roomId), { currentTeam: nt, currentClue: null, currentClueNum: 0, guessesLeft: 0 });
   }
 
-  async function leaveRoom() {
-    Alert.alert('مغادرة', 'هل تريد مغادرة الغرفة؟', [
-      { text: 'إلغاء', style: 'cancel' },
-      { text: 'مغادرة', style: 'destructive', onPress: async () => {
-        const uid = getUid();
-        if (roomId) {
-          try {
-            const snap = await getDoc(doc(db, 'codenames_rooms', roomId));
-            if (snap.exists()) {
-              const d = snap.data();
-              if (d.phase === 'lobby_friends' || d.phase === 'lobby_random') onSpendTokens?.(-COST);
-              if (d.hostUid === uid && d.players.length <= 1) await deleteDoc(doc(db, 'codenames_rooms', roomId));
-              else await updateDoc(doc(db, 'codenames_rooms', roomId), { players: d.players.filter(p => p.uid !== uid) });
-            }
-          } catch {}
+  function leaveRoom() { setShowLeave(true); }
+
+  async function confirmLeave() {
+    setShowLeave(false);
+    const uid = getUid();
+    if (roomId) {
+      try {
+        const snap = await getDoc(doc(db, 'codenames_rooms', roomId));
+        if (snap.exists()) {
+          const d = snap.data();
+          if (d.phase === 'lobby_friends' || d.phase === 'lobby_random') onSpendTokens?.(-COST);
+          if (d.hostUid === uid && d.players.length <= 1) await deleteDoc(doc(db, 'codenames_rooms', roomId));
+          else await updateDoc(doc(db, 'codenames_rooms', roomId), { players: d.players.filter(p => p.uid !== uid) });
         }
-        if (unsubRef.current) unsubRef.current();
-        setRoomId(null); setRoomData(null); setPhase('menu');
-      }},
-    ]);
+      } catch {}
+    }
+    if (unsubRef.current) unsubRef.current();
+    setRoomId(null); setRoomData(null); setPhase('menu');
   }
 
   const isHost = roomData?.hostUid === myUid;
@@ -997,23 +997,41 @@ export default function CodenamesGameScreen({ onBack, currentUser, tokens, onSpe
     </View>
   );
 
-  if (phase === 'result')       return <ResultScreen roomData={roomData} myUid={myUid} onLeave={leaveRoom} />;
-  if (phase === 'game')         return <GameScreen roomData={roomData} myUid={myUid} onAction={handleAction} onEndTurn={endTurn} onLeave={leaveRoom} />;
-  if (phase === 'lobby_friends') return (
-    <FriendsLobby
-      roomData={roomData} roomId={roomId} myUid={myUid} isHost={isHost}
-      onLeave={leaveRoom} onSearch={searchFriend} onInvite={inviteFriend}
-      friendSearch={friendSearch} friendResults={friendResults} searching={searching}
-      onStartGame={() => updateDoc(doc(db, 'codenames_rooms', roomId), {
-        phase: 'game', board: generateBoard(),
-        currentTeam: 'team1', currentClue: null, currentClueNum: 0, guessesLeft: 0, winner: null, winReason: null,
-      })}
-      onJoinTeam={joinTeam}
-      onBecomeSpymaster={becomeSpymaster}
-      onResignSpymaster={resignSpymaster}
-    />
+  if (phase === 'result') return (
+    <>
+      <ResultScreen roomData={roomData} myUid={myUid} onLeave={leaveRoom} />
+      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
+    </>
   );
-  if (phase === 'lobby_random') return <RandomLobby roomData={roomData} myUid={myUid} onLeave={leaveRoom} botWaitSecs={botWaitSecs} />;
+  if (phase === 'game') return (
+    <>
+      <GameScreen roomData={roomData} myUid={myUid} onAction={handleAction} onEndTurn={endTurn} onLeave={leaveRoom} />
+      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
+    </>
+  );
+  if (phase === 'lobby_friends') return (
+    <>
+      <FriendsLobby
+        roomData={roomData} roomId={roomId} myUid={myUid} isHost={isHost}
+        onLeave={leaveRoom} onSearch={searchFriend} onInvite={inviteFriend}
+        friendSearch={friendSearch} friendResults={friendResults} searching={searching}
+        onStartGame={() => updateDoc(doc(db, 'codenames_rooms', roomId), {
+          phase: 'game', board: generateBoard(),
+          currentTeam: 'team1', currentClue: null, currentClueNum: 0, guessesLeft: 0, winner: null, winReason: null,
+        })}
+        onJoinTeam={joinTeam}
+        onBecomeSpymaster={becomeSpymaster}
+        onResignSpymaster={resignSpymaster}
+      />
+      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
+    </>
+  );
+  if (phase === 'lobby_random') return (
+    <>
+      <RandomLobby roomData={roomData} myUid={myUid} onLeave={leaveRoom} botWaitSecs={botWaitSecs} />
+      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
+    </>
+  );
 
   return (
     <MenuScreen

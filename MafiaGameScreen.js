@@ -460,7 +460,7 @@ export default function MafiaGameScreen({ onBack, currentUser, tokens, onSpendTo
       <HowToPlayModal visible={showHow} onClose={() => setShowHow(false)} />
       <Animated.View style={[s.header, { opacity: fadeAnim }]}>
         <TouchableOpacity onPress={onBack} style={s.iconBtn}>
-          <Text style={s.iconBtnTxt}>→</Text>
+          <Text style={s.iconBtnTxt}>←</Text>
         </TouchableOpacity>
         <View style={s.headerCenter}>
           <Text style={{ fontSize: 28 }}>🎭</Text>
@@ -516,7 +516,7 @@ export default function MafiaGameScreen({ onBack, currentUser, tokens, onSpendTo
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
       <View style={s.header}>
         <TouchableOpacity onPress={() => { if (unsubRef.current) unsubRef.current(); doReset(); }} style={s.iconBtn}>
-          <Text style={s.iconBtnTxt}>→</Text>
+          <Text style={s.iconBtnTxt}>←</Text>
         </TouchableOpacity>
         <View style={s.headerCenter}>
           <Text style={{ fontSize: 22 }}>🎭</Text>

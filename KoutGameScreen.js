@@ -5,6 +5,7 @@ import {
   ScrollView, TextInput, Modal,
 } from 'react-native';
 import { db, auth } from './firebaseConfig';
+import LeaveModal from './LeaveModal';
 import {
   doc, setDoc, onSnapshot, updateDoc, deleteDoc,
   collection, serverTimestamp, arrayUnion, getDoc, query, where, getDocs,
@@ -204,6 +205,7 @@ export default function KoutGameScreen({ onBack, currentUser, tokens, onSpendTok
   const [searching,      setSearching]     = useState(false);
   const [desiredCount,   setDesiredCount]  = useState(4);
   const [selectedCard,   setSelectedCard]  = useState(null);
+  const [showLeave,      setShowLeave]     = useState(false);
   const startedRef = useRef(false);
   const unsubRef   = useRef(null);
   const fadeAnim   = useRef(new Animated.Value(0)).current;
@@ -488,13 +490,17 @@ export default function KoutGameScreen({ onBack, currentUser, tokens, onSpendTok
   }
 
   // ── مغادرة ──
-  async function leaveRoom() {
+  function leaveRoom() { setShowLeave(true); }
+
+  async function confirmLeave() {
+    setShowLeave(false);
     if (unsubRef.current) unsubRef.current();
     if (roomId) {
       try {
         const snap = await getDoc(doc(db,'kout_rooms',roomId));
         if (snap.exists()) {
           const data = snap.data();
+          if (data.phase === 'lobby') onSpendTokens && onSpendTokens(-COST);
           if (data.phase === 'lobby' && data.hostUid === getUid()) {
             await deleteDoc(doc(db,'kout_rooms',roomId));
           } else {
@@ -534,7 +540,7 @@ export default function KoutGameScreen({ onBack, currentUser, tokens, onSpendTok
       <Animated.View style={{ opacity: fadeAnim, flex:1 }}>
         <View style={s.header}>
           <TouchableOpacity onPress={onBack} style={s.backBtn}>
-            <Text style={s.backText}>→</Text>
+            <Text style={s.backText}>←</Text>
           </TouchableOpacity>
           <View style={s.headerCenter}>
             <Text style={s.headerEmoji}>🂡</Text>
@@ -620,7 +626,7 @@ export default function KoutGameScreen({ onBack, currentUser, tokens, onSpendTok
     <View style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
       <View style={s.header}>
-        <TouchableOpacity onPress={leaveRoom} style={s.backBtn}><Text style={s.backText}>→</Text></TouchableOpacity>
+        <TouchableOpacity onPress={leaveRoom} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
         <Text style={s.headerTitle}>🂡 انتظار اللاعبين</Text>
         <View style={s.tokenBadge}><Text style={s.tokenText}>🪙 {tokens}</Text></View>
       </View>
@@ -680,6 +686,7 @@ export default function KoutGameScreen({ onBack, currentUser, tokens, onSpendTok
           <Text style={s.waitingText}>في انتظار اكتمال اللاعبين...</Text>
         </View>
       </ScrollView>
+      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
     </View>
   );
 
@@ -698,7 +705,7 @@ export default function KoutGameScreen({ onBack, currentUser, tokens, onSpendTok
       <View style={s.container}>
         <StatusBar barStyle="light-content" backgroundColor="#06061a" />
         <View style={s.gameHeader}>
-          <TouchableOpacity onPress={leaveRoom} style={s.backBtn}><Text style={s.backText}>→</Text></TouchableOpacity>
+          <TouchableOpacity onPress={leaveRoom} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
           <View style={{ alignItems:'center' }}>
             <Text style={s.gameTitle}>🂡 المزايدة</Text>
             <Text style={s.gameSubtitle}>حد الفوز: {WIN_LIMIT} نقطة</Text>
@@ -776,7 +783,7 @@ export default function KoutGameScreen({ onBack, currentUser, tokens, onSpendTok
         <StatusBar barStyle="light-content" backgroundColor="#06061a" />
 
         <View style={s.gameHeader}>
-          <TouchableOpacity onPress={leaveRoom} style={s.backBtn}><Text style={s.backText}>→</Text></TouchableOpacity>
+          <TouchableOpacity onPress={leaveRoom} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
           <View style={{ alignItems:'center' }}>
             <Text style={s.gameTitle}>🂡 كوت</Text>
             {trump && <Text style={{color:SUIT_COLOR[trump]||'#fff',fontSize:14,fontWeight:'800'}}>حكم: {trump}</Text>}
@@ -961,7 +968,7 @@ export default function KoutGameScreen({ onBack, currentUser, tokens, onSpendTok
       <View style={s.container}>
         <StatusBar barStyle="light-content" backgroundColor="#06061a" />
         <View style={s.gameHeader}>
-          <TouchableOpacity onPress={onBack} style={s.backBtn}><Text style={s.backText}>→</Text></TouchableOpacity>
+          <TouchableOpacity onPress={onBack} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
           <Text style={s.gameTitle}>🏆 النهاية</Text>
           <View/>
         </View>
@@ -999,6 +1006,7 @@ export default function KoutGameScreen({ onBack, currentUser, tokens, onSpendTok
   return (
     <View style={[s.container,{alignItems:'center',justifyContent:'center'}]}>
       <ActivityIndicator color="#8b5cf6" size="large"/>
+      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
     </View>
   );
 }

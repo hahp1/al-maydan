@@ -6,6 +6,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { db } from './firebaseConfig';
+import LeaveModal from './LeaveModal';
 import {
   collection, doc, setDoc, onSnapshot,
   updateDoc, serverTimestamp, getDoc, deleteDoc,
@@ -126,8 +127,8 @@ const cv = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════
 // ── وضع الجلسة (LOCAL) ─────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════
-function LocalMode({ onBack, tokens = 0, onSpendTokens }) {
-  const [phase, setPhase] = useState('setup'); // setup | draw | guess | roundEnd | end
+function LocalMode({ onBack }) {
+  const [phase, setPhase] = useState('setup');
   const [playerName, setPlayerName] = useState('');
   const [players, setPlayers] = useState([]);
   const [currentDrawerIdx, setCurrentDrawerIdx] = useState(0);
@@ -144,6 +145,7 @@ function LocalMode({ onBack, tokens = 0, onSpendTokens }) {
   const [roundIdx, setRoundIdx] = useState(0);
   const [color, setColor] = useState('#fff');
   const [brushSize, setBrushSize] = useState(6);
+  const [showLeave, setShowLeave] = useState(false);
 
   const timerRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -163,8 +165,6 @@ function LocalMode({ onBack, tokens = 0, onSpendTokens }) {
 
   function startGame() {
     if (players.length < 2) return Alert.alert('', 'أضف لاعبين على الأقل');
-    if (tokens < 10) return Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 عملات للعب\nاشحن رصيدك من قائمة العملات');
-    onSpendTokens && onSpendTokens(10);
     const order = [];
     for (let r = 0; r < totalRounds; r++) {
       shuffle(players).forEach(p => order.push(p.id));
@@ -269,8 +269,8 @@ function LocalMode({ onBack, tokens = 0, onSpendTokens }) {
       <View style={styles.container}>
         <StatusBar barStyle="light-content" />
         <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={[styles.backBtn, { borderColor: '#3b82f630' }]}>
-            <Text style={[styles.backText, { color: '#3b82f6' }]}>→</Text>
+          <TouchableOpacity onPress={()=>setShowLeave(true)} style={[styles.backBtn, { borderColor: '#3b82f630' }]}>
+            <Text style={[styles.backText, { color: '#3b82f6' }]}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerEmoji}>🎨</Text>
@@ -319,11 +319,6 @@ function LocalMode({ onBack, tokens = 0, onSpendTokens }) {
                 <Text style={[styles.roundBtnText, totalRounds === n && styles.roundBtnTextActive]}>{n}</Text>
               </TouchableOpacity>
             ))}
-          </View>
-
-          <View style={styles.tokenBadge}>
-            <Text style={styles.tokenBadgeText}>🪙 10 عملات للجولة</Text>
-            <Text style={styles.tokenBalance}>رصيدك: {tokens} 🪙</Text>
           </View>
 
           {players.length >= 2 && (
@@ -459,14 +454,16 @@ function LocalMode({ onBack, tokens = 0, onSpendTokens }) {
     );
   }
 
-  return null;
+  return (
+    <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={onBack} />
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
 // ── وضع الأونلاين ───────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════
-function OnlineMode({ onBack, currentUser, tokens = 0, onSpendTokens }) {
-  const [phase, setPhase] = useState('lobby'); // lobby | waiting | game | end
+function OnlineMode({ onBack, currentUser }) {
+  const [phase, setPhase] = useState('lobby');
   const [roomCode, setRoomCode] = useState('');
   const [inputCode, setInputCode] = useState('');
   const [roomData, setRoomData] = useState(null);
@@ -478,6 +475,7 @@ function OnlineMode({ onBack, currentUser, tokens = 0, onSpendTokens }) {
   const [color, setColor] = useState('#fff');
   const [brushSize, setBrushSize] = useState(6);
   const [wordOptions, setWordOptions] = useState([]);
+  const [showLeave, setShowLeave] = useState(false);
 
   const timerRef = useRef(null);
   const roomRef = useRef(null);
@@ -489,8 +487,6 @@ function OnlineMode({ onBack, currentUser, tokens = 0, onSpendTokens }) {
   }, []);
 
   async function createRoom() {
-    if (tokens < 10) return Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 عملات للعب\nاشحن رصيدك من قائمة العملات');
-    onSpendTokens && onSpendTokens(10);
     const code = generateRoomCode();
     setRoomCode(code);
     const ref = doc(db, 'drawguess_rooms', code);
@@ -517,8 +513,6 @@ function OnlineMode({ onBack, currentUser, tokens = 0, onSpendTokens }) {
   async function joinRoom() {
     const code = inputCode.trim();
     if (code.length !== 6) return Alert.alert('', 'أدخل كود صحيح من 6 أرقام');
-    if (tokens < 10) return Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 عملات للعب\nاشحن رصيدك من قائمة العملات');
-    onSpendTokens && onSpendTokens(10);
     const ref = doc(db, 'drawguess_rooms', code);
     const snap = await getDoc(ref);
     if (!snap.exists()) return Alert.alert('', 'الغرفة غير موجودة');
@@ -605,7 +599,7 @@ function OnlineMode({ onBack, currentUser, tokens = 0, onSpendTokens }) {
       <StatusBar barStyle="light-content" />
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={[styles.backBtn, { borderColor: '#a855f730' }]}>
-          <Text style={[styles.backText, { color: '#a855f7' }]}>→</Text>
+          <Text style={[styles.backText, { color: '#a855f7' }]}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>🌐</Text>
@@ -617,10 +611,6 @@ function OnlineMode({ onBack, currentUser, tokens = 0, onSpendTokens }) {
         <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#a855f7' }]} onPress={createRoom}>
           <Text style={styles.startBtnText}>🏠 أنشئ غرفة جديدة</Text>
         </TouchableOpacity>
-        <View style={[styles.tokenBadge, { borderColor: '#a855f740', backgroundColor: '#a855f715' }]}>
-          <Text style={[styles.tokenBadgeText, { color: '#a855f7' }]}>🪙 10 عملات للدخول</Text>
-          <Text style={styles.tokenBalance}>رصيدك: {tokens} 🪙</Text>
-        </View>
         <Text style={styles.orText}>أو</Text>
         <TextInput
           style={[styles.input, { borderColor: '#a855f730', textAlign: 'center', fontSize: 22, letterSpacing: 6 }]}
@@ -783,13 +773,15 @@ function OnlineMode({ onBack, currentUser, tokens = 0, onSpendTokens }) {
     );
   }
 
-  return null;
+  return (
+    <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={()=>{if(unsub.current)unsub.current();onBack();}} />
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
 // ── الشاشة الرئيسية: اختيار النمط ──────────────────────────────
 // ═══════════════════════════════════════════════════════════════
-export default function DrawGuessScreen({ onBack, currentUser, mode, tokens = 0, onSpendTokens }) {
+export default function DrawGuessScreen({ onBack, currentUser, mode }) {
   const [selectedMode, setSelectedMode] = useState(mode || null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -797,15 +789,15 @@ export default function DrawGuessScreen({ onBack, currentUser, mode, tokens = 0,
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, []);
 
-  if (selectedMode === 'local') return <LocalMode onBack={() => setSelectedMode(null)} tokens={tokens} onSpendTokens={onSpendTokens} />;
-  if (selectedMode === 'online') return <OnlineMode onBack={() => setSelectedMode(null)} currentUser={currentUser} tokens={tokens} onSpendTokens={onSpendTokens} />;
+  if (selectedMode === 'local') return <LocalMode onBack={() => setSelectedMode(null)} />;
+  if (selectedMode === 'online') return <OnlineMode onBack={() => setSelectedMode(null)} currentUser={currentUser} />;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
       <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
+          <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>🎨</Text>
@@ -902,14 +894,6 @@ const styles = StyleSheet.create({
   startBtnText: { color: '#000', fontWeight: '900', fontSize: 16 },
   outlineBtn: { backgroundColor: 'transparent', borderWidth: 1.5 },
   outlineBtnText: { fontWeight: '900', fontSize: 16 },
-  tokenBadge: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#3b82f615', borderRadius: 12,
-    borderWidth: 1, borderColor: '#3b82f640',
-    paddingHorizontal: 16, paddingVertical: 10,
-  },
-  tokenBadgeText: { color: '#3b82f6', fontWeight: '700', fontSize: 14 },
-  tokenBalance: { color: '#8080aa', fontSize: 13 },
 
   // اختيار كلمة
   centerContent: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center', gap: 16 },

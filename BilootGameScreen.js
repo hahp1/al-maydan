@@ -11,6 +11,7 @@ import {
   TextInput, Animated,
 } from 'react-native';
 import { db, auth } from './firebaseConfig';
+import LeaveModal from './LeaveModal';
 import {
   doc, setDoc, onSnapshot, updateDoc, getDoc, serverTimestamp,
 } from 'firebase/firestore';
@@ -179,8 +180,8 @@ function legalCards(hand, trick, trump) {
 // ══════════════════════════════════════════════════════════════
 // المكوّن الرئيسي
 // ══════════════════════════════════════════════════════════════
-export default function BilootGameScreen({ onBack, currentUser }) {
-  const [uiPhase, setUiPhase] = useState('lobby'); // lobby|waiting|playing|over
+export default function BilootGameScreen({ onBack, currentUser, tokens, onSpendTokens }) {
+  const [uiPhase, setUiPhase] = useState('lobby');
   const [roomCode, setRoomCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [roomData, setRoomData] = useState(null);
@@ -190,7 +191,7 @@ export default function BilootGameScreen({ onBack, currentUser }) {
   const [scores,   setScores]   = useState([0,0]);
   const [winner,   setWinner]   = useState(null);
   const [msg,      setMsg]      = useState('');
-
+  const [showLeave, setShowLeave] = useState(false);
   const myUid       = getUid();
   const unsubRef    = useRef(null);
   const waitRef     = useRef(null);
@@ -507,16 +508,16 @@ export default function BilootGameScreen({ onBack, currentUser }) {
     <View style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="#06061a"/>
       <View style={s.header}>
-        <TouchableOpacity onPress={onBack} style={s.backBtn}><Text style={s.backTxt}>→</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onBack} style={s.backBtn}><Text style={s.backTxt}>←</Text></TouchableOpacity>
         <Text style={s.headerTitle}>🃏 بلوت</Text>
-        <View style={{width:40}}/>
+        <View style={s.tokenBadgeSmall}><Text style={s.tokenTextSmall}>🪙 {tokens ?? 0}</Text></View>
       </View>
       <View style={s.center}>
         <Text style={s.bigEmoji}>🃏</Text>
         <Text style={s.title}>بلوت الفريقين</Text>
         <Text style={s.sub}>الفوز بـ 152 | 4 لاعبين</Text>
         {msg?<Text style={s.err}>{msg}</Text>:null}
-        <TouchableOpacity style={s.btn} onPress={handleCreate}><Text style={s.btnTxt}>إنشاء غرفة</Text></TouchableOpacity>
+        <TouchableOpacity style={s.btn} onPress={handleCreate}><Text style={s.btnTxt}>إنشاء غرفة  🪙 10</Text></TouchableOpacity>
         <View style={s.row}>
           <TextInput style={s.codeInput} placeholder="كود الغرفة" placeholderTextColor="#3a3a60"
             value={joinCode} onChangeText={setJoinCode} autoCapitalize="characters" maxLength={6}/>
@@ -534,7 +535,7 @@ export default function BilootGameScreen({ onBack, currentUser }) {
       <StatusBar barStyle="light-content" backgroundColor="#06061a"/>
       <View style={s.header}>
         <TouchableOpacity onPress={()=>{setUiPhase('lobby');setRoomCode('');}} style={s.backBtn}>
-          <Text style={s.backTxt}>→</Text></TouchableOpacity>
+          <Text style={s.backTxt}>←</Text></TouchableOpacity>
         <Text style={s.headerTitle}>انتظار</Text>
         <View style={{width:40}}/>
       </View>
@@ -602,13 +603,14 @@ export default function BilootGameScreen({ onBack, currentUser }) {
 
       {/* هيدر */}
       <View style={s.header}>
-        <TouchableOpacity onPress={onBack} style={s.backBtn}><Text style={s.backTxt}>→</Text></TouchableOpacity>
+        <TouchableOpacity onPress={()=>setShowLeave(true)} style={s.backBtn}><Text style={s.backTxt}>←</Text></TouchableOpacity>
         <View style={{alignItems:'center'}}>
           <Text style={s.headerTitle}>🃏 بلوت</Text>
           <Text style={s.scoreBar}>🔵 {scores[0]}  –  {scores[1]} 🔴</Text>
         </View>
         <View style={{width:40}}/>
       </View>
+      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={()=>{setShowLeave(false); onBack();}} />
 
       {/* معلومات الجولة */}
       <View style={s.roundInfo}>
@@ -720,6 +722,8 @@ const s = StyleSheet.create({
   header: { flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingHorizontal:20, marginBottom:8 },
   backBtn: { width:40,height:40,borderRadius:12,backgroundColor:'#0f0f2e',borderWidth:1,borderColor:'#8b5cf640',alignItems:'center',justifyContent:'center' },
   backTxt: { color:'#8b5cf6',fontSize:20,fontWeight:'700' },
+  tokenBadgeSmall: { backgroundColor:'#f59e0b22', borderWidth:1, borderColor:'#f59e0b50', borderRadius:10, paddingHorizontal:10, paddingVertical:5 },
+  tokenTextSmall: { color:'#f59e0b', fontSize:13, fontWeight:'700' },
   headerTitle: { color:'#8b5cf6',fontSize:18,fontWeight:'900' },
   scoreBar: { color:'#a0a0c0',fontSize:13,marginTop:2 },
 

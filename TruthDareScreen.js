@@ -97,7 +97,7 @@ const wh = StyleSheet.create({
 });
 
 // ── الشاشة الرئيسية ──────────────────────────────────────────
-export default function TruthDareScreen({ onBack }) {
+export default function TruthDareScreen({ onBack, tokens = 0, onSpendTokens, onOpenTokenModal }) {
 
   // مراحل: setup | spin_asker | spin_target | choose | confirm | results
   const [phase, setPhase]         = useState('setup');
@@ -144,6 +144,14 @@ export default function TruthDareScreen({ onBack }) {
       Alert.alert('', 'أضف لاعبَين على الأقل');
       return;
     }
+    if (tokens < 10) {
+      Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز لبدء اللعبة', [
+        { text: 'اذهب إلى السوق', onPress: () => onOpenTokenModal && onOpenTokenModal() },
+        { text: 'إلغاء', style: 'cancel' },
+      ]);
+      return;
+    }
+    onSpendTokens && onSpendTokens(10);
     const queue = buildTurnQueue(players);
     setTurnQueue(queue);
     setTurnIndex(0);
@@ -198,10 +206,12 @@ export default function TruthDareScreen({ onBack }) {
 
       <View style={s.header}>
         <TouchableOpacity onPress={onBack} style={s.backBtn}>
-          <Text style={s.backTxt}>→</Text>
+          <Text style={s.backTxt}>←</Text>
         </TouchableOpacity>
         <Text style={s.headerTitle}>😈 صراحة أو تحدي</Text>
-        <View style={{ width: 40 }} />
+        <View style={s.tokenBadge}>
+          <Text style={s.tokenText}>🪙 {tokens}</Text>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={s.setupScroll} keyboardShouldPersistTaps="handled">
@@ -233,7 +243,7 @@ export default function TruthDareScreen({ onBack }) {
 
         {players.length >= 2 && (
           <TouchableOpacity style={s.startBtn} onPress={startGame}>
-            <Text style={s.startBtnTxt}>ابدأ اللعبة 🎲</Text>
+            <Text style={s.startBtnTxt}>ابدأ اللعبة 🎲  🪙 10</Text>
           </TouchableOpacity>
         )}
 
@@ -522,6 +532,12 @@ const s = StyleSheet.create({
   },
   backTxt:    { color: '#a78bfa', fontSize: 20, fontWeight: '700' },
   headerTitle:{ color: '#a78bfa', fontSize: 18, fontWeight: '900' },
+  tokenBadge: {
+    backgroundColor: '#f59e0b22', borderWidth: 1,
+    borderColor: '#f59e0b50', borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  tokenText: { color: '#f59e0b', fontSize: 13, fontWeight: '700' },
 
   // progress
   progressWrap: { paddingHorizontal: 20, gap: 4, marginBottom: 8 },

@@ -5,6 +5,7 @@ import {
   Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { db, auth } from './firebaseConfig';
+import LeaveModal from './LeaveModal';
 import {
   doc, setDoc, getDocs, onSnapshot,
   updateDoc, query, where, deleteDoc,
@@ -57,7 +58,7 @@ function ModeSelect({ onLocal, onOnline, onBack }) {
       {/* هيدر */}
       <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
+          <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>✕○</Text>
@@ -116,7 +117,7 @@ function LocalSetup({ onStart, onBack }) {
 
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
+          <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>✕○</Text>
@@ -330,21 +331,21 @@ function LocalGame({ name1, name2, xPlayer, onBack }) {
     />;
   }
 
+  const [showLeaveLocal, setShowLeaveLocal] = useState(false);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
 
       {/* هيدر */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => Alert.alert('مغادرة', 'تريد الخروج؟', [
-          { text: 'إلغاء', style: 'cancel' },
-          { text: 'خروج', style: 'destructive', onPress: onBack },
-        ])} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
+        <TouchableOpacity onPress={() => setShowLeaveLocal(true)} style={styles.backBtn}>
+          <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.roundLabel}>الجولة {round} / {TOTAL_ROUNDS}</Text>
         <View style={{ width: 40 }} />
       </View>
+      <LeaveModal visible={showLeaveLocal} onCancel={()=>setShowLeaveLocal(false)} onConfirm={onBack} />
 
       {/* النقاط */}
       <View style={styles.scoreboard}>
@@ -413,12 +414,46 @@ function LocalGame({ name1, name2, xPlayer, onBack }) {
 // ══════════════════════════════════════════
 // شاشة الأونلاين
 // ══════════════════════════════════════════
+// ── بوت XO: Minimax بسيط ──────────────────────────────────
+function botMove(board) {
+  // 1. هل البوت يفوز؟
+  for (let i = 0; i < 9; i++) {
+    if (!board[i]) {
+      const b = [...board]; b[i] = 'O';
+      if (checkWinner(b)?.winner === 'O') return i;
+    }
+  }
+  // 2. هل يمنع اللاعب؟
+  for (let i = 0; i < 9; i++) {
+    if (!board[i]) {
+      const b = [...board]; b[i] = 'X';
+      if (checkWinner(b)?.winner === 'X') return i;
+    }
+  }
+  // 3. المركز
+  if (!board[4]) return 4;
+  // 4. زاوية عشوائية
+  const corners = [0,2,6,8].filter(i => !board[i]);
+  if (corners.length) return corners[Math.floor(Math.random()*corners.length)];
+  // 5. أي خلية فارغة
+  const empty = board.map((v,i)=>v?null:i).filter(v=>v!==null);
+  return empty[Math.floor(Math.random()*empty.length)];
+}
+
+const BOT_UID  = 'bot_xo';
+const BOT_NAME = '🤖 بوت';
+const BOT_WAIT = 60000; // 60 ثانية
+
 function OnlineXO({ onBack, currentUser }) {
-  const [phase, setPhase] = useState('searching'); // searching | playing | finished
+  const [phase, setPhase] = useState('searching');
   const [roomId, setRoomId] = useState(null);
   const [roomData, setRoomData] = useState(null);
   const [isPlayer1, setIsPlayer1] = useState(false);
-  const unsubRef = useRef(null);
+  const [waitSeconds, setWaitSeconds] = useState(BOT_WAIT / 1000);
+  const [showLeave, setShowLeave] = useState(false);
+  const unsubRef   = useRef(null);
+  const botTimerRef = useRef(null);
+  const roomIdRef  = useRef(null);
 
   const myUid = getOrCreateUid();
   const myName = currentUser?.name || 'لاعب';
@@ -427,8 +462,22 @@ function OnlineXO({ onBack, currentUser }) {
     findOrCreateRoom();
     return () => {
       if (unsubRef.current) unsubRef.current();
+      if (botTimerRef.current) clearTimeout(botTimerRef.current);
     };
   }, []);
+
+  // عداد ثواني الانتظار
+  useEffect(() => {
+    if (phase !== 'waiting') return;
+    setWaitSeconds(BOT_WAIT / 1000);
+    const iv = setInterval(() => {
+      setWaitSeconds(s => {
+        if (s <= 1) { clearInterval(iv); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [phase]);
 
   const findOrCreateRoom = async () => {
     try {
@@ -448,6 +497,7 @@ function OnlineXO({ onBack, currentUser }) {
           status: 'playing',
         });
         setRoomId(rId);
+        roomIdRef.current = rId;
         setIsPlayer1(false);
         listenRoom(rId);
       } else {
@@ -458,15 +508,32 @@ function OnlineXO({ onBack, currentUser }) {
           player2: { uid: null, name: null, score: 0 },
           round: 1,
           board: emptyBoard(),
-          currentTurn: 1, // 1 أو 2
+          currentTurn: 1,
           roundStarter: 1,
           winner: null,
           createdAt: serverTimestamp(),
         });
         setRoomId(rId);
+        roomIdRef.current = rId;
         setIsPlayer1(true);
         setPhase('waiting');
         listenRoom(rId);
+
+        // ── بعد 60 ثانية: أضف البوت ──
+        botTimerRef.current = setTimeout(async () => {
+          const rIdNow = roomIdRef.current;
+          if (!rIdNow) return;
+          const roomSnap = await import('firebase/firestore').then(({getDoc,doc:d})=>getDoc(d(db,'xo_rooms',rIdNow)));
+          if (!roomSnap.exists()) return;
+          const rd = roomSnap.data();
+          if (rd.status !== 'waiting') return; // جاء لاعب حقيقي
+          await updateDoc(doc(db, 'xo_rooms', rIdNow), {
+            'player2.uid': BOT_UID,
+            'player2.name': BOT_NAME,
+            status: 'playing',
+            isVsBot: true,
+          });
+        }, BOT_WAIT);
       }
     } catch (e) {
       Alert.alert('خطأ', e.message);
@@ -474,11 +541,49 @@ function OnlineXO({ onBack, currentUser }) {
   };
 
   const listenRoom = (rId) => {
-    const unsub = onSnapshot(doc(db, 'xo_rooms', rId), (snap) => {
+    const unsub = onSnapshot(doc(db, 'xo_rooms', rId), async (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
       setRoomData(data);
-      if (data.status === 'playing') setPhase('playing');
+      if (data.status === 'playing') {
+        setPhase('playing');
+        // ── حركة البوت إذا كان الدور عليه ──
+        if (data.isVsBot && data.currentTurn === 2 && !checkWinner(data.board)) {
+          setTimeout(async () => {
+            const idx = botMove(data.board);
+            if (idx === null || idx === undefined) return;
+            const symbol = data.roundStarter === 2 ? 'X' : 'O';
+            const newBoard = [...data.board];
+            newBoard[idx] = symbol;
+            const result = checkWinner(newBoard);
+            const nextTurn = 1;
+            if (result) {
+              let roundWinner = null;
+              if (result.winner === 'X') roundWinner = data.roundStarter;
+              else if (result.winner === 'O') roundWinner = data.roundStarter === 1 ? 2 : 1;
+              const p1Score = data.player1.score + (roundWinner === 1 ? 1 : 0);
+              const p2Score = data.player2.score + (roundWinner === 2 ? 1 : 0);
+              if (data.round >= TOTAL_ROUNDS) {
+                let gameWinner = 'draw';
+                if (p1Score > p2Score) gameWinner = data.player1.name;
+                else if (p2Score > p1Score) gameWinner = BOT_NAME;
+                await updateDoc(doc(db, 'xo_rooms', rId), {
+                  board: newBoard, 'player1.score': p1Score, 'player2.score': p2Score,
+                  status: 'finished', winner: gameWinner,
+                });
+              } else {
+                const nextStarter = data.roundStarter === 1 ? 2 : 1;
+                await updateDoc(doc(db, 'xo_rooms', rId), {
+                  board: emptyBoard(), 'player1.score': p1Score, 'player2.score': p2Score,
+                  round: data.round + 1, roundStarter: nextStarter, currentTurn: nextStarter,
+                });
+              }
+            } else {
+              await updateDoc(doc(db, 'xo_rooms', rId), { board: newBoard, currentTurn: nextTurn });
+            }
+          }, 900); // تأخير 0.9 ث ليبدو طبيعياً
+        }
+      }
       if (data.status === 'finished') setPhase('finished');
     });
     unsubRef.current = unsub;
@@ -537,14 +642,12 @@ function OnlineXO({ onBack, currentUser }) {
     }
   };
 
-  const handleLeave = () => {
-    Alert.alert('مغادرة', 'سيفوز خصمك إذا غادرت!', [
-      { text: 'إلغاء', style: 'cancel' },
-      { text: 'مغادرة', style: 'destructive', onPress: async () => {
-        if (roomId) await deleteDoc(doc(db, 'xo_rooms', roomId));
-        onBack();
-      }},
-    ]);
+  const handleLeave = () => setShowLeave(true);
+
+  const confirmLeave = async () => {
+    setShowLeave(false);
+    if (roomId) await deleteDoc(doc(db, 'xo_rooms', roomId));
+    onBack();
   };
 
   // ── انتظار لاعب ──
@@ -552,8 +655,8 @@ function OnlineXO({ onBack, currentUser }) {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
+        <TouchableOpacity onPress={handleLeave} style={styles.backBtn}>
+          <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>✕○</Text>
@@ -565,7 +668,13 @@ function OnlineXO({ onBack, currentUser }) {
         <ActivityIndicator color="#f59e0b" size="large" />
         <Text style={styles.searchingText}>بانتظار خصم...</Text>
         <Text style={styles.searchingHint}>سيتم المطابقة تلقائياً</Text>
+        {waitSeconds <= 30 && (
+          <Text style={styles.botHint}>
+            🤖 سيُضاف بوت خلال {waitSeconds} ثانية إذا لم يأتِ أحد
+          </Text>
+        )}
       </View>
+      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
     </View>
   );
 
@@ -596,7 +705,7 @@ function OnlineXO({ onBack, currentUser }) {
         <StatusBar barStyle="light-content" backgroundColor="#06061a" />
         <View style={styles.header}>
           <TouchableOpacity onPress={handleLeave} style={styles.backBtn}>
-            <Text style={styles.backText}>→</Text>
+            <Text style={styles.backText}>←</Text>
           </TouchableOpacity>
           <Text style={styles.roundLabel}>الجولة {roomData.round} / {TOTAL_ROUNDS}</Text>
           <View style={{ width: 40 }} />
@@ -626,6 +735,7 @@ function OnlineXO({ onBack, currentUser }) {
           disabled={!isMyTurn}
           winLine={winLine}
         />
+        <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} message="سيفوز خصمك إذا غادرت!" />
       </View>
     );
   }
@@ -661,11 +771,14 @@ function OnlineXO({ onBack, currentUser }) {
             <Text style={styles.backHomeBtnText}>العودة للقائمة</Text>
           </TouchableOpacity>
         </View>
+        <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} message="سيفوز خصمك إذا غادرت!" />
       </View>
     );
   }
 
-  return null;
+  return (
+    <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} message="سيفوز خصمك إذا غادرت!" />
+  );
 }
 
 // ══════════════════════════════════════════
@@ -982,6 +1095,7 @@ const styles = StyleSheet.create({
   centerContent: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 30 },
   searchingText: { color: '#f5c518', fontSize: 18, fontWeight: '800' },
   searchingHint: { color: '#5a5a80', fontSize: 13 },
+  botHint: { color: '#f59e0b99', fontSize: 12, textAlign: 'center', marginTop: 6 },
 
   // نهاية اللعبة
   gameOverEmoji: { fontSize: 60 },

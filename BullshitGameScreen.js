@@ -10,6 +10,7 @@ import {
   collection, query, where, getDocs, serverTimestamp,
   arrayUnion, getDoc,
 } from 'firebase/firestore';
+import LeaveModal from './LeaveModal';
 
 // ══════════════════════════════════════
 // ثوابت
@@ -122,6 +123,7 @@ export default function BullshitGameScreen({ onBack, currentUser, tokens, onSpen
   const [selectedCards,  setSelectedCards]  = useState([]);
   const [desiredCount,   setDesiredCount]   = useState(4);
   const [botWaitSecs,    setBotWaitSecs]    = useState(60);
+  const [showLeave,      setShowLeave]      = useState(false);
   const animPile   = useRef(new Animated.Value(1)).current;
   const unsubRef   = useRef(null);
   const fadeAnim   = useRef(new Animated.Value(0)).current;
@@ -439,25 +441,24 @@ export default function BullshitGameScreen({ onBack, currentUser, tokens, onSpen
   }
 
   // ─── مغادرة ───
-  async function leaveRoom() {
-    Alert.alert('مغادرة','هل تريد مغادرة الغرفة؟',[
-      { text:'إلغاء', style:'cancel' },
-      { text:'مغادرة', style:'destructive', onPress: async () => {
-        const uid = getUid();
-        if (roomId) {
-          const snap = await getDoc(doc(db,'bullshit_rooms',roomId));
-          if (snap.exists()) {
-            const d = snap.data();
-            // استرداد الرصيد إذا لم تبدأ اللعبة بعد
-            if (d.phase === 'lobby') onSpendTokens(-COST);
-            if (d.hostUid===uid && d.players.length<=1) await deleteDoc(doc(db,'bullshit_rooms',roomId));
-            else await updateDoc(doc(db,'bullshit_rooms',roomId), { players: d.players.filter(p=>p.uid!==uid) });
-          }
-        }
-        if (unsubRef.current) unsubRef.current();
-        setRoomId(null); setRoomData(null); setPhase('menu');
-      }},
-    ]);
+  function leaveRoom() {
+    setShowLeave(true);
+  }
+
+  async function confirmLeave() {
+    setShowLeave(false);
+    const uid = getUid();
+    if (roomId) {
+      const snap = await getDoc(doc(db,'bullshit_rooms',roomId));
+      if (snap.exists()) {
+        const d = snap.data();
+        if (d.phase === 'lobby') onSpendTokens && onSpendTokens(-COST);
+        if (d.hostUid===uid && d.players.length<=1) await deleteDoc(doc(db,'bullshit_rooms',roomId));
+        else await updateDoc(doc(db,'bullshit_rooms',roomId), { players: d.players.filter(p=>p.uid!==uid) });
+      }
+    }
+    if (unsubRef.current) unsubRef.current();
+    setRoomId(null); setRoomData(null); setPhase('menu');
   }
 
   // ─── حسابات ───
@@ -474,29 +475,38 @@ export default function BullshitGameScreen({ onBack, currentUser, tokens, onSpen
   );
 
   if (phase==='result') return (
-    <ResultScreen roomData={roomData} myUid={myUid}
-      onBack={()=>{leaveRoom(); onBack();}} onPlayAgain={leaveRoom} />
+    <>
+      <ResultScreen roomData={roomData} myUid={myUid}
+        onBack={()=>{confirmLeave(); onBack();}} onPlayAgain={confirmLeave} />
+      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
+    </>
   );
 
   if (phase==='game') return (
-    <GameScreen
-      roomData={roomData} myUid={myUid} myPlayer={myPlayer}
-      isMyTurn={isMyTurn} selectedCards={selectedCards} setSelectedCards={setSelectedCards}
-      currentRank={roomData?.currentRank} turnStartedAt={roomData?.turnStartedAt}
-      onPlay={playCards} onBullshit={callBullshit} onLeave={leaveRoom}
-      onTimeout={handleTimeout} animPile={animPile}
-      roomId={roomId} myName={myName}
-      messages={roomData?.messages || []}
-    />
+    <>
+      <GameScreen
+        roomData={roomData} myUid={myUid} myPlayer={myPlayer}
+        isMyTurn={isMyTurn} selectedCards={selectedCards} setSelectedCards={setSelectedCards}
+        currentRank={roomData?.currentRank} turnStartedAt={roomData?.turnStartedAt}
+        onPlay={playCards} onBullshit={callBullshit} onLeave={leaveRoom}
+        onTimeout={handleTimeout} animPile={animPile}
+        roomId={roomId} myName={myName}
+        messages={roomData?.messages || []}
+      />
+      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
+    </>
   );
 
   if (phase==='lobby') return (
-    <LobbyScreen
-      roomData={roomData} roomId={roomId} myUid={myUid} isHost={isHost}
-      friendSearch={friendSearch} friendResults={friendResults} searching={searching}
-      onSearch={searchFriend} onInvite={inviteFriend} onLeave={leaveRoom}
-      desiredCount={desiredCount} botWaitSecs={botWaitSecs}
-    />
+    <>
+      <LobbyScreen
+        roomData={roomData} roomId={roomId} myUid={myUid} isHost={isHost}
+        friendSearch={friendSearch} friendResults={friendResults} searching={searching}
+        onSearch={searchFriend} onInvite={inviteFriend} onLeave={leaveRoom}
+        desiredCount={desiredCount} botWaitSecs={botWaitSecs}
+      />
+      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
+    </>
   );
 
   return (
@@ -518,7 +528,7 @@ function MenuScreen({ fadeAnim, desiredCount, setDesiredCount, onCreatePrivate, 
     <View style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
       <Animated.View style={[s.header,{opacity:fadeAnim}]}>
-        <TouchableOpacity onPress={onBack} style={s.backBtn}><Text style={s.backText}>→</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onBack} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
         <View style={s.headerCenter}>
           <Text style={s.headerEmoji}>🃏</Text>
           <Text style={s.headerTitle}>بوليشيت</Text>
@@ -597,7 +607,7 @@ function LobbyScreen({ roomData, roomId, myUid, isHost, friendSearch, friendResu
     <View style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="#06061a" />
       <View style={s.header}>
-        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>→</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
         <View style={s.headerCenter}>
           <Text style={s.headerEmoji}>🃏</Text>
           <Text style={s.headerTitle}>انتظار اللاعبين</Text>
@@ -812,7 +822,7 @@ function GameScreen({ roomData, myUid, myPlayer, isMyTurn, selectedCards, setSel
 
       {/* هيدر */}
       <View style={s.gameHeader}>
-        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>→</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
         <Text style={s.gameTitle}>🃏 بوليشيت</Text>
         <View style={s.rankBadge}>
           <Text style={s.rankBadgeText}>{RANK_AR[currentRank]||currentRank}</Text>

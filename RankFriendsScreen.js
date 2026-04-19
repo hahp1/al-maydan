@@ -95,7 +95,7 @@ const rl = StyleSheet.create({
 });
 
 // ── المكوّن الرئيسي ──────────────────────────────────────────
-export default function RankFriendsScreen({ onBack, tokens = 0, onSpendTokens }) {
+export default function RankFriendsScreen({ onBack, tokens = 0, onSpendTokens, onOpenTokenModal }) {
   const [phase, setPhase] = useState('setup'); // setup | play | reveal | end
   const [playerName, setPlayerName] = useState('');
   const [players, setPlayers] = useState([]);
@@ -135,7 +135,13 @@ export default function RankFriendsScreen({ onBack, tokens = 0, onSpendTokens })
 
   function startGame() {
     if (players.length < 3) return Alert.alert('', 'أضف 3 لاعبين على الأقل');
-    if (tokens < 10) return Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 عملات للعب\nاشحن رصيدك من قائمة العملات');
+    if (tokens < 10) {
+      Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز لبدء اللعبة', [
+        { text: 'اذهب إلى السوق', onPress: () => onOpenTokenModal && onOpenTokenModal() },
+        { text: 'إلغاء', style: 'cancel' },
+      ]);
+      return;
+    }
     onSpendTokens && onSpendTokens(10);
     const qs = shuffle(QUESTIONS).slice(0, Math.min(15, QUESTIONS.length));
     setQuestions(qs);
@@ -185,24 +191,21 @@ export default function RankFriendsScreen({ onBack, tokens = 0, onSpendTokens })
 
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
           <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-            <Text style={styles.backText}>→</Text>
+            <Text style={styles.backText}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerEmoji}>🏆</Text>
             <Text style={styles.headerTitle}>رتّب أصدقاءك</Text>
           </View>
-          <View style={{ width: 40 }} />
+          <View style={styles.tokenBadge}>
+            <Text style={styles.tokenText}>🪙 {tokens}</Text>
+          </View>
         </Animated.View>
 
         <ScrollView contentContainerStyle={styles.setupContent} keyboardShouldPersistTaps="handled">
           <Text style={styles.setupDesc}>
             أسئلة تكشف من هو من في مجموعتك 😄{'\n'}كل شخص يرتّب الجميع بسرية ثم تُكشف النتائج!
           </Text>
-
-          <View style={styles.tokenBadge}>
-            <Text style={styles.tokenBadgeText}>🪙 10 عملات للجولة</Text>
-            <Text style={styles.tokenBalance}>رصيدك: {tokens} 🪙</Text>
-          </View>
 
           <View style={styles.inputRow}>
             <TouchableOpacity style={styles.addBtn} onPress={addPlayer}>
@@ -239,7 +242,7 @@ export default function RankFriendsScreen({ onBack, tokens = 0, onSpendTokens })
 
           {players.length >= 3 && (
             <TouchableOpacity style={styles.startBtn} onPress={startGame}>
-              <Text style={styles.startBtnText}>🏆 ابدأ اللعبة</Text>
+              <Text style={styles.startBtnText}>🏆 ابدأ اللعبة  🪙 10</Text>
             </TouchableOpacity>
           )}
         </ScrollView>
@@ -394,6 +397,12 @@ const styles = StyleSheet.create({
   headerCenter: { alignItems: 'center', gap: 2 },
   headerEmoji: { fontSize: 24 },
   headerTitle: { color: '#f59e0b', fontSize: 18, fontWeight: '900' },
+  tokenBadge: {
+    backgroundColor: '#f59e0b22', borderWidth: 1,
+    borderColor: '#f59e0b50', borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  tokenText: { color: '#f59e0b', fontSize: 13, fontWeight: '700' },
 
   // إعداد
   setupContent: { paddingHorizontal: 20, paddingBottom: 60, gap: 16 },
@@ -443,14 +452,6 @@ const styles = StyleSheet.create({
   startBtnText: { color: '#000', fontWeight: '900', fontSize: 16 },
   outlineBtn: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: '#f59e0b50' },
   outlineBtnText: { color: '#f59e0b', fontWeight: '900', fontSize: 16 },
-  tokenBadge: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#f59e0b15', borderRadius: 12,
-    borderWidth: 1, borderColor: '#f59e0b40',
-    paddingHorizontal: 16, paddingVertical: 10,
-  },
-  tokenBadgeText: { color: '#f59e0b', fontWeight: '700', fontSize: 14 },
-  tokenBalance: { color: '#8080aa', fontSize: 13 },
 
   // لعب
   playContent: { paddingHorizontal: 20, paddingBottom: 60, gap: 16 },

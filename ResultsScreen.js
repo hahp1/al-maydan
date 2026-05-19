@@ -1,180 +1,105 @@
+import { memo, useCallback } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, StatusBar } from 'react-native';
+import { useTheme } from './ThemeContext';
+import { useT } from './I18n';
 
-export default function ResultsScreen({ team1, team2, score1, score2, onRematch, onHome }) {
-  const isDraw = score1 === score2;
-  const winner = score1 > score2 ? team1 : team2;
-  const winnerScore = score1 > score2 ? score1 : score2;
-  const loserScore = score1 > score2 ? score2 : score1;
+const ResultsScreen = memo(function ResultsScreen({ team1, team2, score1, score2, onRematch, onHome }) {
+  const { theme } = useTheme();
+  const t = useT();
+
+  const isDraw      = score1 === score2;
+  const winner      = score1 > score2 ? team1 : team2;
+  const diff        = Math.abs(score1 - score2);
+
+  const handleRematch = useCallback(() => onRematch(), [onRematch]);
+  const handleHome    = useCallback(() => onHome(),    [onHome]);
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
+    <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
-      {/* Trophy */}
       <Text style={styles.trophy}>🏆</Text>
 
-      {/* Result Title */}
       {isDraw ? (
-        <Text style={styles.drawTitle}>تعادل!</Text>
+        <Text style={[styles.drawTitle, { color: theme.accent }]}>{t('common.draw')}</Text>
       ) : (
         <View style={styles.winnerSection}>
-          <Text style={styles.winnerLabel}>الفائز</Text>
-          <Text style={styles.winnerName}>{winner}</Text>
+          <Text style={[styles.winnerLabel, { color: theme.textSecondary }]}>{t('results.winnerLabel')}</Text>
+          <Text style={[styles.winnerName, { color: theme.accent }]}>{winner}</Text>
           <Text style={styles.winnerCrown}>👑</Text>
         </View>
       )}
 
-      {/* Scores */}
       <View style={styles.scoresBox}>
-        <View style={[styles.scoreCard, !isDraw && winner === team1 && styles.scoreCardWinner]}>
-          <Text style={styles.scoreTeam}>{team1}</Text>
-          <Text style={styles.scorePoints}>{score1}</Text>
-          <Text style={styles.scoreLabel}>نقطة</Text>
+        <View style={[
+          styles.scoreCard,
+          { backgroundColor: theme.bgCard, borderColor: theme.borderCard },
+          !isDraw && winner === team1 && { borderColor: theme.accent },
+        ]}>
+          <Text style={[styles.scoreTeam, { color: theme.textSecondary }]}>{team1}</Text>
+          <Text style={[styles.scorePoints, { color: theme.accent }]}>{score1}</Text>
+          <Text style={[styles.scoreLabel, { color: theme.textMuted }]}>{t('common.points')}</Text>
         </View>
 
-        <Text style={styles.vs}>VS</Text>
+        <Text style={[styles.vs, { color: theme.textMuted }]}>VS</Text>
 
-        <View style={[styles.scoreCard, !isDraw && winner === team2 && styles.scoreCardWinner]}>
-          <Text style={styles.scoreTeam}>{team2}</Text>
-          <Text style={styles.scorePoints}>{score2}</Text>
-          <Text style={styles.scoreLabel}>نقطة</Text>
+        <View style={[
+          styles.scoreCard,
+          { backgroundColor: theme.bgCard, borderColor: theme.borderCard },
+          !isDraw && winner === team2 && { borderColor: theme.accent },
+        ]}>
+          <Text style={[styles.scoreTeam, { color: theme.textSecondary }]}>{team2}</Text>
+          <Text style={[styles.scorePoints, { color: theme.accent }]}>{score2}</Text>
+          <Text style={[styles.scoreLabel, { color: theme.textMuted }]}>{t('common.points')}</Text>
         </View>
       </View>
 
-      {/* Difference */}
       {!isDraw && (
-        <Text style={styles.difference}>
-          فاز {winner} بفارق {Math.abs(score1 - score2)} نقطة
+        <Text style={[styles.difference, { color: theme.textSecondary }]}>
+          {t('results.diff', { w: winner, d: diff })}
         </Text>
       )}
 
-      {/* Buttons */}
       <View style={styles.buttons}>
-        <TouchableOpacity style={styles.btnRematch} onPress={onRematch}>
-          <Text style={styles.btnRematchText}>⚔️ مباراة انتقام</Text>
+        <TouchableOpacity
+          style={[styles.btnRematch, { backgroundColor: theme.accent }]}
+          onPress={handleRematch}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.btnRematchText, { color: theme.textOnAccent }]}>{t('results.rematch')}</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity style={styles.btnHome} onPress={onHome}>
-          <Text style={styles.btnHomeText}>🏠 العودة للصفحة الرئيسية</Text>
+        <TouchableOpacity
+          style={[styles.btnHome, { backgroundColor: theme.bgCard, borderColor: theme.accent }]}
+          onPress={handleHome}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.btnHomeText, { color: theme.accent }]}>{t('common.returnHome')}</Text>
         </TouchableOpacity>
       </View>
-
     </View>
   );
-}
+});
+
+export default ResultsScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0d0d2b',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    gap: 24,
-  },
-  trophy: {
-    fontSize: 80,
-  },
-  drawTitle: {
-    fontSize: 48,
-    fontWeight: '900',
-    color: '#f5c518',
-    textShadowColor: '#f5c51888',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 20,
-  },
-  winnerSection: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  winnerLabel: {
-    color: '#a09060',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  winnerName: {
-    color: '#f5c518',
-    fontSize: 42,
-    fontWeight: '900',
-    textShadowColor: '#f5c51888',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 20,
-  },
-  winnerCrown: {
-    fontSize: 32,
-  },
-  scoresBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    width: '100%',
-  },
-  scoreCard: {
-    flex: 1,
-    backgroundColor: '#1a1a3e',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#2a2a55',
-    gap: 4,
-  },
-  scoreCardWinner: {
-    borderColor: '#f5c518',
-    backgroundColor: '#1a1a2e',
-  },
-  scoreTeam: {
-    color: '#a09060',
-    fontSize: 14,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  scorePoints: {
-    color: '#f5c518',
-    fontSize: 36,
-    fontWeight: '900',
-  },
-  scoreLabel: {
-    color: '#555577',
-    fontSize: 12,
-  },
-  vs: {
-    color: '#555577',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  difference: {
-    color: '#a09060',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  buttons: {
-    width: '100%',
-    gap: 12,
-  },
-  btnRematch: {
-    backgroundColor: '#f5c518',
-    paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: 'center',
-    elevation: 8,
-  },
-  btnRematchText: {
-    color: '#0d0d2b',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  btnHome: {
-    backgroundColor: '#1a1a3e',
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#f5c518',
-  },
-  btnHomeText: {
-    color: '#f5c518',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  container:     { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 24 },
+  trophy:        { fontSize: 80 },
+  drawTitle:     { fontSize: 48, fontWeight: '900', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 20 },
+  winnerSection: { alignItems: 'center', gap: 4 },
+  winnerLabel:   { fontSize: 16, fontWeight: '700' },
+  winnerName:    { fontSize: 42, fontWeight: '900', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 20 },
+  winnerCrown:   { fontSize: 32 },
+  scoresBox:     { flexDirection: 'row', alignItems: 'center', gap: 16, width: '100%' },
+  scoreCard:     { flex: 1, borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1.5, gap: 4 },
+  scoreTeam:     { fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  scorePoints:   { fontSize: 36, fontWeight: '900' },
+  scoreLabel:    { fontSize: 12 },
+  vs:            { fontSize: 18, fontWeight: '900' },
+  difference:    { fontSize: 14, textAlign: 'center' },
+  buttons:       { width: '100%', gap: 12 },
+  btnRematch:    { paddingVertical: 18, borderRadius: 16, alignItems: 'center', elevation: 8 },
+  btnRematchText:{ fontSize: 18, fontWeight: '800' },
+  btnHome:       { paddingVertical: 16, borderRadius: 16, alignItems: 'center', borderWidth: 1.5 },
+  btnHomeText:   { fontSize: 16, fontWeight: '700' },
 });

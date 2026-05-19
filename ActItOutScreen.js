@@ -1,197 +1,97 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Animated, StatusBar, ScrollView, Alert, TextInput,
+  Animated, StatusBar, ScrollView, TextInput,
 } from 'react-native';
+import { useTheme } from './ThemeContext';
+import { ActItOutEngraving } from './GameEngraving';
+import { useT, useRTLStyles, useLanguage } from './I18n';
+import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { playSound } from './SoundService';
 
-// ─────────────────────────────────────────────────────────────
-// بنك الكلمات — مناسبة للتمثيل بالجسم
-// ─────────────────────────────────────────────────────────────
-
-// 👤 أشخاص مشهورون
-const PERSONS = [
-  'جاك نيكلسون','توم هانكس','ليوناردو دي كابريو','براد بيت','جوني ديب',
-  'ويل سميث','دينزل واشنطن','مورغان فريمان','روبرت داوني جونيور','كيانو ريفز',
-  'أرنولد شوارزنيغر','سيلفستر ستالون','بروس ويليس','نيكولاس كيج','توم كروز',
-  'مارلون براندو','آل باتشينو','روبرت دي نيرو','كلينت إيستوود','هاريسون فورد',
-  'أنجلينا جولي','ميريل ستريب','سكارليت جوهانسون','جينيفر لوبيز','ريانا',
-  'بيونسيه','ليدي غاغا','تايلور سويفت','ماريا كاري','مايكل جاكسون',
-  'إلفيس بريسلي','مادونا','إد شيران','جاستن بيبر','مارك زوكربيرغ',
-  'ستيف جوبز','إيلون ماسك','بيل غيتس','جيف بيزوس','أوبرا وينفري',
-  'محمد علي','مايكل جوردان','ليبرون جيمس','كوبي براينت','شاكيل أونيل',
-  'رونالدو','ميسي','نيمار','كيليان مبابي','زين الدين زيدان',
-  'رونالدينيو','بيليه','دييغو مارادونا','تييري أنري','ديفيد بيكهام',
-  'روجر فيدرر','رافاييل نادال','نوفاك ديوكوفيتش','محمد صلاح','ساديو ماني',
-  'أوساين بولت','مايكل فيلبس','سيرينا ويليامز','تايغر وودز','فلويد مايويذر',
-  'نابليون بونابرت','ألبرت أينشتاين','إسحاق نيوتن','غاليليو','تشارلز داروين',
-  'كليوباترا','يوليوس قيصر','الإسكندر الأكبر','جنكيز خان','صلاح الدين الأيوبي',
-  'نيلسون مانديلا','مارتن لوثر كينغ','غاندي','ونستون تشرشل',
-  'أم كلثوم','فيروز','عبدالحليم حافظ','فريد الأطرش','وردة الجزائرية',
-  'محمد عبده','طلال مداح','كاظم الساهر','ماجد المهندس','أصالة',
-  'عادل إمام','نور الشريف','يسرا','هند صبري','منى زكي',
-  'أحمد زكي','محمود عبدالعزيز','دريد لحام','سعد الصغير','تامر حسني',
-  'ياسر العرفات','صدام حسين','معمر القذافي','جمال عبدالناصر',
-  'شارلي شابلن','مريلين مونرو','أودري هيبورن','بروس لي','جاكي شان',
-  'جيم كاري','آدم ساندلر','ستيف كاريل','مورغان فريمان','دنيا سمير غانم',
-];
-
-// 🐾 حيوانات
-const ANIMALS = [
-  'أسد','نمر','فيل','زرافة','دب','ذئب','ثعلب','أرنب','قرد','غوريلا',
-  'حصان','جمل','بقرة','خروف','دجاجة','بطريق','كنغر','كوالا','باندا','حمار',
-  'تمساح','حية','ضفدع','سلحفاة','قرش','دلفين','حوت','أخطبوط','فرس النهر','وحيد القرن',
-  'نسر','صقر','بومة','ببغاء','طاووس','هدهد','عقاب','نعامة','خفاش','حمامة',
-  'قنفذ','سنجاب','فهد','حمار وحشي','ضبع','غزال','فيل بحري','كركدن','جاموس',
-  'عقرب','ضبة','ثعبان الكوبرا','قطة','كلب','ديك','بطة','أوز','سمكة','كراكي',
-  'قرد الشمبانزي','الدب القطبي','الثعلب القطبي','الذئب الرمادي','النمر الثلجي',
-];
-
-// 🎬 أفلام ومسلسلات معروفة
-const MOVIES = [
-  'تيتانيك','الأسد الملك','هاري بوتر','ستار وورز','الرجل العنكبوت',
-  'أفاتار','الجوكر','باتمان','سوبرمان','الرجل الحديدي',
-  'إنترستيلار','المصفوفة','الأب الروحي','شينلر ليست','فورست غامب',
-  'جيمس بوند','ميشن إمبوسيبل','فاست فيوريوس','ترانسفورمرز','أفنجرز',
-  'توي ستوري','فروزن','شريك','المدهشون','كارز',
-  'ديدبول','لوغان','كابتن أمريكا','ثور','غوردانز رينجرز',
-  'باب الحارة','بقعة ضوء','مرايا','ضيعة ضايعة','عطر الشام',
-  'نسر الصعيد','الملك','الجماعة','قيامة أرطغرل','حريم السلطان',
-  'بريكنج باد','غيم أوف ثرونز','فريندز','ذا أوفيس','سترنجر ثينغز',
-  'لوسيفر','فيكينغز','نارككوس','مانداليوريان','ذا كراون',
-  'دكتور هاوس','CSI','ووكنق ديد','بريزن بريك','سبونج بوب',
-  'توم وجيري','بوكيمون','دراغون بول','ناروتو','ون بيس',
-  'الحارة','سامي وسيف','أبو جانتي','مسلسل نور','سلسل الذهب',
-  'إنديانا جونز','الجاسوس','شيرلوك هولمز','هرقل بوارو','جيمس بوند',
-];
-
-// 🌍 دول وأماكن مشهورة
-const PLACES = [
-  'أمريكا','الصين','روسيا','فرنسا','ألمانيا','إنجلترا','إيطاليا','إسبانيا','اليابان','الهند',
-  'البرازيل','أستراليا','كندا','المكسيك','كوريا الجنوبية','تركيا','مصر','السعودية','العراق','الإمارات',
-  'المغرب','الأرجنتين','جنوب أفريقيا','إيران','باكستان','هولندا','السويد','سويسرا','اليونان','البرتغال',
-  'باريس','لندن','روما','مدريد','برلين','طوكيو','بكين','موسكو','واشنطن','نيويورك',
-  'دبي','الرياض','القاهرة','بغداد','أبوظبي','الكويت','الدوحة','عمّان','بيروت','دمشق',
-  'طهران','إسطنبول','أثينا','أمستردام','برشلونة','ميلان','ميونيخ','فيينا','براغ','سيدني',
-  'برج إيفل','الأهرامات','برج خليفة','تمثال الحرية','برج بيزا المائل',
-  'الكولوسيوم','سور الصين العظيم','البتراء','ماتشو بيتشو','تاج محل',
-  'أبو سمبل','شلالات نياغارا','جبل فوجي','جبل إيفرست','جزر المالديف',
-  'الكعبة المشرفة','المسجد النبوي','القدس','ديزني لاند','مدينة البندقية',
-  'درب التبانة','نهر الأمازون','الصحراء الكبرى','الربع الخالي','غابة الأمازون',
-  'الحاجز المرجاني العظيم','جزيرة هاواي','جزيرة بالي','كيب تاون','ريو دي جانيرو',
-];
-
+// ══════════════════════════════════════════════════════════════
+// محتوى عربي
+// ══════════════════════════════════════════════════════════════
+const PERSONS = ['جاك نيكلسون','توم هانكس','ليوناردو دي كابريو','براد بيت','جوني ديب','ويل سميث','دينزل واشنطن','مورغان فريمان','روبرت داوني جونيور','كيانو ريفز','أرنولد شوارزنيغر','بروس ويليس','توم كروز','أنجلينا جولي','ميريل ستريب','سكارليت جوهانسون','بيونسيه','ليدي غاغا','تايلور سويفت','مايكل جاكسون','إلفيس بريسلي','مارك زوكربيرغ','ستيف جوبز','إيلون ماسك','بيل غيتس','محمد علي','مايكل جوردان','كوبي براينت','رونالدو','ميسي','نيمار','مبابي','زيدان','بيليه','مارادونا','روجر فيدرر','محمد صلاح','أوساين بولت','مايكل فيلبس','سيرينا ويليامز','نابليون بونابرت','ألبرت أينشتاين','غاندي','نيلسون مانديلا','أم كلثوم','فيروز','عبدالحليم حافظ','محمد عبده','عادل إمام','نور الشريف'];
+const ANIMALS  = ['أسد','نمر','فيل','زرافة','دب','ذئب','ثعلب','أرنب','قرد','غوريلا','حصان','جمل','بقرة','خروف','دجاجة','بطريق','كنغر','كوالا','باندا','تمساح','حية','ضفدع','سلحفاة','قرش','دلفين','حوت','أخطبوط','فرس النهر','وحيد القرن','نسر','صقر','بومة','ببغاء','طاووس','نعامة','قنفذ','فهد','حمار وحشي','ضبع','غزال'];
+const MOVIES   = ['تيتانيك','الأسد الملك','هاري بوتر','ستار وورز','الرجل العنكبوت','أفاتار','الجوكر','باتمان','سوبرمان','الرجل الحديدي','إنترستيلار','المصفوفة','الأب الروحي','شينلر ليست','فورست غامب','جيمس بوند','ميشن إمبوسيبل','فاست فيوريوس','أفنجرز','توي ستوري','فروزن','شريك','باب الحارة','قيامة أرطغرل','حريم السلطان','بريكنج باد','غيم أوف ثرونز','فريندز','ذا أوفيس','سترنجر ثينغز','سبونج بوب','توم وجيري','ناروتو','ون بيس'];
+const PLACES   = ['أمريكا','الصين','روسيا','فرنسا','ألمانيا','إنجلترا','إيطاليا','اليابان','البرازيل','أستراليا','مصر','السعودية','الإمارات','المغرب','تركيا','باريس','لندن','روما','مدريد','برلين','طوكيو','بكين','موسكو','دبي','القاهرة','إسطنبول','برج إيفل','الأهرامات','برج خليفة','تمثال الحرية','سور الصين','البتراء','تاج محل','الكعبة المشرفة'];
 const NORMAL_WORDS = [...PERSONS, ...ANIMALS, ...MOVIES, ...PLACES];
+const AMTHAL = ['إن مع العسر يسرا','الصبر مفتاح الفرج','العقل زينة','من جد وجد','الوقت كالسيف','الصدق منجاة','ابدأ بنفسك','خذ من الدنيا ما أعطتك'];
+const ASHAAR  = ['على قدر أهل العزم تأتي العزائم','وما نيل المطالب بالتمني ولكن تؤخذ الدنيا غلابا','إذا أنت أكرمت الكريم ملكته','تعلم فليس المرء يولد عالما','إنما الأمم الأخلاق ما بقيت'];
 
-// 💬 أمثال شعبية (50)
-const AMTHAL = [
-  'العقل زينة',
-  'الصبر مفتاح الفرج',
-  'من جد وجد',
-  'اتق شر من أحسنت إليه',
-  'الوقت كالسيف إن لم تقطعه قطعك',
-  'خير الكلام ما قل ودل',
-  'الحر تكفيه الإشارة',
-  'القناعة كنز لا يفنى',
-  'أهل مكة أدرى بشعابها',
-  'درهم وقاية خير من قنطار علاج',
-  'العين بصيرة واليد قصيرة',
-  'إذا كان الكلام من فضة فالسكوت من ذهب',
-  'الجار قبل الدار',
-  'يد واحدة لا تصفق',
-  'من حفر حفرة لأخيه وقع فيها',
-  'البعد عن العين بعد عن القلب',
-  'العصفور في اليد خير من عشرة على الشجرة',
-  'الغائب حجته معه',
-  'لا تؤجل عمل اليوم إلى الغد',
-  'ما حك جلدك مثل ظفرك',
-  'كل فتاة بأبيها معجبة',
-  'العلم في الصغر كالنقش على الحجر',
-  'الكذب مقياسه قصير',
-  'الجاهل عدو نفسه',
-  'من طلب العلا سهر الليالي',
-  'رب أخ لك لم تلده أمك',
-  'الفرصة لا تأتي مرتين',
-  'الصديق وقت الضيق',
-  'المرء كثير بأخيه',
-  'الشجرة المثمرة يرمونها بالحجارة',
-  'من أمن العقوبة أساء الأدب',
-  'ربما أضرك ما تتمنى',
-  'ما ضاع حق وراءه مطالب',
-  'الناس للناس',
-  'المعدة بيت الداء',
-  'اعمل خيرا وارمه في البحر',
-  'العجلة من الشيطان',
-  'بالعقل لا بالطول',
-  'ابدأ بنفسك',
-  'الحسنة تمحو السيئة',
-  'إن مع العسر يسرا',
-  'للصبر حدود',
-  'زرع الخير يبقى ثمره',
-  'الحمد لله على كل حال',
-  'خذ من الدنيا ما أعطتك',
-  'الإنسان مرهون بعمله',
-  'كن ابن من شئت واكتسب أدبا',
-  'أعطِ الخبازَ خبزه ولو أكل نصفه',
-  'استعن بالصبر والصلاة',
-  'بلا سبب ما يجي الطرب',
+// ══════════════════════════════════════════════════════════════
+// محتوى إنجليزي
+// ══════════════════════════════════════════════════════════════
+const EN_PERSONS = [
+  'Michael Jackson','Elvis Presley','Marilyn Monroe','Arnold Schwarzenegger','Tom Hanks',
+  'Leonardo DiCaprio','Brad Pitt','Johnny Depp','Will Smith','Morgan Freeman',
+  'Robert Downey Jr.','Keanu Reeves','Tom Cruise','Angelina Jolie','Meryl Streep',
+  'Scarlett Johansson','Beyoncé','Lady Gaga','Taylor Swift','Britney Spears',
+  'Mark Zuckerberg','Steve Jobs','Elon Musk','Bill Gates','Jeff Bezos',
+  'Muhammad Ali','Michael Jordan','Kobe Bryant','Cristiano Ronaldo','Lionel Messi',
+  'LeBron James','Roger Federer','Usain Bolt','Michael Phelps','Serena Williams',
+  'Napoleon Bonaparte','Albert Einstein','Abraham Lincoln','Neil Armstrong','Cleopatra',
+  'Barack Obama','Donald Trump','Queen Elizabeth','Winston Churchill','Nelson Mandela',
+  'Charlie Chaplin','Mr. Bean','Jack Sparrow','Harry Potter','Indiana Jones',
+];
+const EN_ANIMALS = [
+  'lion','tiger','elephant','giraffe','bear','wolf','fox','rabbit','monkey','gorilla',
+  'horse','camel','cow','sheep','chicken','penguin','kangaroo','koala','panda','crocodile',
+  'snake','frog','turtle','shark','dolphin','whale','octopus','hippo','rhino','eagle',
+  'owl','parrot','peacock','ostrich','hedgehog','cheetah','zebra','hyena','flamingo','bat',
+];
+const EN_MOVIES = [
+  'Titanic','The Lion King','Harry Potter','Star Wars','Spider-Man','Avatar','Joker',
+  'Batman','Superman','Iron Man','Interstellar','The Matrix','The Godfather','Forrest Gump',
+  'James Bond','Mission Impossible','Fast & Furious','Avengers','Toy Story','Frozen',
+  'Shrek','The Office','Friends','Stranger Things','SpongeBob','Tom and Jerry','Breaking Bad',
+  'Game of Thrones','The Simpsons','Jurassic Park','Home Alone','Die Hard','Rocky','Jaws',
+  'Inception','Gladiator','The Dark Knight','Pulp Fiction','Goodfellas',
+];
+const EN_PLACES = [
+  'America','China','Russia','France','Germany','England','Italy','Japan','Brazil','Australia',
+  'Paris','London','Rome','Madrid','Berlin','Tokyo','New York','Las Vegas','Hollywood',
+  'Eiffel Tower','Statue of Liberty','Big Ben','Colosseum','Niagara Falls',
+  'Grand Canyon','Times Square','Disney World','The White House','Hollywood Sign',
+  'Mount Everest','Amazon Rainforest','Sahara Desert','Great Wall of China','Antarctica',
+];
+const EN_NORMAL_WORDS = [...EN_PERSONS, ...EN_ANIMALS, ...EN_MOVIES, ...EN_PLACES];
+const EN_QUOTES = [
+  'Just Do It','I\'ll be back','May the Force be with you','To infinity and beyond',
+  'You can\'t handle the truth','Why so serious?','I am your father',
+  'Life is like a box of chocolates','There\'s no place like home',
+  'Elementary, my dear Watson','Houston, we have a problem','You had me at hello',
+];
+const EN_SCENES = [
+  'Titanic – standing at the bow of the ship','The Lion King – Simba held up on Pride Rock',
+  'Star Wars – swinging a lightsaber','Spider-Man – shooting webs from the wrist',
+  'Rocky – training montage punching the air','The Matrix – dodging bullets in slow motion',
+  'Home Alone – hands on cheeks screaming','Forrest Gump – running and running',
+  'Jaws – swimming in panic from a shark','Gladiator – pointing at the crowd',
+  'The Godfather – making an offer you can\'t refuse','Frozen – letting it go with ice powers',
 ];
 
-// 📜 أبيات شعر معروفة (50)
-const ASHAAR = [
-  'لكل داء دواء يستطب به إلا الحماقة أعيت من يداويها',
-  'على قدر أهل العزم تأتي العزائم وتأتي على قدر الكرام المكارم',
-  'وما نيل المطالب بالتمني ولكن تؤخذ الدنيا غلابا',
-  'إذا المرء لا يرعاك إلا تكلفا فدعه ولا تكثر عليه التأسفا',
-  'إذا أنت أكرمت الكريم ملكته وإن أنت أكرمت اللئيم تمردا',
-  'تعلم فليس المرء يولد عالما وليس أخو علم كمن هو جاهل',
-  'عش عزيزا أو مت وأنت كريم بين أسياف مجدك والمكارم',
-  'إذا كنت في نعمة فارعها إن المعاصي تزيل النعم',
-  'إذا الشعب يوما أراد الحياة فلا بد أن يستجيب القدر',
-  'بلادي وإن جارت علي عزيزة وأهلي وإن ضنوا علي كرام',
-  'ألا ليت الشباب يعود يوما فأخبره بما فعل المشيب',
-  'إنما الأمم الأخلاق ما بقيت فإن هم ذهبت أخلاقهم ذهبوا',
-  'وطني لو شغلت بالخلد عنه نازعتني إليه في الخلد نفسي',
-  'ليس الجمال بأثواب تزيننا إن الجمال جمال العلم والأدب',
-  'لا تقل من أين أبدأ قل هنا أبدأ الآن',
-  'ما أجمل الدنيا إذا ابتسمت لنا وما أقسى الأيام حين تعبس',
-  'الصبر جميل والفرج قريب ومن صبر ظفر بما يريد',
-  'يا دار ما فعلت بك الأيام وكيف غيرتك الليالي والعام',
-  'رحل الذين أحبهم وبقيت مثل السيف فرد',
-  'كن ابن يومك لا تضيع ساعة في غد مجهول أو أمس قد مضى',
-  'الشمس تشرق كل يوم وتغيب وما بين الشروق والغياب حياة',
-  'من يزرع الخير يحصد السعادة ومن يزرع الشر يحصد الندامة',
-  'وخير الناس ذو قلب سليم وخير العيش ما صفا ودام',
-  'لكل شيء إذا ما تم نقصان فلا يغر بطيب العيش إنسان',
-  'سأظل أمشي وإن طالت بي الدروب ما دام في القلب أمل وفي الروح حب',
-  'يا أيها الإنسان ما أغراك بربك الكريم',
-  'إذا أعياك داء فاطلب شفاءه من الله فهو الشافي الكافي',
-  'أبي الذي علمني كيف أكون رجلا وأمي التي علمتني كيف أحب',
-  'قالوا الغياب يميت الحب قلت لهم وكيف يموت ما في القلب',
-  'سلامي على وطني كل يوم وللوطن الحب والانتماء',
-  'أنا من أهوى ومن أهوى أنا نحن روحان حللنا بدنا',
-  'وللموت خير من حياة الذليل في ظل من لا يريد له الكرامة',
-  'يا قلب كم لاقيت من هموم ومع ذلك ما زلت تنبض',
-  'ترحل عني ولكن لا تغيب عن بالي فأنت روحي وأنت سبب حياتي',
-  'يا أمة العرب قومي من رقادك فالمجد ينتظر صحوتك',
-  'وإذا تأملت الحياة وجدتها مثل الخيال تزول وتنقضي',
-  'شعرت بأن الأرض ضاقت رحابها وأن السماء أغلقت أبوابها',
-  'إذا لم تستح فاصنع ما شئت فالحياء زينة الرجال',
-  'لا تبكِ على اللبن المسكوب فما مضى لن يعود',
-  'ما أجمل العيش لو أن الفتى حجر تنبو الصروف عنه وهو صلد',
-  'حياتك لحظات اغتنمها قبل أن تفوتها اللحظات',
-  'فلو أن ما أسعى لأدنى معيشة كفاني ولم أطلب قليل من المال',
-  'يقولون لي فيك انقباض وإنما رأوا رجلا عن موقف الذل أحجما',
-  'وتظن روحي أن هذا الوداع يصبح لقاء في يوم ما',
-  'أحب أمي حبا جما وقلبي بحبها طافح',
-  'كم ذا يكابد عاشق متيم طول الليالي وهو يبكي ويلوم',
-  'وفي الليل من نجم يضيء لنا الدروب وفي الفجر أمل جديد',
-  'لو كان في قلبي سواك ما بكيت عليك دمعة',
-  'يا رب لك الحمد كما ينبغي لجلال وجهك وعظيم سلطانك',
-  'لا تغضب ولا تيأس وثق بالله دائما فهو الكريم وهو الرزاق',
+// ══════════════════════════════════════════════════════════════
+// إعدادات الجولات — 7 جولات: 5 عادية + أمثال + شعر
+// ══════════════════════════════════════════════════════════════
+// ROUND_CONFIG: indexed 0..6
+// roundIndex 0-4 → normal  (+0s)
+// roundIndex 5   → amthal  (+30s) → 15pts / steal 20pts
+// roundIndex 6   → shear   (+60s) → 20pts / steal 25pts
+const ROUND_CONFIGS = [
+  { type: 'normal', pts: 10, stealPts: 15, extraTime: 0  },
+  { type: 'normal', pts: 10, stealPts: 15, extraTime: 0  },
+  { type: 'normal', pts: 10, stealPts: 15, extraTime: 0  },
+  { type: 'normal', pts: 10, stealPts: 15, extraTime: 0  },
+  { type: 'normal', pts: 10, stealPts: 15, extraTime: 0  },
+  { type: 'mathal', pts: 15, stealPts: 20, extraTime: 30 },
+  { type: 'shear',  pts: 20, stealPts: 25, extraTime: 60 },
 ];
 
-// ─────────────────────────────────────────────────────────────
-
+// ══════════════════════════════════════════════════════════════
+// helpers
+// ══════════════════════════════════════════════════════════════
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -201,8 +101,19 @@ function shuffle(arr) {
   return a;
 }
 
-function buildRounds() {
-  const normal = shuffle(NORMAL_WORDS).slice(0, 8);
+// بناء ٧ كلمات: ٥ عادية + مثل + شعر
+function buildRounds(isGlobal = false) {
+  if (isGlobal) {
+    const normal = shuffle(EN_NORMAL_WORDS).slice(0, 5);
+    const quote  = shuffle(EN_QUOTES)[0];
+    const scene  = shuffle(EN_SCENES)[0];
+    return [
+      ...normal.map(w => ({ word: w, type: 'normal' })),
+      { word: quote, type: 'quote' },
+      { word: scene, type: 'scene' },
+    ];
+  }
+  const normal = shuffle(NORMAL_WORDS).slice(0, 5);
   const mathal = shuffle(AMTHAL)[0];
   const shear  = shuffle(ASHAAR)[0];
   return [
@@ -212,386 +123,673 @@ function buildRounds() {
   ];
 }
 
-// ── شاشة الإعداد ─────────────────────────────────────────────
-function SetupScreen({ onStart }) {
-  const [timeLimit, setTimeLimit] = useState(60);
-  const [team1Name, setTeam1Name] = useState('الفريق الأول');
-  const [team2Name, setTeam2Name] = useState('الفريق الثاني');
+const HIT_SLOP = { top: 10, bottom: 10, left: 10, right: 10 };
+
+// ══════════════════════════════════════════════════════════════
+// SetupScreen
+// ══════════════════════════════════════════════════════════════
+const SetupScreen = memo(({ onStart, onBack, theme, t, rs, isGlobal }) => {
+  const [team1Name, setTeam1Name] = useState(isGlobal ? 'Team 1' : 'الفريق الأول');
+  const [team2Name, setTeam2Name] = useState(isGlobal ? 'Team 2' : 'الفريق الثاني');
+
+  const handleStart = useCallback(() => {
+    onStart({
+      team1Name: team1Name.trim() || (isGlobal ? 'Team 1' : 'الفريق الأول'),
+      team2Name: team2Name.trim() || (isGlobal ? 'Team 2' : 'الفريق الثاني'),
+    });
+  }, [team1Name, team2Name, onStart]);
 
   return (
-    <ScrollView style={s.setupContainer} contentContainerStyle={s.setupContent}>
-      <Text style={s.subtitle}>مثّل الكلمة وفريقك يخمّن قبل انتهاء الوقت</Text>
+    <View style={{ flex: 1 }}>
+      {/* Header with back button top-left */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={onBack}
+          style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]}
+          hitSlop={HIT_SLOP}
+        >
+          <Text style={[styles.backText, { color: '#ec4899' }]}>←</Text>
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
+          {isGlobal ? 'Act It Out 🎭' : 'مثّلها 🎭'}
+        </Text>
+        <View style={{ width: 40 }} />
+      </View>
 
-      {/* أسماء الفرق */}
-      <View style={s.section}>
-        <Text style={s.label}>أسماء الفرق</Text>
-        <View style={s.teamRow}>
-          <View style={[s.teamInputWrap, { borderColor: '#ec489950' }]}>
-            <Text style={[s.teamInputLabel, { color: '#ec4899' }]}>🔴 الفريق الأول</Text>
-            <TextInput
-              style={s.teamInput}
-              value={team1Name}
-              onChangeText={setTeam1Name}
-              maxLength={20}
-              textAlign="right"
-            />
-          </View>
-          <View style={[s.teamInputWrap, { borderColor: '#3b82f650' }]}>
-            <Text style={[s.teamInputLabel, { color: '#3b82f6' }]}>🔵 الفريق الثاني</Text>
-            <TextInput
-              style={s.teamInput}
-              value={team2Name}
-              onChangeText={setTeam2Name}
-              maxLength={20}
-              textAlign="right"
-            />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.setupContent, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+          {isGlobal ? 'Act it out — no talking, no sounds!' : 'مثّل الكلمة — بدون كلام وبدون أصوات!'}
+        </Text>
+
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: theme.textPrimary }]}>
+            {isGlobal ? 'Team Names' : 'أسماء الفريقين'}
+          </Text>
+          <View style={styles.teamRow}>
+            <View style={[styles.teamInputWrap, { backgroundColor: theme.bgCard, borderColor: '#ec489950' }]}>
+              <Text style={[styles.teamInputLabel, { color: '#ec4899' }]}>🔴 {isGlobal ? 'Team 1' : 'الفريق الأول'}</Text>
+              <TextInput
+                style={[styles.teamInput, { color: theme.textPrimary }, isGlobal ? styles.teamInputLTR : rs.textInput]}
+                value={team1Name} onChangeText={setTeam1Name} maxLength={20}
+              />
+            </View>
+            <View style={[styles.teamInputWrap, { backgroundColor: theme.bgCard, borderColor: '#3b82f650' }]}>
+              <Text style={[styles.teamInputLabel, { color: '#3b82f6' }]}>🔵 {isGlobal ? 'Team 2' : 'الفريق الثاني'}</Text>
+              <TextInput
+                style={[styles.teamInput, { color: theme.textPrimary }, isGlobal ? styles.teamInputLTR : rs.textInput]}
+                value={team2Name} onChangeText={setTeam2Name} maxLength={20}
+              />
+            </View>
           </View>
         </View>
-      </View>
 
-      <View style={s.section}>
-        <Text style={s.label}>وقت كل جولة للتمثيل</Text>
-        <View style={s.options}>
-          {[45, 60, 90].map(t => (
-            <TouchableOpacity
-              key={t}
-              style={[s.optBtn, timeLimit === t && s.optBtnActive]}
-              onPress={() => setTimeLimit(t)}
-            >
-              <Text style={[s.optText, timeLimit === t && s.optTextActive]}>{t}ث</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={[styles.infoCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+          {isGlobal ? (
+            <>
+              <Text style={[styles.infoTitle, { color: theme.textPrimary }]}>📋 Round Structure (7 Rounds)</Text>
+              <Text style={[styles.infoRow, { color: theme.textSecondary }]}>🎭 Rounds 1–5: People / Animals / Movies / Places</Text>
+              <Text style={[styles.infoRow, { color: theme.textSecondary }]}>💬 Round 6: Famous Quote — act it out!</Text>
+              <Text style={[styles.infoRow, { color: theme.textSecondary }]}>🎬 Round 7: Iconic Movie Scene — act it out!</Text>
+              <Text style={[styles.infoNote, { color: theme.accent }]}>10 pts • Round 6: 15 pts • Round 7: 20 pts</Text>
+              <Text style={[styles.infoNote, { color: '#f59e0b' }]}>Steal: 15 • Round 6: 20 • Round 7: 25 pts</Text>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.infoTitle, { color: theme.textPrimary }]}>📋 هيكل الجولات السبع</Text>
+              <Text style={[styles.infoRow, { color: theme.textSecondary }]}>🎭 جولات 1–5: أشخاص / حيوانات / أفلام / أماكن</Text>
+              <Text style={[styles.infoRow, { color: theme.textSecondary }]}>💬 جولة 6: مثل شعبي (+٣٠ ثانية)</Text>
+              <Text style={[styles.infoRow, { color: theme.textSecondary }]}>📜 جولة 7: بيت شعر (+دقيقة)</Text>
+              <Text style={[styles.infoNote, { color: theme.accent }]}>إجابة: ١٠ | جولة ٦: ١٥ | جولة ٧: ٢٠ نقطة</Text>
+              <Text style={[styles.infoNote, { color: '#f59e0b' }]}>سرقة: ١٥ | جولة ٦: ٢٠ | جولة ٧: ٢٥ نقطة</Text>
+            </>
+          )}
         </View>
-      </View>
 
-      <View style={s.infoCard}>
-        <Text style={s.infoTitle}>📋 هيكل الجولات العشر</Text>
-        <Text style={s.infoRow}>🎭 جولات 1–8: أشخاص / حيوانات / أفلام / أماكن</Text>
-        <Text style={s.infoRow}>💬 جولة 9: مثل شعبي</Text>
-        <Text style={s.infoRow}>📜 جولة 10: بيت شعر</Text>
-        <Text style={s.infoNote}>كل جولة = 10 نقاط • السرقة = 10 نقاط</Text>
-      </View>
-
-      <TouchableOpacity style={s.startBtn} onPress={() => onStart({ timeLimit, team1Name: team1Name.trim() || 'الفريق الأول', team2Name: team2Name.trim() || 'الفريق الثاني' })}>
-        <Text style={s.startText}>ابدأ اللعبة ←  🪙 10</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <TouchableOpacity style={[styles.startBtn, { backgroundColor: theme.accent }]} onPress={handleStart} activeOpacity={0.85}>
+          <Text style={styles.startText}>
+            {isGlobal ? 'Start Game 🎭' : 'ابدأ اللعبة 🎭'}
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
-}
+});
 
-// ── شاشة اللعب ───────────────────────────────────────────────
-function PlayScreen({ timeLimit, onBack, team1Name = 'الفريق الأول', team2Name = 'الفريق الثاني' }) {
-  const rounds = useRef(buildRounds()).current;
-  const [roundIndex, setRoundIndex] = useState(0);
-  const [scores, setScores] = useState([0, 0]);
-  const [actingTeam, setActingTeam] = useState(0);
-  const [phase, setPhase] = useState('ready');
-  const [timeLeft, setTimeLeft] = useState(timeLimit);
-  const timerColor = useRef(new Animated.Value(0)).current;
+// ══════════════════════════════════════════════════════════════
+// PlayScreen
+// ══════════════════════════════════════════════════════════════
+const BASE_TIME = 60; // الوقت الأساسي للتمثيل
+const REVEAL_DURATION = 10; // ثواني تظهر فيها الكلمة
+const STEAL_DURATION  = 20; // ثواني فرصة السرقة
 
+function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
+  const { themeId } = useTheme();
+  const { lang } = useLanguage();
+  // كل جولة = دوران: دور الفريق الأول ثم دور الفريق الثاني
+  // roundIndex: الجولة الكاملة 0..6 (7 جولات)
+  // actingTeam: 0 أو 1 (داخل الجولة)
+  // turnIndex: الدور الكلي = roundIndex * 2 + actingTeam
+
+  const rounds = useRef(buildRounds(isGlobal)).current;
+  const [roundIndex, setRoundIndex] = useState(0); // 0..6
+  const [actingTeam, setActingTeam] = useState(0); // 0 or 1
+  const [scores,     setScores]     = useState([0, 0]);
+  // phases: 'ready' | 'revealing' | 'acting' | 'steal' | 'done'
+  const [phase,     setPhase]    = useState('ready');
+  const [timeLeft,  setTimeLeft] = useState(BASE_TIME);
+  const [stealTime, setStealTime] = useState(STEAL_DURATION);
+  const [wordVisible, setWordVisible] = useState(false);
+
+  const dangerOpacity = useRef(new Animated.Value(0)).current;
+  const stealDanger   = useRef(new Animated.Value(0)).current;
+
+  const cfg = ROUND_CONFIGS[roundIndex]; // { type, pts, stealPts, extraTime }
   const currentRound = rounds[roundIndex];
-  const isLastTwoRounds = roundIndex >= 8;
-  const roundLabel = roundIndex < 8
-    ? `جولة ${roundIndex + 1}`
-    : roundIndex === 8 ? 'جولة الأمثال 💬' : 'جولة الشعر 📜';
+  const isSpecialRound = roundIndex >= 5;
+  const actingTime = BASE_TIME + cfg.extraTime;
 
+  // ── labels ──
+  const getRoundLabel = () => {
+    if (isGlobal) {
+      if (roundIndex < 5)  return `Round ${roundIndex + 1} of 7`;
+      if (roundIndex === 5) return 'Round 6 of 7 — Famous Quote 💬';
+      return 'Round 7 of 7 — Iconic Scene 🎬';
+    }
+    if (roundIndex < 5)  return `الجولة ${roundIndex + 1} من 7`;
+    if (roundIndex === 5) return 'الجولة 6 من 7 — الأمثال 💬';
+    return 'الجولة 7 من 7 — الشعر 📜';
+  };
+
+  const getRoundTypeLabel = () => {
+    if (isGlobal) {
+      if (currentRound.type === 'quote') return '💬 Famous Quote';
+      if (currentRound.type === 'scene') return '🎬 Movie Scene';
+    } else {
+      if (currentRound.type === 'mathal') return '💬 مثل شعبي';
+      if (currentRound.type === 'shear')  return '📜 بيت شعر';
+    }
+    return null;
+  };
+
+  const t1 = actingTeam === 0 ? team1Name : team2Name;
+  const t2 = actingTeam === 0 ? team2Name : team1Name;
+  const t2Team = actingTeam === 0 ? 1 : 0;
+
+  // ── timers ──
+  // مرحلة إظهار الكلمة لـ١٠ ثواني
+  useEffect(() => {
+    if (phase !== 'revealing') return;
+    setWordVisible(true);
+    const hide = setTimeout(() => {
+      setWordVisible(false);
+      setPhase('acting');
+      setTimeLeft(actingTime);
+    }, REVEAL_DURATION * 1000);
+    return () => clearTimeout(hide);
+  }, [phase]);
+
+  // عداد التمثيل
   useEffect(() => {
     if (phase !== 'acting') return;
-    if (timeLeft <= 0) { setPhase('steal'); return; }
-    const t = setTimeout(() => setTimeLeft(x => x - 1), 1000);
-    return () => clearTimeout(t);
+    if (timeLeft <= 0) { setPhase('steal'); setStealTime(STEAL_DURATION); return; }
+    if (timeLeft <= 5) playSound('countdown');
+    const timer = setTimeout(() => setTimeLeft(x => x - 1), 1000);
+    return () => clearTimeout(timer);
   }, [phase, timeLeft]);
 
+  // عداد السرقة
   useEffect(() => {
-    Animated.timing(timerColor, {
-      toValue: timeLeft < 10 ? 1 : 0,
-      duration: 300, useNativeDriver: false,
+    if (phase !== 'steal') return;
+    if (stealTime <= 0) { handleNoAnswer(); return; }
+    if (stealTime <= 5) playSound('countdown');
+    const timer = setTimeout(() => setStealTime(x => x - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [phase, stealTime]);
+
+  // danger animation للتمثيل
+  useEffect(() => {
+    Animated.timing(dangerOpacity, {
+      toValue: timeLeft < 10 && phase === 'acting' ? 1 : 0,
+      duration: 300, useNativeDriver: true,
     }).start();
-  }, [timeLeft < 10]);
+  }, [timeLeft < 10, phase]);
 
-  const timerBg = timerColor.interpolate({
-    inputRange: [0, 1], outputRange: ['#1e1b4b', '#450a0a'],
-  });
+  // danger animation للسرقة
+  useEffect(() => {
+    Animated.timing(stealDanger, {
+      toValue: stealTime < 8 && phase === 'steal' ? 1 : 0,
+      duration: 300, useNativeDriver: true,
+    }).start();
+  }, [stealTime < 8, phase]);
 
-  function startActing() { setPhase('acting'); setTimeLeft(timeLimit); }
-
-  function teamGuessed() {
-    const ns = [...scores]; ns[actingTeam] += 10; nextRound(ns);
-  }
-  function stealSuccess() {
-    const other = actingTeam === 0 ? 1 : 0;
-    const ns = [...scores]; ns[other] += 10; nextRound(ns);
-  }
-  function stealFailed() { nextRound(scores); }
-
-  function nextRound(ns) {
-    setScores(ns);
-    if (roundIndex + 1 >= rounds.length) { setPhase('done'); return; }
+  // ── next turn/round ──
+  const goNext = useCallback((newScores) => {
+    setScores(newScores);
+    // إذا كان الفريق الثاني لم يؤدِّ دوره بعد
+    if (actingTeam === 0) {
+      setActingTeam(1);
+      setPhase('ready');
+      return;
+    }
+    // كلا الفريقين أدّيا — انتقل للجولة التالية
+    if (roundIndex + 1 >= rounds.length) {
+      setPhase('done');
+      return;
+    }
     setRoundIndex(i => i + 1);
-    setActingTeam(t => t === 0 ? 1 : 0);
+    setActingTeam(0);
     setPhase('ready');
-  }
+  }, [actingTeam, roundIndex, rounds.length]);
 
+  const startReveal  = useCallback(() => setPhase('revealing'), []);
+
+  // الفريق الممثِّل أجاب
+  const teamGuessed  = useCallback(() => {
+    const ns = [...scores];
+    ns[actingTeam] += cfg.pts;
+    goNext(ns);
+  }, [scores, actingTeam, cfg, goNext]);
+
+  // أجاب الفريق الأول (الممثّل) في فرصة السرقة
+  const stealTeam1Answered = useCallback(() => {
+    const ns = [...scores];
+    ns[actingTeam] += cfg.pts;
+    goNext(ns);
+  }, [scores, actingTeam, cfg, goNext]);
+
+  // الفريق الثاني سرق
+  const stealSuccess = useCallback(() => {
+    const ns = [...scores];
+    ns[t2Team] += cfg.stealPts;
+    goNext(ns);
+  }, [scores, t2Team, cfg, goNext]);
+
+  // لم يجب أحد
+  const handleNoAnswer = useCallback(() => goNext(scores), [scores, goNext]);
+
+  // ══════════════════════════════════════════════════════════════
+  // PHASE: done
+  // ══════════════════════════════════════════════════════════════
   if (phase === 'done') {
-    const winner = scores[0] > scores[1] ? 'الفريق الأول'
-      : scores[1] > scores[0] ? 'الفريق الثاني' : null;
+    const winner = scores[0] > scores[1] ? team1Name : scores[1] > scores[0] ? team2Name : null;
     return (
-      <View style={s.centerContainer}>
-        <Text style={s.bigEmoji}>🏆</Text>
-        <Text style={s.winnerTitle}>{winner ? `${winner} فاز!` : 'تعادل!'}</Text>
-        <View style={s.finalScores}>
-          <View style={s.finalTeam}>
-            <Text style={s.finalTeamName}>الفريق الأول</Text>
-            <Text style={[s.finalScore, scores[0] >= scores[1] && s.finalScoreWin]}>{scores[0]}</Text>
+      <View style={[styles.centerContainer, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <Text style={styles.bigEmoji}>🏆</Text>
+        <Text style={[styles.winnerTitle, { color: theme.accent }]}>
+          {winner
+            ? (isGlobal ? `${winner} wins!` : `${winner} فاز!`)
+            : (isGlobal ? 'Draw!' : 'تعادل!')}
+        </Text>
+        <View style={styles.finalScores}>
+          <View style={[styles.finalTeam, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+            <Text style={[styles.finalTeamName, { color: theme.textSecondary }]}>{team1Name}</Text>
+            <Text style={[styles.finalScore, { color: scores[0] >= scores[1] ? theme.accent : theme.textPrimary }]}>{scores[0]}</Text>
           </View>
-          <Text style={s.vs}>VS</Text>
-          <View style={s.finalTeam}>
-            <Text style={s.finalTeamName}>الفريق الثاني</Text>
-            <Text style={[s.finalScore, scores[1] > scores[0] && s.finalScoreWin]}>{scores[1]}</Text>
+          <Text style={[styles.vs, { color: theme.textMuted }]}>VS</Text>
+          <View style={[styles.finalTeam, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+            <Text style={[styles.finalTeamName, { color: theme.textSecondary }]}>{team2Name}</Text>
+            <Text style={[styles.finalScore, { color: scores[1] > scores[0] ? theme.accent : theme.textPrimary }]}>{scores[1]}</Text>
           </View>
         </View>
-        <TouchableOpacity style={s.actionBtn} onPress={onBack}>
-          <Text style={s.actionText}>العودة للقائمة</Text>
+        <TouchableOpacity style={styles.actionBtn} onPress={onBack} activeOpacity={0.85}>
+          <Text style={styles.actionText}>{isGlobal ? 'Return Home' : t('common.returnHome')}</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // PHASE: steal
+  // ══════════════════════════════════════════════════════════════
   if (phase === 'steal') {
-    const other = actingTeam === 0 ? 1 : 0;
     return (
-      <View style={s.centerContainer}>
-        <Text style={s.bigEmoji}>⏰</Text>
-        <Text style={s.phaseTitle}>انتهى الوقت!</Text>
-        <Text style={s.stealPrompt}>فرصة {other === 0 ? team1Name : team2Name} للسرقة 🔥</Text>
-        <Text style={s.stealHint}>جواب واحد فقط</Text>
-        <View style={s.stealBtns}>
-          <TouchableOpacity style={s.stealFailBtn} onPress={stealFailed}>
-            <Text style={s.stealFailText}>✗ خطأ</Text>
+      <View style={[styles.fullScreen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        {/* back btn top-left */}
+        <View style={styles.floatBackRow}>
+          <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
+            <Text style={[styles.backText, { color: '#ec4899' }]}>←</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.stealSuccessBtn} onPress={stealSuccess}>
-            <Text style={s.stealSuccessText}>✓ صح! +10</Text>
-          </TouchableOpacity>
+          <GameInfoButton gameType="act_it_out" lang={lang} />
+          <WebScreenButton
+            playerUid="act_p0"
+            playerName=""
+            gameType="act_it_out"
+            getPublicData={() => ({ phase, scores, actingTeam })}
+            themeName={themeId || 'dark'}
+          />
         </View>
-        <TouchableOpacity style={s.skipRoundBtn} onPress={() => nextRound(scores)}>
-          <Text style={s.skipRoundText}>تخطي الجولة</Text>
-        </TouchableOpacity>
+
+        {/* scoreboard */}
+        <View style={styles.scoreboardWrap}>
+          <View style={[styles.scoreTeam, { backgroundColor: theme.bgCard, borderColor: theme.border }, actingTeam === 0 && styles.scoreTeamActive]}>
+            <Text style={[styles.scoreTeamName, { color: theme.textSecondary }]}>{team1Name}</Text>
+            <Text style={[styles.scoreTeamScore, { color: theme.textPrimary }]}>{scores[0]}</Text>
+          </View>
+          <View style={[styles.scoreTeam, { backgroundColor: theme.bgCard, borderColor: theme.border }, actingTeam === 1 && styles.scoreTeamActive]}>
+            <Text style={[styles.scoreTeamName, { color: theme.textSecondary }]}>{team2Name}</Text>
+            <Text style={[styles.scoreTeamScore, { color: theme.textPrimary }]}>{scores[1]}</Text>
+          </View>
+        </View>
+
+        {/* شريط التقدم */}
+        <View style={styles.progressWrap}>
+          <Text style={[styles.progressText, { color: theme.textMuted }]}>
+            {isGlobal ? `Round ${roundIndex + 1} / ${rounds.length}` : `الجولة ${roundIndex + 1} من ${rounds.length}`}
+          </Text>
+          <View style={[styles.progressBar, { backgroundColor: theme.bgCard }]}>
+            <View style={[styles.progressFill, { width: `${((roundIndex + 1) / rounds.length) * 100}%` }]} />
+          </View>
+        </View>
+
+        <View style={styles.stealContent}>
+          {/* عداد السرقة */}
+          <View style={[styles.stealTimerCircle, { backgroundColor: theme.bgCard }]}>
+            <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: theme.error, borderRadius: 50, opacity: stealDanger }]} />
+            <Text style={[styles.stealTimerText, stealTime < 8 && { color: '#ff6666' }]}>{stealTime}</Text>
+          </View>
+
+          <Text style={[styles.timeUpLabel, { color: '#f59e0b' }]}>
+            {isGlobal ? "⏰ Time's Up!" : '⏰ انتهى الوقت!'}
+          </Text>
+          <Text style={[styles.stealPrompt, { color: theme.textPrimary }]}>
+            {isGlobal
+              ? `${t2} — steal attempt! 🔥`
+              : `فرصة ${t2} للسرقة! 🔥`}
+          </Text>
+          <Text style={[styles.stealHint, { color: theme.textMuted }]}>
+            {isGlobal
+              ? `+${cfg.stealPts} pts for steal`
+              : `السرقة = ${cfg.stealPts} نقطة`}
+          </Text>
+
+          {/* الأزرار الثلاثة */}
+          <View style={styles.stealBtns}>
+            {/* الفريق الأول أجاب */}
+            <TouchableOpacity style={[styles.stealBtn, { backgroundColor: theme.success + '22', borderColor: theme.success + '44' }]} onPress={stealTeam1Answered} activeOpacity={0.85}>
+              <Text style={styles.stealBtnEmoji}>✅</Text>
+              <Text style={[styles.stealBtnLabel, { color: '#4aff4a' }]}>
+                {isGlobal ? `${t1}\nAnswered` : `أجاب\n${t1}`}
+              </Text>
+              <Text style={[styles.stealBtnPts, { color: '#4aff4a' }]}>+{cfg.pts}</Text>
+            </TouchableOpacity>
+
+            {/* الفريق الثاني سرق */}
+            <TouchableOpacity style={[styles.stealBtn, { backgroundColor: theme.purple + '22', borderColor: theme.purple + '44' }]} onPress={stealSuccess} activeOpacity={0.85}>
+              <Text style={styles.stealBtnEmoji}>🔥</Text>
+              <Text style={[styles.stealBtnLabel, { color: '#818cf8' }]}>
+                {isGlobal ? `${t2}\nStole!` : `سرق\n${t2}`}
+              </Text>
+              <Text style={[styles.stealBtnPts, { color: '#818cf8' }]}>+{cfg.stealPts}</Text>
+            </TouchableOpacity>
+
+            {/* لم يجب أحد */}
+            <TouchableOpacity style={[styles.stealBtn, { backgroundColor: theme.error + '22', borderColor: theme.error + '44' }]} onPress={handleNoAnswer} activeOpacity={0.85}>
+              <Text style={styles.stealBtnEmoji}>❌</Text>
+              <Text style={[styles.stealBtnLabel, { color: '#ff6666' }]}>
+                {isGlobal ? 'No one\nAnswered' : 'لم يجب\nأحد'}
+              </Text>
+              <Text style={[styles.stealBtnPts, { color: '#ff6666' }]}>+0</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     );
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // PHASE: ready
+  // ══════════════════════════════════════════════════════════════
   if (phase === 'ready') {
     return (
-      <View style={s.centerContainer}>
-        <View style={s.scoreboard}>
-          <View style={[s.scoreTeam, actingTeam === 0 && s.scoreTeamActive]}>
-            <Text style={s.scoreTeamName}>{team1Name}</Text>
-            <Text style={s.scoreTeamScore}>{scores[0]}</Text>
+      <View style={[styles.fullScreen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        {/* back btn top-left */}
+        <View style={styles.floatBackRow}>
+          <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
+            <Text style={[styles.backText, { color: '#ec4899' }]}>←</Text>
+          </TouchableOpacity>
+          <GameInfoButton gameType="act_it_out" lang={lang} />
+          <WebScreenButton
+            playerUid="act_p0"
+            playerName=""
+            gameType="act_it_out"
+            getPublicData={() => ({ phase, scores, actingTeam })}
+            themeName={themeId || 'dark'}
+          />
+        </View>
+
+        {/* scoreboard */}
+        <View style={styles.scoreboardWrap}>
+          <View style={[styles.scoreTeam, { backgroundColor: theme.bgCard, borderColor: theme.border }, actingTeam === 0 && styles.scoreTeamActive]}>
+            <Text style={[styles.scoreTeamName, { color: theme.textSecondary }]}>{team1Name}</Text>
+            <Text style={[styles.scoreTeamScore, { color: theme.textPrimary }]}>{scores[0]}</Text>
           </View>
-          <View style={[s.scoreTeam, actingTeam === 1 && s.scoreTeamActive]}>
-            <Text style={s.scoreTeamName}>{team2Name}</Text>
-            <Text style={s.scoreTeamScore}>{scores[1]}</Text>
+          <View style={[styles.scoreTeam, { backgroundColor: theme.bgCard, borderColor: theme.border }, actingTeam === 1 && styles.scoreTeamActive]}>
+            <Text style={[styles.scoreTeamName, { color: theme.textSecondary }]}>{team2Name}</Text>
+            <Text style={[styles.scoreTeamScore, { color: theme.textPrimary }]}>{scores[1]}</Text>
           </View>
         </View>
-        <Text style={s.roundLabel}>{roundLabel}</Text>
-        {isLastTwoRounds && (
-          <Text style={s.specialHint}>
-            {roundIndex === 8 ? '💬 مثل شعبي — مثّله بأي طريقة!' : '📜 بيت شعر — المهم فريقك يعرفه!'}
+
+        {/* شريط التقدم */}
+        <View style={styles.progressWrap}>
+          <Text style={[styles.progressText, { color: theme.textMuted }]}>
+            {isGlobal ? `Round ${roundIndex + 1} / ${rounds.length}` : `الجولة ${roundIndex + 1} من ${rounds.length}`}
           </Text>
-        )}
-        <Text style={s.phaseTitle}>دور الفريق {actingTeam === 0 ? 'الأول' : 'الثاني'}</Text>
-        <Text style={s.instruction}>الممثل فقط يضغط "اكشف"{'\n'}والباقين يغمضون أعينهم</Text>
-        <TouchableOpacity style={s.actionBtn} onPress={startActing}>
-          <Text style={s.actionText}>اكشف ←</Text>
-        </TouchableOpacity>
+          <View style={[styles.progressBar, { backgroundColor: theme.bgCard }]}>
+            <View style={[styles.progressFill, { width: `${((roundIndex + 1) / rounds.length) * 100}%` }]} />
+          </View>
+        </View>
+
+        <View style={styles.readyContent}>
+          {isSpecialRound && (
+            <Text style={[styles.specialHint, { color: theme.accent }]}>
+              {isGlobal
+                ? (currentRound.type === 'quote' ? '💬 Famous Quote — act without words!' : '🎬 Movie Scene — no talking!')
+                : (currentRound.type === 'mathal' ? '💬 مثل شعبي — مثّله بأي طريقة!' : '📜 بيت شعر — المهم فريقك يعرفه!')}
+            </Text>
+          )}
+
+          <Text style={[styles.phaseTitle, { color: theme.textPrimary }]}>
+            {isGlobal ? `${t1}'s turn to act 🎭` : `دور فريق ${t1} للتمثيل 🎭`}
+          </Text>
+
+          <Text style={[styles.instruction, { color: theme.textMuted }]}>
+            {isGlobal
+              ? `Only the actor taps "Reveal"\nEveryone else looks away 🙈\n\nWord shows for 10 seconds then disappears`
+              : `الممثل فقط يضغط "اكشف"\nوالباقين يغمضون أعينهم 🙈\n\nالكلمة تظهر ١٠ ثواني ثم تختفي`}
+          </Text>
+
+          <TouchableOpacity style={styles.actionBtn} onPress={startReveal} activeOpacity={0.85}>
+            <Text style={styles.actionText}>
+              {isGlobal ? 'Reveal 👁️' : 'اكشف الكلمة 👁️'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
-  return (
-    <View style={s.centerContainer}>
-      <Animated.View style={[s.timerCircle, { backgroundColor: timerBg }]}>
-        <Text style={[s.timerText, timeLeft < 10 && s.timerTextRed]}>{timeLeft}</Text>
-      </Animated.View>
-      <View style={[s.wordCard, isLastTwoRounds && s.wordCardSpecial]}>
-        {isLastTwoRounds && (
-          <Text style={s.wordType}>
-            {currentRound.type === 'mathal' ? '💬 مثل شعبي' : '📜 بيت شعر'}
+  // ══════════════════════════════════════════════════════════════
+  // PHASE: revealing (10 ثواني تظهر الكلمة)
+  // ══════════════════════════════════════════════════════════════
+  if (phase === 'revealing') {
+    return (
+      <View style={[styles.centerContainer, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        {wordVisible ? (
+          <>
+            <Text style={[styles.revealHint, { color: theme.textMuted }]}>
+              {isGlobal ? '👁️ Memorize it! 10 seconds...' : '👁️ احفظها! ١٠ ثواني...'}
+            </Text>
+            {getRoundTypeLabel() && (
+              <Text style={[styles.wordType, { color: theme.accent }]}>{getRoundTypeLabel()}</Text>
+            )}
+            <View style={[styles.wordCard, { backgroundColor: theme.bgCard, borderColor: isSpecialRound ? '#f59e0b40' : theme.border }]}>
+              <Text style={[styles.wordText, { color: theme.textPrimary }, isSpecialRound && styles.wordTextSpecial]}>
+                {currentRound.word}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <Text style={[styles.phaseTitle, { color: theme.textMuted }]}>
+            {isGlobal ? 'Get ready...' : 'استعد...'}
           </Text>
         )}
-        <Text style={[s.wordText, isLastTwoRounds && s.wordTextSmall]}>
-          {currentRound.word}
+      </View>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // PHASE: acting
+  // ══════════════════════════════════════════════════════════════
+  return (
+    <View style={[styles.fullScreen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      {/* back btn top-left */}
+      <View style={styles.floatBackRow}>
+        <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
+          <Text style={[styles.backText, { color: '#ec4899' }]}>←</Text>
+        </TouchableOpacity>
+        <GameInfoButton gameType="act_it_out" lang={lang} />
+        <WebScreenButton
+          playerUid="act_p0"
+          playerName=""
+          gameType="act_it_out"
+          getPublicData={() => ({ phase, scores, actingTeam })}
+          themeName={themeId || 'dark'}
+        />
+      </View>
+
+      {/* scoreboard */}
+      <View style={styles.scoreboardWrap}>
+        <View style={[styles.scoreTeam, { backgroundColor: theme.bgCard, borderColor: theme.border }, actingTeam === 0 && styles.scoreTeamActive]}>
+          <Text style={[styles.scoreTeamName, { color: theme.textSecondary }]}>{team1Name}</Text>
+          <Text style={[styles.scoreTeamScore, { color: theme.textPrimary }]}>{scores[0]}</Text>
+        </View>
+        <View style={[styles.scoreTeam, { backgroundColor: theme.bgCard, borderColor: theme.border }, actingTeam === 1 && styles.scoreTeamActive]}>
+          <Text style={[styles.scoreTeamName, { color: theme.textSecondary }]}>{team2Name}</Text>
+          <Text style={[styles.scoreTeamScore, { color: theme.textPrimary }]}>{scores[1]}</Text>
+        </View>
+      </View>
+
+      {/* شريط التقدم */}
+      <View style={styles.progressWrap}>
+        <Text style={[styles.progressText, { color: theme.textMuted }]}>
+          {isGlobal ? `Round ${roundIndex + 1} / ${rounds.length}` : `الجولة ${roundIndex + 1} من ${rounds.length}`}
         </Text>
+        <View style={[styles.progressBar, { backgroundColor: theme.bgCard }]}>
+          <View style={[styles.progressFill, { width: `${((roundIndex + 1) / rounds.length) * 100}%` }]} />
+        </View>
       </View>
-      <View style={s.liveScores}>
-        <Text style={s.liveScore}>الأول: {scores[0]}</Text>
-        <Text style={s.liveScoreSep}>|</Text>
-        <Text style={s.liveScore}>الثاني: {scores[1]}</Text>
+
+      <View style={styles.actingContent}>
+        {/* عداد التمثيل */}
+        <View style={[styles.timerCircle, { backgroundColor: theme.bgCard }]}>
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: theme.error, borderRadius: 50, opacity: dangerOpacity }]} />
+          <Text style={[styles.timerText, timeLeft < 10 && { color: '#ff6666' }]}>{timeLeft}</Text>
+        </View>
+
+        {/* معلومات الدور */}
+        <Text style={[styles.actingLabel, { color: theme.textSecondary }]}>
+          {isGlobal ? `${t1} is acting 🎭` : `${t1} يمثّل الآن 🎭`}
+        </Text>
+
+        {/* نقاط هذا الدور */}
+        <View style={[styles.ptsHint, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+          <Text style={[styles.ptsHintText, { color: theme.textMuted }]}>
+            {isGlobal
+              ? `Correct: +${cfg.pts} pts  •  Steal: +${cfg.stealPts} pts`
+              : `إجابة: +${cfg.pts} نقطة  •  سرقة: +${cfg.stealPts} نقطة`}
+          </Text>
+        </View>
+
+        {/* زر الإكمال */}
+        <TouchableOpacity style={styles.guessedBtn} onPress={teamGuessed} activeOpacity={0.85}>
+          <Text style={styles.guessedText}>
+            {isGlobal ? `${t1} Guessed It! ✓` : `أجاب فريق ${t1} ✓`}
+          </Text>
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity style={s.correctBtn} onPress={teamGuessed}>
-        <Text style={s.correctText}>✓ الفريق خمّن صح! +10</Text>
-      </TouchableOpacity>
     </View>
   );
 }
 
-// ── المكوّن الرئيسي ─────────────────────────────────────────
-export default function ActItOutScreen({ onBack, tokens = 0, onSpendTokens, onOpenTokenModal }) {
-  const [gameStarted, setGameStarted] = useState(false);
-  const [config, setConfig] = useState(null);
+// ══════════════════════════════════════════════════════════════
+// المكوّن الرئيسي
+// ══════════════════════════════════════════════════════════════
+export default function ActItOutScreen({ onBack, experience }) {
+  const { theme, themeId } = useTheme();
+  const t  = useT();
+  const rs = useRTLStyles();
+  const isGlobal = experience === 'global';
 
-  function handleStart(cfg) {
-    if (tokens < 10) {
-      Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز لبدء اللعبة', [
-        { text: 'اذهب إلى السوق', onPress: () => onOpenTokenModal && onOpenTokenModal() },
-        { text: 'إلغاء', style: 'cancel' },
-      ]);
-      return;
-    }
-    onSpendTokens && onSpendTokens(10);
-    setConfig(cfg);
-    setGameStarted(true);
-  }
+  const [config, setConfig] = useState(null);
+  const handleStart = useCallback((cfg) => setConfig(cfg), []);
+  const handleBack  = useCallback(() => {
+    if (config) setConfig(null);
+    else onBack();
+  }, [config, onBack]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#06061a' }}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={s.headerRow}>
-        <TouchableOpacity style={s.backBtn} onPress={onBack}>
-          <Text style={s.backText}>←</Text>
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>🕺 بدون كلام</Text>
-        <View style={s.tokenBadge}>
-          <Text style={s.tokenText}>🪙 {tokens}</Text>
-        </View>
-      </View>
-      {!gameStarted
-        ? <SetupScreen onStart={handleStart} />
-        : <PlayScreen timeLimit={config.timeLimit} team1Name={config.team1Name} team2Name={config.team2Name} onBack={onBack} />
+    <View style={[styles.root, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <ActItOutEngraving theme={theme} />
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
+      {!config
+        ? <SetupScreen onStart={handleStart} onBack={handleBack} theme={theme} t={t} rs={rs} isGlobal={isGlobal} />
+        : <PlayScreen {...config} onBack={handleBack} theme={theme} t={t} isGlobal={isGlobal} />
       }
     </View>
   );
 }
 
-// ── الستايلات ────────────────────────────────────────────────
-const s = StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingTop: 56, paddingBottom: 8,
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: '#0f0f2e', borderWidth: 1,
-    borderColor: '#ec489930', alignItems: 'center', justifyContent: 'center',
-  },
-  backText: { color: '#ec4899', fontSize: 20, fontWeight: '700' },
-  headerTitle: { color: '#ec4899', fontSize: 17, fontWeight: '900' },
-  tokenBadge: {
-    backgroundColor: '#f59e0b22', borderWidth: 1,
-    borderColor: '#f59e0b50', borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 5,
-  },
-  tokenText: { color: '#f59e0b', fontSize: 13, fontWeight: '700' },
-  setupContainer: { flex: 1, backgroundColor: '#06061a' },
-  setupContent: { padding: 24, paddingBottom: 60, alignItems: 'center', gap: 20 },
-  title: { color: '#fff', fontSize: 32, fontWeight: '900', marginTop: 8 },
-  subtitle: { color: '#5a5a80', fontSize: 14, textAlign: 'center' },
-  section: { width: '100%', gap: 12 },
-  label: { color: '#ec4899', fontSize: 16, fontWeight: '700', textAlign: 'right' },
-  options: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-end' },
-  optBtn: {
-    paddingHorizontal: 18, paddingVertical: 10,
-    borderRadius: 12, borderWidth: 1.5, borderColor: '#ec489930', backgroundColor: '#0f0f2e',
-  },
-  optBtnActive: { borderColor: '#ec4899', backgroundColor: '#1a0a12' },
-  optText: { color: '#5a5a80', fontSize: 15, fontWeight: '700' },
-  optTextActive: { color: '#ec4899' },
-  infoCard: {
-    width: '100%', backgroundColor: '#0f0f2e',
-    borderRadius: 16, borderWidth: 1.5, borderColor: '#ec489930', padding: 16, gap: 6,
-  },
-  teamRow: { flexDirection: 'row', gap: 10 },
-  teamInputWrap: {
-    flex: 1, backgroundColor: '#0f0f2e', borderRadius: 14,
-    borderWidth: 1.5, padding: 12, gap: 6,
-  },
-  teamInputLabel: { fontSize: 12, fontWeight: '700' },
-  teamInput: {
-    color: '#fff', fontSize: 15, fontWeight: '600',
-    borderBottomWidth: 1, borderBottomColor: '#ffffff20',
-    paddingBottom: 4,
-  },
-  infoTitle: { color: '#ec4899', fontSize: 15, fontWeight: '800', marginBottom: 4 },
-  infoRow: { color: '#a0a0c0', fontSize: 13 },
-  infoNote: { color: '#5a5a80', fontSize: 12, marginTop: 4 },
-  statsCard: {
-    width: '100%', backgroundColor: '#0a0a1e',
-    borderRadius: 16, borderWidth: 1.5, borderColor: '#ffffff10', padding: 16, gap: 5,
-  },
-  statsTitle: { color: '#a78bfa', fontSize: 14, fontWeight: '800', marginBottom: 4 },
-  statsRow: { color: '#5a5a80', fontSize: 12 },
-  statsTotal: { color: '#a78bfa', fontSize: 13, fontWeight: '700', marginTop: 4 },
-  startBtn: {
-    backgroundColor: '#be185d', borderRadius: 16,
-    paddingVertical: 16, paddingHorizontal: 48, marginTop: 8,
-  },
-  startText: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  centerContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 20 },
-  bigEmoji: { fontSize: 64 },
-  phaseTitle: { color: '#fff', fontSize: 24, fontWeight: '900', textAlign: 'center' },
-  instruction: { color: '#5a5a80', fontSize: 14, textAlign: 'center', lineHeight: 24 },
-  roundLabel: { color: '#ec4899', fontSize: 18, fontWeight: '800' },
-  specialHint: { color: '#f59e0b', fontSize: 13, textAlign: 'center' },
-  scoreboard: { flexDirection: 'row', gap: 16 },
-  scoreTeam: {
-    flex: 1, alignItems: 'center', padding: 12,
-    backgroundColor: '#0f0f2e', borderRadius: 14, borderWidth: 1.5, borderColor: '#ffffff10',
-  },
-  scoreTeamActive: { borderColor: '#ec489980', backgroundColor: '#1a0a12' },
-  scoreTeamName: { color: '#5a5a80', fontSize: 12, fontWeight: '600' },
-  scoreTeamScore: { color: '#fff', fontSize: 28, fontWeight: '900' },
-  timerCircle: {
-    width: 90, height: 90, borderRadius: 45,
-    borderWidth: 2, borderColor: '#ec489940', alignItems: 'center', justifyContent: 'center',
-  },
-  timerText: { color: '#ec4899', fontSize: 36, fontWeight: '900' },
-  timerTextRed: { color: '#ef4444' },
-  wordCard: {
-    backgroundColor: '#1a0a12', borderRadius: 24, borderWidth: 2, borderColor: '#ec489950',
-    paddingVertical: 32, paddingHorizontal: 28, minWidth: 280, alignItems: 'center', gap: 8,
-  },
-  wordCardSpecial: { borderColor: '#f59e0b80', backgroundColor: '#1a1200' },
-  wordType: { color: '#f59e0b', fontSize: 14, fontWeight: '700' },
-  wordText: { color: '#fff', fontSize: 30, fontWeight: '900', textAlign: 'center' },
-  wordTextSmall: { fontSize: 18 },
-  liveScores: { flexDirection: 'row', gap: 16, alignItems: 'center' },
-  liveScore: { color: '#5a5a80', fontSize: 14, fontWeight: '600' },
-  liveScoreSep: { color: '#3a3a60' },
-  stealPrompt: { color: '#f59e0b', fontSize: 20, fontWeight: '800', textAlign: 'center' },
-  stealHint: { color: '#5a5a80', fontSize: 14 },
-  stealBtns: { flexDirection: 'row', gap: 14, width: '100%' },
-  stealFailBtn: {
-    flex: 1, paddingVertical: 16, borderRadius: 16,
-    backgroundColor: '#1e1b4b', borderWidth: 1.5, borderColor: '#ffffff20', alignItems: 'center',
-  },
-  stealFailText: { color: '#5a5a80', fontSize: 16, fontWeight: '700' },
-  stealSuccessBtn: { flex: 1, paddingVertical: 16, borderRadius: 16, backgroundColor: '#10b981', alignItems: 'center' },
-  stealSuccessText: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  skipRoundBtn: { marginTop: 4 },
-  skipRoundText: { color: '#3a3a60', fontSize: 13 },
-  actionBtn: { backgroundColor: '#be185d', borderRadius: 16, paddingVertical: 16, paddingHorizontal: 40 },
-  actionText: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  correctBtn: {
-    backgroundColor: '#10b981', borderRadius: 16,
-    paddingVertical: 18, paddingHorizontal: 32, width: '100%', alignItems: 'center',
-  },
-  correctText: { color: '#fff', fontSize: 17, fontWeight: '900' },
-  winnerTitle: { color: '#fff', fontSize: 28, fontWeight: '900' },
-  finalScores: { flexDirection: 'row', alignItems: 'center', gap: 20 },
-  finalTeam: { alignItems: 'center', gap: 6 },
-  finalTeamName: { color: '#5a5a80', fontSize: 14, fontWeight: '600' },
-  finalScore: { color: '#fff', fontSize: 48, fontWeight: '900' },
-  finalScoreWin: { color: '#f59e0b' },
-  vs: { color: '#3a3a60', fontSize: 20, fontWeight: '800' },
+// ══════════════════════════════════════════════════════════════
+// styles
+// ══════════════════════════════════════════════════════════════
+const styles = StyleSheet.create({
+  root:             { flex: 1 },
+
+  // header (setup)
+  header:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 52, paddingBottom: 8 },
+  headerTitle:      { fontSize: 18, fontWeight: '800' },
+  backBtn:          { width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  backText:         { fontSize: 18, fontWeight: '900' },
+
+  // floating back (play screens)
+  floatBack:        { width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  floatBackRow:     { position: 'absolute', top: 52, left: 16, zIndex: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
+
+  // setup
+  setupContent:     { padding: 24, gap: 24, paddingBottom: 40 },
+  subtitle:         { fontSize: 14, textAlign: 'center' },
+  section:          { gap: 12 },
+  label:            { fontSize: 15, fontWeight: '700' },
+  teamRow:          { flexDirection: 'row', gap: 12 },
+  teamInputWrap:    { flex: 1, borderRadius: 14, borderWidth: 1.5, padding: 12, gap: 6 },
+  teamInputLabel:   { fontSize: 12, fontWeight: '700' },
+  teamInput:        { fontSize: 15, padding: 0 },
+  teamInputLTR:     { textAlign: 'left', writingDirection: 'ltr' },
+  infoCard:         { borderRadius: 16, padding: 16, gap: 8, borderWidth: 1 },
+  infoTitle:        { fontSize: 14, fontWeight: '800' },
+  infoRow:          { fontSize: 13 },
+  infoNote:         { fontSize: 12, fontWeight: '700', marginTop: 4 },
+  startBtn:         { borderRadius: 16, paddingVertical: 18, alignItems: 'center', elevation: 8 },
+  startText:        { color: '#fff', fontSize: 18, fontWeight: '900' },
+
+  // fullScreen layout (play)
+  fullScreen:       { flex: 1 },
+  scoreboardWrap:   { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingTop: 104, paddingBottom: 6 },
+  progressWrap:     { paddingHorizontal: 16, marginTop: 6, marginBottom: 2, gap: 4 },
+  progressText:     { fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  progressBar:      { height: 5, borderRadius: 3, overflow: 'hidden' },
+  progressFill:     { height: '100%', backgroundColor: '#ec4899', borderRadius: 3 },
+  scoreTeam:        { flex: 1, borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1.5 },
+  scoreTeamActive:  { borderColor: '#ec489960', backgroundColor: '#ec489910' },
+  scoreTeamName:    { fontSize: 13 },
+  scoreTeamScore:   { fontSize: 28, fontWeight: '900' },
+
+  // ready content
+  readyContent:     { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
+  roundLabel:       { fontSize: 14, textAlign: 'center' },
+  specialHint:      { fontSize: 13, textAlign: 'center' },
+  phaseTitle:       { fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  instruction:      { fontSize: 14, textAlign: 'center', lineHeight: 22 },
+  actionBtn:        { backgroundColor: '#ec4899', paddingVertical: 16, paddingHorizontal: 40, borderRadius: 16, elevation: 6 },
+  actionText:       { color: '#fff', fontSize: 18, fontWeight: '900' },
+
+  // acting content
+  actingContent:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
+  timerCircle:      { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#ffffff20' },
+  timerText:        { color: '#fff', fontSize: 36, fontWeight: '900' },
+  actingLabel:      { fontSize: 16, fontWeight: '700' },
+  ptsHint:          { borderRadius: 10, paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1 },
+  ptsHintText:      { fontSize: 13 },
+  guessedBtn:       { backgroundColor: '#10b981', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 16, elevation: 6 },
+  guessedText:      { color: '#fff', fontSize: 16, fontWeight: '900' },
+
+  // revealing
+  centerContainer:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20, padding: 24 },
+  revealHint:       { fontSize: 14, textAlign: 'center' },
+  wordCard:         { borderRadius: 20, padding: 24, width: '100%', alignItems: 'center', gap: 8, borderWidth: 1.5, minHeight: 100, justifyContent: 'center' },
+  wordType:         { fontSize: 13, fontWeight: '700' },
+  wordText:         { fontSize: 28, fontWeight: '900', textAlign: 'center' },
+  wordTextSpecial:  { fontSize: 18, lineHeight: 28 },
+
+  // steal
+  stealContent:     { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14 },
+  stealTimerCircle: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#ffffff20' },
+  stealTimerText:   { color: '#fff', fontSize: 30, fontWeight: '900' },
+  timeUpLabel:      { fontSize: 20, fontWeight: '900' },
+  stealPrompt:      { fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  stealHint:        { fontSize: 13 },
+  stealBtns:        { flexDirection: 'row', gap: 10, width: '100%' },
+  stealBtn:         { flex: 1, borderRadius: 14, padding: 12, alignItems: 'center', borderWidth: 1, gap: 4 },
+  stealBtnEmoji:    { fontSize: 22 },
+  stealBtnLabel:    { fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  stealBtnPts:      { fontSize: 15, fontWeight: '900' },
+
+  // done
+  bigEmoji:         { fontSize: 72 },
+  winnerTitle:      { fontSize: 28, fontWeight: '900', textAlign: 'center' },
+  finalScores:      { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  finalTeam:        { alignItems: 'center', borderRadius: 16, padding: 20, borderWidth: 1.5 },
+  finalTeamName:    { fontSize: 13 },
+  finalScore:       { fontSize: 36, fontWeight: '900' },
+  vs:               { fontSize: 18, fontWeight: '900' },
 });

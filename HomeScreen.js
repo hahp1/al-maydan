@@ -1,257 +1,450 @@
-import { useRef, useEffect } from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet,
-  Animated, StatusBar, ScrollView
-} from 'react-native';
+/**
+ * HomeScreen.js — محدّث
+ * ════════════════════════════════════════════════
+ *  ✅ أيقونة القلوب ❤️ طافية بجانب التوكنز 🪙 في userBar
+ *  ✅ نبض تحذيري عند صفر قلوب
+ *  ✅ عداد تنازلي للتجديد التلقائي
+ *  ✅ زر الملف الشخصي 👤 — يفتح ProfileScreen
+ *  ✅ اسم المستخدم قابل للنقر →ملف شخصي
+ *  ✅ جميع الوظائف السابقة محفوظة
+ */
 
-const GAMES = [
-  {
-    id: 'xo',
-    emoji: '✕○',
-    title: 'إكس أو',
-    desc: 'الكلاسيكية — من يكمل الصف أولاً؟',
-    color: '#f59e0b',
-    border: '#f59e0b40',
-    bg: '#f59e0b12',
-    ready: true,
-    players: '2 لاعبين',
-  },
-  {
-    id: 'bullshit',
-    emoji: '🃏',
-    title: 'بوليشيت',
-    desc: 'كذّب منافسيك وافتضح أكاذيبهم',
-    color: '#ef4444',
-    border: '#ef444440',
-    bg: '#ef444412',
-    ready: false,
-    players: '3–6 لاعبين',
-  },
-  {
-    id: 'kout',
-    emoji: '🂡',
-    title: 'كوت بو 6',
-    desc: 'لعبة الورق الخليجية الشهيرة',
-    color: '#8b5cf6',
-    border: '#8b5cf640',
-    bg: '#8b5cf612',
-    ready: false,
-    players: '4 لاعبين',
-  },
-  {
-    id: 'dominoes',
-    emoji: '🁣',
-    title: 'دومينو',
-    desc: 'الحجارة والتكتيك والمفاجآت',
-    color: '#06b6d4',
-    border: '#06b6d440',
-    bg: '#06b6d412',
-    ready: false,
-    players: '2–4 لاعبين',
-  },
-  {
-    id: 'codenames',
-    emoji: '🔤',
-    title: 'كلمات سرية',
-    desc: 'أوصل فريقك للكلمات الصحيحة',
-    color: '#10b981',
-    border: '#10b98140',
-    bg: '#10b98112',
-    ready: false,
-    players: '4–8 لاعبين',
-  },
-  {
-    id: 'poker',
-    emoji: '♠️',
-    title: 'بوكر',
-    desc: 'الخداع والمراهنات والبلوف',
-    color: '#f43f5e',
-    border: '#f43f5e40',
-    bg: '#f43f5e12',
-    ready: false,
-    players: '2–6 لاعبين',
-  },
-];
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated, ImageBackground } from 'react-native';
+import TokenModal from './TokenModal';
+import DailyRewardModal from './DailyRewardModal';
+import { checkDailyReward, claimDailyReward } from './DailyRewardService';
+import { useLanguage } from './I18n';
+import { useTheme } from './ThemeContext';
+import { getRefillCountdown } from './HeartsService';
+import { LinearGradient } from 'expo-linear-gradient';
 
-export default function GamesArenaScreen({ setScreen, user }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const cardAnims = GAMES.map(() => useRef(new Animated.Value(40)).current);
+const STARS = [...Array(18)].map((_, i) => ({
+  key: i, top: `${Math.floor((i * 37 + 11) % 90)}%`, left: `${Math.floor((i * 53 + 7) % 92)}%`,
+  size: i % 3 === 0 ? 3 : 2, opacity: 0.2 + (i % 4) * 0.1,
+}));
+
+const StarLayer = memo(({ theme }) => {
+  if (theme.isCityTheme) return null;
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {STARS.map(s => (
+        <View key={s.key} style={[
+          styles.star,
+          {
+            top: s.top, left: s.left, width: s.size, height: s.size,
+            opacity: theme.isLight ? s.opacity * 0.3 : s.opacity,
+            backgroundColor: theme.isLight ? theme.purple : theme.accent + 'cc',
+          }
+        ]} />
+      ))}
+    </View>
+  );
+});
+
+const CITY_STARS_CACHE = {};
+function getCityStars(themeId, count) {
+  if (!CITY_STARS_CACHE[themeId]) {
+    CITY_STARS_CACHE[themeId] = [...Array(count)].map((_, i) => ({
+      key: i,
+      top:  `${(i * 43 + 7)  % 65}%`,
+      left: `${(i * 67 + 13) % 96}%`,
+      size: i % 5 === 0 ? 2.5 : i % 3 === 0 ? 1.8 : 1.2,
+      opacity: 0.25 + (i % 4) * 0.15,
+    }));
+  }
+  return CITY_STARS_CACHE[themeId];
+}
+
+const CityStarLayer = memo(({ theme }) => {
+  if (!theme.isCityTheme || !theme.starCount) return null;
+  const stars = getCityStars(theme.id, theme.starCount);
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {stars.map(s => (
+        <View key={s.key} style={[
+          styles.star,
+          { top: s.top, left: s.left, width: s.size, height: s.size,
+            opacity: s.opacity, backgroundColor: theme.accent + 'dd' }
+        ]} />
+      ))}
+    </View>
+  );
+});
+
+function HeartsWidget({ hearts, countdown, onPress, theme }) {
+  const pulseHeart = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-    Animated.stagger(60, cardAnims.map(a =>
-      Animated.spring(a, { toValue: 0, friction: 8, useNativeDriver: true })
-    )).start();
-  }, []);
+    if (hearts === 0) {
+      const loop = Animated.loop(Animated.sequence([
+        Animated.timing(pulseHeart, { toValue: 1.2, duration: 500, useNativeDriver: true }),
+        Animated.timing(pulseHeart, { toValue: 1,   duration: 500, useNativeDriver: true }),
+      ]));
+      loop.start();
+      return () => loop.stop();
+    } else {
+      pulseHeart.setValue(1);
+    }
+  }, [hearts]);
+
+  const heartColor = hearts > 0 ? '#ef4444' : '#6b7280';
+  const bgColor    = hearts > 0 ? '#ef444420' : theme.bgElevated;
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.heartsBtn, { backgroundColor: bgColor, borderColor: heartColor + '55' }]}
+      hitSlop={HIT_SLOP}
+      activeOpacity={0.75}
+    >
+      <Animated.Text style={[styles.heartIcon, { transform: [{ scale: pulseHeart }] }]}>
+        {hearts > 0 ? '❤️' : '🖤'}
+      </Animated.Text>
+      <Text style={[styles.heartsCount, { color: heartColor }]}>{hearts}</Text>
+      {countdown && hearts === 0 && (
+        <Text style={[styles.heartsCountdown, { color: '#9ca3af' }]}>{countdown}</Text>
+      )}
+    </TouchableOpacity>
+  );
+}
 
-      {/* هيدر */}
+// ── بادج المستوى الصغير في الـ userBar ──
+function LevelBadge({ user, theme, onPress }) {
+  const level = user?.level || 1;
+  const isGuest = !!user?.isGuest;
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      hitSlop={HIT_SLOP}
+      activeOpacity={0.75}
+      style={[styles.profileBtn, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}
+    >
+      <Text style={[styles.profileIcon, { color: theme.accent }]}>
+        {isGuest ? '👤' : '⚡'}
+      </Text>
+      {!isGuest && (
+        <Text style={[styles.profileLevel, { color: theme.accent }]}>{level}</Text>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+export default function HomeScreen({
+  user, tokens, setTokens, setScreen,
+  showTokenModal, setShowTokenModal,
+  highScore,
+  hearts, setHearts,
+  onOpenHeartsModal,
+}) {
+  const { t }     = useLanguage();
+  const { theme } = useTheme();
+
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slide1    = useRef(new Animated.Value(60)).current;
+  const slide2    = useRef(new Animated.Value(60)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseLoop = useRef(null);
+
+  const [dailyVisible, setDailyVisible] = useState(false);
+  const [dailyStreak,  setDailyStreak]  = useState(1);
+  const [dailyReward,  setDailyReward]  = useState(15);
+  const [countdown,    setCountdown]    = useState(null);
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 450, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.spring(slide1, { toValue: 0, friction: 7, tension: 60, useNativeDriver: true }),
+        Animated.spring(slide2, { toValue: 0, friction: 7, tension: 60, delay: 100, useNativeDriver: true }),
+      ]),
+    ]).start();
+
+    pulseLoop.current = Animated.loop(Animated.sequence([
+      Animated.timing(pulseAnim, { toValue: 1.06, duration: 1800, useNativeDriver: true }),
+      Animated.timing(pulseAnim, { toValue: 1,    duration: 1800, useNativeDriver: true }),
+    ]));
+    pulseLoop.current.start();
+
+    // المكافأة اليومية
+    const timer = setTimeout(async () => {
+      const r = await checkDailyReward();
+      if (r.shouldShow && !r.alreadyClaimed) {
+        setDailyStreak(r.streak);
+        setDailyReward(r.reward);
+        setDailyVisible(true);
+      }
+    }, 1000);
+
+    getRefillCountdown().then(setCountdown);
+    const cdInterval = setInterval(() => {
+      getRefillCountdown().then(setCountdown);
+    }, 60000);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(cdInterval);
+      pulseLoop.current?.stop();
+    };
+  }, []);
+
+  const handleClaimDaily = useCallback(async () => {
+    await claimDailyReward(dailyStreak);
+    setTokens(tk => tk + dailyReward);
+    setDailyVisible(false);
+  }, [dailyStreak, dailyReward]);
+
+  const openTokenModal  = useCallback(() => setShowTokenModal(true),  []);
+  const closeTokenModal = useCallback(() => setShowTokenModal(false), []);
+  const addTokens       = useCallback((a) => setTokens(tk => tk + a), []);
+  const openProfile     = useCallback(() => setScreen('profile'), []);
+
+  const isCityTheme = !!theme.isCityTheme;
+  const isGuest     = !!user?.isGuest;
+  const userName    = isGuest
+    ? (t('home.guestUser') || '👤 ضيف')
+    : `👤 ${user?.name || ''}`;
+
+  // ── محتوى الشاشة ──
+  const screenContent = (
+    <>
+      <StatusBar barStyle={theme.statusBar} backgroundColor="transparent" translucent />
+      <StarLayer theme={theme} />
+      <CityStarLayer theme={theme} />
+
+      {/* ─── العنوان ─── */}
       <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-        <TouchableOpacity onPress={() => setScreen('home')} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerEmoji}>🎲</Text>
-          <Text style={styles.headerTitle}>ميدان الألعاب</Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </Animated.View>
-
-      {/* شريط الأصدقاء السريع */}
-      <Animated.View style={[styles.friendsQuick, { opacity: fadeAnim }]}>
-        <TouchableOpacity style={styles.friendsQuickBtn} onPress={() => setScreen('friends')}>
-          <Text style={styles.friendsQuickText}>👥  العب مع أصدقائك</Text>
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* الألعاب */}
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {GAMES.map((game, i) => (
-          <Animated.View
-            key={game.id}
-            style={{ transform: [{ translateY: cardAnims[i] }], opacity: fadeAnim }}
-          >
-            <TouchableOpacity
-              style={[styles.gameCard, { borderColor: game.border, backgroundColor: '#0f0f2e' }]}
-              onPress={() => {
-                if (game.ready) setScreen(game.id);
-              }}
-              activeOpacity={game.ready ? 0.8 : 0.95}
-            >
-              {/* أيقونة */}
-              <View style={[styles.gameIconWrap, { backgroundColor: game.bg, borderColor: game.border }]}>
-                <Text style={styles.gameEmoji}>{game.emoji}</Text>
-              </View>
-
-              {/* معلومات */}
-              <View style={styles.gameInfo}>
-                <View style={styles.gameTitleRow}>
-                  <Text style={[styles.gameTitle, { color: game.color }]}>{game.title}</Text>
-                  {!game.ready && (
-                    <View style={styles.soonBadge}>
-                      <Text style={styles.soonText}>قريباً</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.gameDesc}>{game.desc}</Text>
-                <Text style={styles.gamePlayers}>👤 {game.players}</Text>
-              </View>
-
-              {/* سهم */}
-              {game.ready && (
-                <Text style={[styles.arrow, { color: game.color }]}>←</Text>
-              )}
-            </TouchableOpacity>
-          </Animated.View>
-        ))}
-
-        {/* بطاقة "ألعاب قادمة" */}
-        <Animated.View style={{ opacity: fadeAnim }}>
-          <View style={styles.comingSoonCard}>
-            <Text style={styles.comingSoonEmoji}>✨</Text>
-            <Text style={styles.comingSoonText}>المزيد قادم قريباً...</Text>
-          </View>
+        <Animated.View style={[styles.titleRow, { transform: [{ scale: pulseAnim }] }]}>
+          {/* A R E N A — تلوين الحروف حسب الثيم */}
+          {(() => {
+            // Mist: logoVowel للحروف المتحركة (A,E,A) — logoCons للصوامت (R,N)
+            // Crystal: crystalLight للأوسط (R,E,N) — crystalColor للخارج (A,A)
+            // Standard: accent لكل الحروف
+            const letters = ['A','r','e','n','a'];
+            return letters.map((l, i) => {
+              let color = theme.accent;
+              if (theme.isMist) {
+                // vowels: A(0), e(2), a(4) — consonants: r(1), n(3)
+                color = [0,2,4].includes(i) ? theme.logoVowel : theme.logoCons;
+              } else if (theme.isCrystal) {
+                // outer: A(0), a(4) — middle: r(1), e(2), n(3)
+                color = [0,4].includes(i) ? theme.crystalColor : theme.crystalLight;
+              }
+              return (
+                <Text key={i} style={[styles.titleLetter, {
+                  color,
+                  textShadowColor: color + '44',
+                }]}>{l}</Text>
+              );
+            });
+          })()}
         </Animated.View>
-      </ScrollView>
+        <Text style={[styles.subtitle, { color: theme.textMuted }]}>
+          {t('home.subtitle')}
+        </Text>
+      </Animated.View>
+
+      {/* ─── شريط المستخدم ─── */}
+      <Animated.View style={[
+        styles.userBar,
+        { opacity: fadeAnim,
+          backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
+          borderColor: theme.accentBorder },
+      ]}>
+        {/* ⚙️ الإعدادات */}
+        <TouchableOpacity onPress={() => setScreen('settings')} style={styles.settingsBtn} hitSlop={HIT_SLOP}>
+          <Text style={styles.settingsIcon}>⚙️</Text>
+        </TouchableOpacity>
+
+        {/* 💰 العملات */}
+        <View style={styles.currencyRow}>
+          <HeartsWidget hearts={hearts ?? 0} countdown={countdown} onPress={onOpenHeartsModal} theme={theme} />
+          <TouchableOpacity
+            onPress={openTokenModal}
+            style={[styles.tokenBtn, {
+              backgroundColor: isCityTheme ? theme.accent + '14' : theme.bgInput,
+              borderColor: theme.accentBorder,
+            }]}
+            hitSlop={HIT_SLOP}
+          >
+            <Text style={[styles.tokenText, { color: theme.accent }]}>🪙 {tokens}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 👤 اسم المستخدم + بادج المستوى — قابل للنقر */}
+        <TouchableOpacity
+          style={styles.userInfoBtn}
+          onPress={openProfile}
+          hitSlop={HIT_SLOP}
+          activeOpacity={0.7}
+        >
+          <LevelBadge user={user} theme={theme} onPress={openProfile} />
+          <Text style={[styles.userText, { color: theme.accent }]} numberOfLines={1}>
+            {userName}
+          </Text>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* ─── أعلى نتيجة ─── */}
+      {highScore > 0 && (
+        <Animated.View style={[
+          styles.highScoreBar,
+          { opacity: fadeAnim,
+            backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
+            borderColor: theme.accentBorder },
+        ]}>
+          <Text style={[styles.highScoreText, { color: theme.accent }]}>
+            {t('home.highScore', { n: highScore })}
+          </Text>
+        </Animated.View>
+      )}
+
+      {/* ─── بطاقتا الميدانين ─── */}
+      <View style={styles.arenaRow}>
+        <Animated.View style={{ transform: [{ translateY: slide1 }], opacity: fadeAnim, flex: 1 }}>
+          <TouchableOpacity
+            style={[styles.arenaCard, {
+              backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
+              borderColor: theme.accentBorder,
+              shadowColor: theme.accent,
+            }]}
+            onPress={() => setScreen('knowledge')}
+            activeOpacity={0.82}
+          >
+            <View style={[styles.arenaIconWrap, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
+              <Text style={styles.arenaEmoji}>🧠</Text>
+            </View>
+            <Text style={[styles.arenaTitle, { color: theme.accent }]}>{t('home.knowledgeTitle')}</Text>
+            <Text style={[styles.arenaDesc,  { color: theme.textMuted }]}>{t('home.knowledgeDesc')}</Text>
+            <View style={[styles.arenaBadge, { backgroundColor: theme.accentSoft }]}>
+              <Text style={[styles.arenaBadgeText, { color: theme.accent }]}>{t('home.knowledgeBadge')}</Text>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+
+        <Animated.View style={{ transform: [{ translateY: slide2 }], opacity: fadeAnim, flex: 1 }}>
+          <TouchableOpacity
+            style={[styles.arenaCard, {
+              backgroundColor: isCityTheme ? theme.purple + '0c' : theme.bgCard,
+              borderColor: theme.purpleBorder,
+              shadowColor: theme.purple,
+            }]}
+            onPress={() => setScreen('games')}
+            activeOpacity={0.82}
+          >
+            <View style={[styles.arenaIconWrap, { backgroundColor: theme.purpleSoft, borderColor: theme.purpleBorder }]}>
+              <Text style={styles.arenaEmoji}>🎲</Text>
+            </View>
+            <Text style={[styles.arenaTitle, { color: theme.purple }]}>{t('home.gamesTitle')}</Text>
+            <Text style={[styles.arenaDesc,  { color: theme.textMuted }]}>{t('home.gamesDesc')}</Text>
+            <View style={[styles.arenaBadge, { backgroundColor: theme.purpleSoft }]}>
+              <Text style={[styles.arenaBadgeText, { color: theme.purple }]}>{t('home.gamesBadge')}</Text>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+
+      {/* ─── زر الأصدقاء ─── */}
+      <Animated.View style={[styles.friendsWrap, { opacity: fadeAnim }]}>
+        <TouchableOpacity
+          style={[styles.friendsBtn, {
+            backgroundColor: isCityTheme ? theme.purple + '0c' : theme.bgCard,
+            borderColor: theme.purple + '55',
+          }]}
+          onPress={() => setScreen('friends')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.friendsBtnText, { color: theme.purple }]}>
+            {t('home.friendsBtn')}
+          </Text>
+        </TouchableOpacity>
+      </Animated.View>
+
+      <TokenModal visible={showTokenModal} onClose={closeTokenModal} tokens={tokens} onAddTokens={addTokens} />
+      <DailyRewardModal visible={dailyVisible} streak={dailyStreak} reward={dailyReward} onClaim={handleClaimDaily} />
+    </>
+  );
+
+  // ── ثيم مدينة ──
+  if (isCityTheme) {
+    return (
+      <LinearGradient
+        colors={theme.skyGradient}
+        style={styles.container}
+        start={{ x: 0.5, y: 1 }}
+        end={{ x: 0.5, y: 0 }}
+      >
+        {screenContent}
+        <View style={styles.skylineWrap} pointerEvents="none">
+          <ImageBackground
+            source={theme.skylineAsset}
+            style={styles.skylineImg}
+            resizeMode="cover"
+            imageStyle={{ objectPosition: 'bottom' }}
+          />
+          <LinearGradient
+            colors={[theme.skyBottom, theme.skyBottom + '00']}
+            style={styles.skylineFade}
+            start={{ x: 0, y: 1 }}
+            end={{ x: 0, y: 0 }}
+          />
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  // ── ثيم عادي ──
+  return (
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      {screenContent}
     </View>
   );
 }
 
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#06061a',
-    paddingTop: 56,
-  },
-
-  // هيدر
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 14,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#0f0f2e',
-    borderWidth: 1,
-    borderColor: '#a78bfa30',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backText: { color: '#a78bfa', fontSize: 20, fontWeight: '700' },
-  headerCenter: { alignItems: 'center', gap: 4 },
-  headerEmoji: { fontSize: 26 },
-  headerTitle: { color: '#a78bfa', fontSize: 20, fontWeight: '900' },
-
-  // أصدقاء سريع
-  friendsQuick: { paddingHorizontal: 20, marginBottom: 16 },
-  friendsQuickBtn: {
-    backgroundColor: '#0f0f2e',
-    borderWidth: 1.5,
-    borderColor: '#3b82f640',
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  friendsQuickText: { color: '#60a5fa', fontSize: 15, fontWeight: '700' },
-
-  // ألعاب
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 40, gap: 12 },
-  gameCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    padding: 14,
-    gap: 12,
-  },
-  gameIconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  gameEmoji: { fontSize: 26 },
-  gameInfo: { flex: 1, gap: 3 },
-  gameTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  gameTitle: { fontSize: 16, fontWeight: '800' },
-  soonBadge: {
-    backgroundColor: '#a78bfa22',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  soonText: { color: '#a78bfa', fontSize: 10, fontWeight: '700' },
-  gameDesc: { color: '#5a5a80', fontSize: 12 },
-  gamePlayers: { color: '#3a3a60', fontSize: 11, marginTop: 1 },
-  arrow: { fontSize: 22, fontWeight: '700', marginRight: 4 },
-
-  // قادم
-  comingSoonCard: {
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#ffffff10',
-    borderStyle: 'dashed',
-    padding: 20,
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  comingSoonEmoji: { fontSize: 24 },
-  comingSoonText: { color: '#3a3a60', fontSize: 14, fontWeight: '600' },
+  container:       { flex: 1, alignItems: 'center', justifyContent: 'space-between', paddingVertical: 52, paddingHorizontal: 20 },
+  star:            { position: 'absolute', borderRadius: 99 },
+  // City Skyline
+  skylineWrap:     { position: 'absolute', bottom: 0, left: 0, right: 0, height: 190, zIndex: 5 },
+  skylineImg:      { width: '100%', height: '100%' },
+  skylineFade:     { position: 'absolute', bottom: 0, left: 0, right: 0, height: 65 },
+  header:          { alignItems: 'center', marginTop: 10 },
+  titleRow:        { flexDirection: 'row', alignItems: 'baseline' },
+  titleLetter:     { fontSize: 68, fontWeight: '900', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 24, letterSpacing: 2 },
+  subtitle:        { fontSize: 16, marginTop: 6, letterSpacing: 1 },
+  // userBar
+  userBar:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 16, borderWidth: 1 },
+  settingsBtn:     { padding: 4 },
+  settingsIcon:    { fontSize: 20 },
+  currencyRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // القلوب
+  heartsBtn:       { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  heartIcon:       { fontSize: 13 },
+  heartsCount:     { fontSize: 14, fontWeight: '800' },
+  heartsCountdown: { fontSize: 10, marginLeft: 2 },
+  // التوكنز
+  tokenBtn:        { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  tokenText:       { fontSize: 14, fontWeight: '700' },
+  // زر المستخدم/الملف الشخصي
+  userInfoBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  profileBtn:      { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 7, paddingVertical: 5, borderRadius: 14, borderWidth: 1 },
+  profileIcon:     { fontSize: 13 },
+  profileLevel:    { fontSize: 11, fontWeight: '900' },
+  userText:        { fontSize: 12, fontWeight: '600', maxWidth: 72 },
+  // باقي العناصر
+  highScoreBar:    { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14, borderWidth: 1, width: '100%', alignItems: 'center' },
+  highScoreText:   { fontSize: 14, fontWeight: '700' },
+  arenaRow:        { flexDirection: 'row', gap: 14, width: '100%' },
+  arenaCard:       { borderRadius: 24, borderWidth: 1.5, padding: 20, alignItems: 'center', gap: 10, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.14, shadowRadius: 12, elevation: 6 },
+  arenaIconWrap:   { width: 72, height: 72, borderRadius: 20, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  arenaEmoji:      { fontSize: 36 },
+  arenaTitle:      { fontSize: 18, fontWeight: '900', textAlign: 'center', lineHeight: 26 },
+  arenaDesc:       { fontSize: 11, textAlign: 'center', lineHeight: 17 },
+  arenaBadge:      { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, marginTop: 2 },
+  arenaBadgeText:  { fontSize: 11, fontWeight: '700' },
+  friendsWrap:     { width: '100%' },
+  friendsBtn:      { borderWidth: 1.5, borderRadius: 16, paddingVertical: 14, alignItems: 'center', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 4 },
+  friendsBtnText:  { fontSize: 17, fontWeight: '800' },
 });

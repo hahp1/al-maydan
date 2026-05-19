@@ -52,7 +52,6 @@
     },
     "plugins": [
       "expo-apple-authentication",
-      "react-native-svg",
       [
         "expo-av",
         {

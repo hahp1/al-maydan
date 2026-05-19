@@ -1,22 +1,37 @@
 {
   "expo": {
-    "name": "الميدان",
+    "name": "Arena",
     "slug": "al-maydan",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "almaydan",
+    "scheme": "arena",
+    "userInterfaceStyle": "automatic",
+    "description": "Arena — The Challenge Arena. Compete with friends in trivia and multiplayer games.",
+    "primaryColor": "#f5c518",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#0d0d2b"
     },
     "assetBundlePatterns": [
-      "**/*"
+      "assets/sounds/*",
+      "assets/images/*",
+      "assets/*.png",
+      "assets/*.jpg"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.almaydan.app"
+      "bundleIdentifier": "com.almaydan.app",
+      "buildNumber": "1",
+      "usesAppleSignIn": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "CFBundleLocalizations": ["en", "ar"],
+        "CFBundleDevelopmentRegion": "en"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,16 +40,40 @@
       },
       "package": "com.almaydan.app",
       "versionCode": 3,
-      "permissions": [],
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ],
       "googleServicesFile": "./google-services.json"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
     },
+    "plugins": [
+      "expo-auth-session",
+      "expo-apple-authentication",
+      "react-native-svg",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow Arena to access your microphone for voice features."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Arena to access your photos to set a profile picture.",
+          "cameraPermission": "Allow Arena to access your camera."
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "b7485332-a4e4-43fc-ba40-631a8ff884b4"
       }
-    }
+    },
+    "owner": "haho1"
   }
 }
+ 

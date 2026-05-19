@@ -1,256 +1,225 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, StatusBar, ScrollView, useWindowDimensions } from 'react-native';
+import { useState, useCallback, memo, useMemo } from 'react';
+import {
+  StyleSheet, Text, View, TouchableOpacity,
+  TextInput, StatusBar, ScrollView, useWindowDimensions,
+} from 'react-native';
+import { useTheme } from './ThemeContext';
+import { useT, useRTLStyles } from './I18n';
+import CachedCategoryImage from './CachedCategoryImage';
 
-export default function GameSetupScreen({ onStart, onBack, tokens, categories = [], onOpenTokenModal }) {
-  const [team1, setTeam1] = useState('');
-  const [team2, setTeam2] = useState('');
+const CategoryCard = memo(({ cat, isSelected, isFull, itemSize, onPress, theme }) => (
+  <TouchableOpacity
+    style={[
+      styles.catCard,
+      { width: itemSize, height: itemSize, backgroundColor: theme.bgCard, borderColor: theme.borderCard },
+      isSelected && { backgroundColor: theme.accentSoft, borderColor: theme.accent },
+      isFull     && styles.catCardDisabled,
+    ]}
+    onPress={onPress}
+    disabled={isFull && !isSelected}
+    activeOpacity={0.8}
+  >
+    <CachedCategoryImage
+      imageUrl={cat.imageUrl}
+      emoji={cat.emoji}
+      size={itemSize * 0.44}
+    />
+    <Text style={[styles.catName, { color: isSelected ? theme.accent : theme.textPrimary }]}>{cat.name}</Text>
+    {isSelected && (
+      <View style={[styles.checkBadge, { backgroundColor: theme.accent }]}>
+        <Text style={[styles.checkText, { color: theme.textOnAccent }]}>✓</Text>
+      </View>
+    )}
+  </TouchableOpacity>
+));
+
+const CountButton = memo(({ num, active, onPress, theme }) => (
+  <TouchableOpacity
+    style={[
+      styles.catBtn,
+      { backgroundColor: theme.bgCard, borderColor: theme.borderCard },
+      active && { backgroundColor: theme.accent, borderColor: theme.accent },
+    ]}
+    onPress={onPress}
+    activeOpacity={0.8}
+  >
+    <Text style={[styles.catBtnNum, { color: active ? theme.textOnAccent : theme.accent }]}>{num}</Text>
+  </TouchableOpacity>
+));
+
+// tokens: للعرض فقط — وسائل المساعدة تستهلكها أثناء اللعبة
+// onOpenTokenModal: يفتح TokenModal لشحن التوكنز
+export default function GameSetupScreen({ onStart, onBack, tokens = 0, categories = [], onOpenTokenModal }) {
+  const { theme } = useTheme();
+  const t  = useT();
+  const rs = useRTLStyles();
+
+  const [team1,    setTeam1]    = useState('');
+  const [team2,    setTeam2]    = useState('');
   const [catCount, setCatCount] = useState(4);
   const [selected, setSelected] = useState([]);
 
   const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
+  const isTablet   = width >= 768;
   const numColumns = isTablet ? 4 : 3;
-  const itemSize = (width - 48 - (numColumns - 1) * 12) / numColumns * 0.65;
+  const itemSize   = useMemo(() =>
+    (width - 48 - (numColumns - 1) * 12) / numColumns * 0.65,
+  [width, numColumns]);
 
-  const costs = { 4: 20, 5: 25, 6: 30 };
-  const cost = costs[catCount];
-  const canStart = team1.trim() && team2.trim() && tokens >= cost && selected.length === catCount;
+  const canStart = team1.trim() && team2.trim() && selected.length === catCount;
 
-  const toggleCategory = (id) => {
-    if (selected.includes(id)) {
-      setSelected(selected.filter((s) => s !== id));
-    } else {
-      if (selected.length < catCount) {
-        setSelected([...selected, id]);
-      }
-    }
-  };
+  const toggleCategory = useCallback((id) => {
+    setSelected(prev => {
+      if (prev.includes(id)) return prev.filter(s => s !== id);
+      if (prev.length < catCount) return [...prev, id];
+      return prev;
+    });
+  }, [catCount]);
+
+  const handleSetCount = useCallback((num) => { setCatCount(num); setSelected([]); }, []);
+  const handleStart    = useCallback(() => {
+    if (canStart) onStart({ team1, team2, categories: catCount, selected });
+  }, [canStart, team1, team2, catCount, selected]);
+
+  const startBtnLabel = useMemo(() => {
+    if (selected.length < catCount) return t('setup.notEnoughCats', { n: catCount - selected.length });
+    return t('setup.startBtn');
+  }, [selected.length, catCount, t]);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
+    <ScrollView
+      contentContainerStyle={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}
+      keyboardShouldPersistTaps="handled"
+    >
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
+      {/* ── الهيدر ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>→ رجوع</Text>
+        <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={HIT_SLOP}>
+          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>إنشاء لعبة</Text>
-        <TouchableOpacity style={styles.tokenBadge} onPress={onOpenTokenModal}>
-          <Text style={styles.tokenText}>🪙 {tokens}</Text>
+        <Text style={[styles.title, { color: theme.accent }]}>{t('setup.title')}</Text>
+        {/* رصيد التوكنز — قابل للنقر لفتح شاشة الشحن */}
+        <TouchableOpacity
+          style={[styles.tokenBadge, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
+          onPress={onOpenTokenModal}
+          hitSlop={HIT_SLOP}
+        >
+          <Text style={[styles.tokenText, { color: theme.accent }]}>🪙 {tokens}</Text>
         </TouchableOpacity>
       </View>
 
+      {/* ── الفرق ── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🏆 أسماء الفرق</Text>
+        <Text style={[styles.sectionTitle, { color: theme.accent }]}>{t('setup.teamsSection')}</Text>
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>الفريق الأول</Text>
+          <Text style={[styles.label, { color: theme.textSecondary }]}>{t('setup.team1')}</Text>
           <TextInput
-            style={styles.input}
-            placeholder="اسم الفريق الأول"
-            placeholderTextColor="#555577"
+            style={[styles.input, { backgroundColor: theme.bgCard, borderColor: theme.borderCard, color: theme.textPrimary }, rs.textInput]}
+            placeholder={t('setup.team1ph')}
+            placeholderTextColor={theme.textMuted}
             value={team1}
             onChangeText={setTeam1}
-            textAlign="right"
+            returnKeyType="next"
           />
         </View>
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>الفريق الثاني</Text>
+          <Text style={[styles.label, { color: theme.textSecondary }]}>{t('setup.team2')}</Text>
           <TextInput
-            style={styles.input}
-            placeholder="اسم الفريق الثاني"
-            placeholderTextColor="#555577"
+            style={[styles.input, { backgroundColor: theme.bgCard, borderColor: theme.borderCard, color: theme.textPrimary }, rs.textInput]}
+            placeholder={t('setup.team2ph')}
+            placeholderTextColor={theme.textMuted}
             value={team2}
             onChangeText={setTeam2}
-            textAlign="right"
+            returnKeyType="done"
           />
         </View>
       </View>
 
+      {/* ── عدد الفئات ── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📚 عدد الفئات</Text>
+        <Text style={[styles.sectionTitle, { color: theme.accent }]}>{t('setup.catsSection')}</Text>
         <View style={styles.categoriesRow}>
-          {[4, 5, 6].map((num) => (
-            <TouchableOpacity
-              key={num}
-              style={[styles.catBtn, catCount === num && styles.catBtnActive]}
-              onPress={() => { setCatCount(num); setSelected([]); }}
-            >
-              <Text style={[styles.catBtnNum, catCount === num && styles.catBtnNumActive]}>
-                {num}
-              </Text>
-              <Text style={[styles.catBtnCost, catCount === num && styles.catBtnCostActive]}>
-                🪙 {costs[num]}
-              </Text>
-            </TouchableOpacity>
+          {[4, 5, 6].map(num => (
+            <CountButton key={num} num={num} active={catCount === num} onPress={() => handleSetCount(num)} theme={theme} />
           ))}
         </View>
       </View>
 
+      {/* ── اختيار الفئات ── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          🎯 اختر الفئات ({selected.length}/{catCount})
+        <Text style={[styles.sectionTitle, { color: theme.accent }]}>
+          {t('setup.chooseCats', { s: selected.length, c: catCount })}
         </Text>
         {categories.length === 0 ? (
-          <Text style={styles.emptyText}>لا توجد فئات — أضف فئات من لوحة الإدارة أولاً</Text>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>{t('setup.noCats')}</Text>
         ) : (
           <View style={styles.grid}>
-            {categories.map((cat) => {
+            {categories.map(cat => {
               const isSelected = selected.includes(cat.id);
-              const isFull = selected.length >= catCount && !isSelected;
+              const isFull     = selected.length >= catCount && !isSelected;
               return (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.catCard,
-                    { width: itemSize, height: itemSize },
-                    isSelected && styles.catCardSelected,
-                    isFull && styles.catCardDisabled,
-                  ]}
-                  onPress={() => !isFull && toggleCategory(cat.id)}
-                >
-                  <Text style={styles.catEmoji}>{cat.emoji}</Text>
-                  <Text style={[styles.catName, isSelected && styles.catNameSelected]}>
-                    {cat.name}
-                  </Text>
-                  {isSelected && (
-                    <View style={styles.checkBadge}>
-                      <Text style={styles.checkText}>✓</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+                <CategoryCard
+                  key={cat.id} cat={cat} isSelected={isSelected} isFull={isFull}
+                  itemSize={itemSize} onPress={() => toggleCategory(cat.id)} theme={theme}
+                />
               );
             })}
           </View>
         )}
       </View>
 
+      {/* ── زر البدء ── */}
       <TouchableOpacity
-        style={[styles.startBtn, !canStart && styles.startBtnDisabled]}
-        onPress={() => canStart && onStart({ team1, team2, categories: catCount, selected })}
+        style={[
+          styles.startBtn,
+          { backgroundColor: canStart ? theme.accent : theme.bgCard },
+          !canStart && { borderWidth: 1, borderColor: theme.borderCard },
+        ]}
+        onPress={handleStart}
+        activeOpacity={canStart ? 0.85 : 1}
       >
-        <Text style={[styles.startBtnText, !canStart && styles.startBtnTextDisabled]}>
-          {tokens < cost ? '❌ رصيد غير كافٍ' :
-           selected.length < catCount ? `اختر ${catCount - selected.length} فئات أخرى` :
-           '🎮 ابدأ اللعبة'}
+        <Text style={[styles.startBtnText, { color: canStart ? theme.textOnAccent : theme.textMuted }]}>
+          {startBtnLabel}
         </Text>
       </TouchableOpacity>
 
-      {tokens < cost && (
-        <TouchableOpacity style={styles.getTokensBtn} onPress={onOpenTokenModal}>
-          <Text style={styles.getTokensText}>احصل على المزيد من النقاط 🪙</Text>
-        </TouchableOpacity>
-      )}
+      {/* ── تلميح وسائل المساعدة ── */}
+      <Text style={[styles.lifelineHint, { color: theme.textMuted }]}>
+        🛡️ وسائل المساعدة تستهلك 🪙 توكنز أثناء اللعبة
+      </Text>
 
     </ScrollView>
   );
 }
 
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: '#0d0d2b',
-    paddingHorizontal: 24,
-    paddingVertical: 50,
-    gap: 32,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backBtn: { padding: 8 },
-  backText: { color: '#f5c518', fontSize: 16, fontWeight: '700' },
-  title: { fontSize: 22, fontWeight: '900', color: '#f5c518' },
-  tokenBadge: {
-    backgroundColor: '#1a1a3e',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#f5c51855',
-  },
-  tokenText: { color: '#f5c518', fontSize: 15, fontWeight: '700' },
-  section: { gap: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#f5c518' },
-  inputGroup: { gap: 8 },
-  label: { color: '#a09060', fontSize: 14, fontWeight: '600' },
-  input: {
-    backgroundColor: '#1a1a3e',
-    borderWidth: 1.5,
-    borderColor: '#2a2a55',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    color: '#ffffff',
-    fontSize: 16,
-  },
-  categoriesRow: {
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'center',
-  },
-  catBtn: {
-    flex: 1,
-    backgroundColor: '#1a1a3e',
-    borderWidth: 1.5,
-    borderColor: '#2a2a55',
-    borderRadius: 16,
-    paddingVertical: 20,
-    alignItems: 'center',
-    gap: 8,
-  },
-  catBtnActive: { backgroundColor: '#f5c518', borderColor: '#f5c518' },
-  catBtnNum: { fontSize: 28, fontWeight: '900', color: '#f5c518' },
-  catBtnNumActive: { color: '#0d0d2b' },
-  catBtnCost: { fontSize: 13, color: '#a09060', fontWeight: '600' },
-  catBtnCostActive: { color: '#0d0d2b' },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'center',
-  },
-  catCard: {
-    backgroundColor: '#1a1a3e',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#2a2a55',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    position: 'relative',
-  },
-  catCardSelected: {
-    backgroundColor: '#1a2a1a',
-    borderColor: '#f5c518',
-  },
+  container:       { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 50, gap: 32 },
+  header:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  backBtn:         { padding: 8 },
+  backText:        { fontSize: 16, fontWeight: '700' },
+  title:           { fontSize: 22, fontWeight: '900' },
+  tokenBadge:      { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  tokenText:       { fontSize: 15, fontWeight: '700' },
+  section:         { gap: 16 },
+  sectionTitle:    { fontSize: 18, fontWeight: '800' },
+  inputGroup:      { gap: 8 },
+  label:           { fontSize: 14, fontWeight: '600' },
+  input:           { borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16 },
+  categoriesRow:   { flexDirection: 'row', gap: 12, justifyContent: 'center' },
+  catBtn:          { flex: 1, borderWidth: 1.5, borderRadius: 16, paddingVertical: 20, alignItems: 'center', gap: 8 },
+  catBtnNum:       { fontSize: 28, fontWeight: '900' },
+  grid:            { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
+  catCard:         { borderRadius: 16, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', gap: 8, position: 'relative' },
   catCardDisabled: { opacity: 0.4 },
-  catEmoji: { fontSize: 36 },
-  catName: { fontSize: 13, fontWeight: '700', color: '#ffffff', textAlign: 'center' },
-  catNameSelected: { color: '#f5c518' },
-  checkBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: '#f5c518',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkText: { color: '#0d0d2b', fontSize: 13, fontWeight: '900' },
-  startBtn: {
-    backgroundColor: '#f5c518',
-    paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: 'center',
-    elevation: 8,
-  },
-  startBtnDisabled: { backgroundColor: '#2a2a45' },
-  startBtnText: { color: '#0d0d2b', fontSize: 20, fontWeight: '800' },
-  startBtnTextDisabled: { color: '#555577' },
-  getTokensBtn: { alignItems: 'center', paddingVertical: 12 },
-  getTokensText: { color: '#a09060', fontSize: 14, textDecorationLine: 'underline' },
-  emptyText: { color: '#a09060', textAlign: 'center', fontSize: 15, paddingVertical: 20 },
+  catEmoji:        { fontSize: 36 },
+  catName:         { fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  checkBadge:      { position: 'absolute', top: 8, left: 8, width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  checkText:       { fontSize: 13, fontWeight: '900' },
+  startBtn:        { paddingVertical: 18, borderRadius: 16, alignItems: 'center', elevation: 8 },
+  startBtnText:    { fontSize: 20, fontWeight: '800' },
+  lifelineHint:    { fontSize: 12, textAlign: 'center', paddingBottom: 8 },
+  emptyText:       { textAlign: 'center', fontSize: 15, paddingVertical: 20 },
 });

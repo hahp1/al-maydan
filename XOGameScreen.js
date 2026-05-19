@@ -1,1130 +1,558 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  StatusBar, Animated, Alert, ActivityIndicator,
-  Modal, TextInput, KeyboardAvoidingView, Platform,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
+  StatusBar, Alert, Image
 } from 'react-native';
-import { db, auth } from './firebaseConfig';
-import LeaveModal from './LeaveModal';
-import {
-  doc, setDoc, getDocs, onSnapshot,
-  updateDoc, query, where, deleteDoc,
-  collection, serverTimestamp,
-} from 'firebase/firestore';
+import { useOnlineGame } from './useOnlineGame';
+import { useTheme } from './ThemeContext';
+import { useLanguage } from './I18n';
+import { XOEngraving } from './GameEngraving';
+import { WebScreenButton, GameInfoButton } from './WebRoomService';
 
-// ══════════════════════════════════════════
-// ثوابت
-// ══════════════════════════════════════════
-const TOTAL_ROUNDS = 7;
-
-const WINNING_LINES = [
+const LINES = [
   [0,1,2],[3,4,5],[6,7,8],
   [0,3,6],[1,4,7],[2,5,8],
   [0,4,8],[2,4,6],
 ];
 
-function checkWinner(board) {
-  for (const [a,b,c] of WINNING_LINES) {
-    if (board[a] && board[a] === board[b] && board[a] === board[c])
-      return { winner: board[a], line: [a,b,c] };
+// ── حساب الفائز ──────────────────────────────────────────────
+function calculateWinner(squares) {
+  for (const [a, b, c] of LINES) {
+    if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
+      return { winner: squares[a], line: [a, b, c] };
+    }
   }
-  if (board.every(Boolean)) return { winner: 'draw', line: [] };
   return null;
 }
 
-function emptyBoard() { return Array(9).fill(null); }
+// ── ذكاء البوت ───────────────────────────────────────────────
+function getBotMove(board, botSymbol) {
+  const playerSymbol = botSymbol === 'O' ? 'X' : 'O';
+  const empty = board.map((v, i) => v === null ? i : null).filter(i => i !== null);
+  if (empty.length === 0) return null;
 
-function getOrCreateUid() {
-  const fromAuth = auth.currentUser?.uid;
-  if (fromAuth) return fromAuth;
-  if (!global._guestUid)
-    global._guestUid = 'guest_' + Math.random().toString(36).slice(2,10) + '_' + Date.now();
-  return global._guestUid;
+  // 1) هل يستطيع البوت الفوز الآن؟
+  for (const idx of empty) {
+    const test = [...board];
+    test[idx] = botSymbol;
+    if (calculateWinner(test)) return idx;
+  }
+
+  // 2) هل الخصم سيفوز بخطوة واحدة؟ → امنعه
+  for (const idx of empty) {
+    const test = [...board];
+    test[idx] = playerSymbol;
+    if (calculateWinner(test)) return idx;
+  }
+
+  // 3) هل الخصم لديه خطوتان رابحتان؟ → امنع إحداهما
+  const threats = [];
+  for (const idx of empty) {
+    const test = [...board];
+    test[idx] = playerSymbol;
+    let wins = 0;
+    for (const idx2 of empty.filter(i => i !== idx)) {
+      const test2 = [...test];
+      test2[idx2] = playerSymbol;
+      if (calculateWinner(test2)) wins++;
+    }
+    if (wins >= 2) threats.push(idx);
+  }
+  if (threats.length > 0) return threats[Math.floor(Math.random() * threats.length)];
+
+  // 4) الوسط
+  if (board[4] === null) return 4;
+
+  // 5) أفضل موقع استراتيجي: ابحث عن أكثر مربع يُكمّل صفاً للبوت
+  let bestScore = -1;
+  let bestMove = null;
+  for (const idx of empty) {
+    let score = 0;
+    for (const [a, b, c] of LINES) {
+      if (![a, b, c].includes(idx)) continue;
+      const line = [board[a], board[b], board[c]];
+      if (line.includes(playerSymbol)) continue;
+      const mine = line.filter(v => v === botSymbol).length;
+      score += mine + 1;
+    }
+    if (score > bestScore) { bestScore = score; bestMove = idx; }
+  }
+  if (bestMove !== null) return bestMove;
+
+  // 6) عشوائي
+  return empty[Math.floor(Math.random() * empty.length)];
 }
 
-// ══════════════════════════════════════════
-// شاشة الاختيار (محلي / أونلاين)
-// ══════════════════════════════════════════
-function ModeSelect({ onLocal, onOnline, onBack }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+const TOTAL_ROUNDS = 7;
+
+// ── المكوّن الرئيسي ───────────────────────────────────────────
+export default function XOGameScreen({ onBack, currentUser, onGameEnd }) {
+  const { theme, themeId } = useTheme();
+  const { lang } = useLanguage();
+  const {
+    roomId,
+    isPlayer1,
+    roomData,
+    loading,
+    error,
+    updateRoom,
+    endGame,
+    leaveRoom,
+  } = useOnlineGame('xo', currentUser);
+
+  const [board, setBoard]             = useState(Array(9).fill(null));
+  const [gameStatus, setGameStatus]   = useState('waiting');
+  const [roundResult, setRoundResult] = useState(null); // { winner, line } | 'draw' — نتيجة الجولة الحالية
+  const [matchOver, setMatchOver]     = useState(false); // انتهت كل الجولات
+  const botPlayingRef = useRef(false);
+
+  // ── مزامنة Firebase ──────────────────────────────────────────
   useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start();
-  }, []);
+    if (!roomData) return;
+    if (roomData.board)      setBoard(roomData.board);
+    if (roomData.gameStatus) setGameStatus(roomData.gameStatus);
 
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
+    // نتيجة الجولة الحالية
+    if (roomData.gameStatus === 'round_over') {
+      if (roomData.roundWinner) setRoundResult({ winner: roomData.roundWinner, line: roomData.winLine || [] });
+      else                      setRoundResult('draw');
+    }
 
-      {/* هيدر */}
-      <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerEmoji}>✕○</Text>
-          <Text style={styles.headerTitle}>إكس أو</Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </Animated.View>
+    // نهاية المباراة كلها
+    if (roomData.gameStatus === 'finished') {
+      setMatchOver(true);
+      // تسجيل XP
+      const sc = roomData.scores || { player1: 0, player2: 0 };
+      const myFinalScore  = isPlayer1 ? sc.player1 : sc.player2;
+      const oppFinalScore = isPlayer1 ? sc.player2 : sc.player1;
+      if (onGameEnd) onGameEnd(myFinalScore > oppFinalScore);
+    }
 
-      {/* شرح اللعبة */}
-      <Animated.View style={[styles.infoBox, { opacity: fadeAnim }]}>
-        <Text style={styles.infoTitle}>📖 كيفية اللعب</Text>
-        <Text style={styles.infoText}>
-          {'• 7 جولات — من يفوز بأكثر يفوز\n• كل جولة على شبكة 3×3\n• أكمل صفاً أو عموداً أو قطراً\n• من يبدأ الجولة يلعب X، الثاني O\n• يتناوبان على البداية كل جولة'}
-        </Text>
-        <View style={styles.infoMeta}>
-          <Text style={styles.infoMetaText}>👤 2 لاعبين</Text>
-          <Text style={styles.infoMetaText}>🪙 5 رصيد</Text>
-          <Text style={styles.infoMetaText}>🔄 7 جولات</Text>
-        </View>
-      </Animated.View>
+    // إعادة تعيين لوحة الجولة الجديدة
+    if (roomData.gameStatus === 'player1_turn' || roomData.gameStatus === 'player2_turn') {
+      setRoundResult(null);
+      botPlayingRef.current = false;
+    }
+  }, [roomData]);
 
-      {/* أزرار الوضع */}
-      <Animated.View style={[styles.modeButtons, { opacity: fadeAnim }]}>
-        <TouchableOpacity style={styles.modeBtn} onPress={onLocal} activeOpacity={0.85}>
-          <Text style={styles.modeBtnEmoji}>📱</Text>
-          <Text style={styles.modeBtnTitle}>محلي</Text>
-          <Text style={styles.modeBtnDesc}>نفس الجهاز — تناوبا على اللمس</Text>
-        </TouchableOpacity>
+  // ── البوت يلعب ───────────────────────────────────────────────
+  useEffect(() => {
+    const isVsBot   = roomData?.player2?.uid === 'bot';
+    const isBotTurn = isPlayer1 && gameStatus === 'player2_turn' && isVsBot;
+    if (!isBotTurn || roundResult || matchOver || botPlayingRef.current) return;
 
-        <TouchableOpacity style={[styles.modeBtn, styles.modeBtnOnline]} onPress={onOnline} activeOpacity={0.85}>
-          <Text style={styles.modeBtnEmoji}>🌐</Text>
-          <Text style={[styles.modeBtnTitle, { color: '#34d399' }]}>أونلاين</Text>
-          <Text style={styles.modeBtnDesc}>عشوائي أو صديق</Text>
-        </TouchableOpacity>
-      </Animated.View>
-    </View>
-  );
-}
+    botPlayingRef.current = true;
+    const delay = 600 + Math.random() * 600;
+    const t = setTimeout(async () => {
+      const move = getBotMove(board, 'O');
+      if (move === null) { botPlayingRef.current = false; return; }
 
-// ══════════════════════════════════════════
-// إعداد اللعبة المحلية
-// ══════════════════════════════════════════
-function LocalSetup({ onStart, onBack }) {
-  const [name1, setName1] = useState('');
-  const [name2, setName2] = useState('');
-  const [xPlayer, setXPlayer] = useState(null); // 1 أو 2
+      const newBoard = [...board];
+      newBoard[move] = 'O';
+      const res = calculateWinner(newBoard);
 
-  const canStart = name1.trim() && name2.trim() && xPlayer;
+      const currentRound  = (roomData?.currentRound  || 1);
+      const scores        = roomData?.scores || { player1: 0, player2: 0 };
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerEmoji}>✕○</Text>
-          <Text style={styles.headerTitle}>إعداد اللعبة</Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <View style={styles.setupBody}>
-        {/* الأسماء */}
-        <Text style={styles.setupLabel}>اسم اللاعب الأول</Text>
-        <TextInput
-          style={styles.setupInput}
-          placeholder="أدخل الاسم..."
-          placeholderTextColor="#3a3a60"
-          value={name1}
-          onChangeText={setName1}
-          textAlign="right"
-          maxLength={12}
-        />
-
-        <Text style={styles.setupLabel}>اسم اللاعب الثاني</Text>
-        <TextInput
-          style={styles.setupInput}
-          placeholder="أدخل الاسم..."
-          placeholderTextColor="#3a3a60"
-          value={name2}
-          onChangeText={setName2}
-          textAlign="right"
-          maxLength={12}
-        />
-
-        {/* اختيار X */}
-        <Text style={[styles.setupLabel, { marginTop: 20 }]}>من يلعب X ؟</Text>
-        <View style={styles.xChoiceRow}>
-          <TouchableOpacity
-            style={[styles.xChoiceBtn, xPlayer === 1 && styles.xChoiceBtnActive]}
-            onPress={() => setXPlayer(1)}
-          >
-            <Text style={styles.xChoiceMark}>✕</Text>
-            <Text style={styles.xChoiceName}>{name1.trim() || 'اللاعب الأول'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.xChoiceBtn, xPlayer === 2 && styles.xChoiceBtnActive]}
-            onPress={() => setXPlayer(2)}
-          >
-            <Text style={styles.xChoiceMark}>✕</Text>
-            <Text style={styles.xChoiceName}>{name2.trim() || 'اللاعب الثاني'}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.startBtn, !canStart && styles.startBtnDisabled]}
-          onPress={() => canStart && onStart({ name1: name1.trim(), name2: name2.trim(), xPlayer })}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.startBtnText}>ابدأ اللعبة 🎮</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
-  );
-}
-
-// ══════════════════════════════════════════
-// شاشة اللعبة المحلية
-// ══════════════════════════════════════════
-const TURN_DURATION = 15; // ثواني
-
-function LocalGame({ name1, name2, xPlayer, onBack }) {
-  // xPlayer=1 يعني اللاعب1 هو X في الجولة التي يبدأها
-  // كل جولة: من يبدأ = X، الثاني = O
-  // الجولات الفردية يبدأ من اختار X، الزوجية يبدأ الآخر
-
-  const [round, setRound] = useState(1);
-  const [board, setBoard] = useState(emptyBoard());
-  const [scores, setScores] = useState([0, 0]); // [لاعب1، لاعب2]
-  const [roundResults, setRoundResults] = useState([]); // سجل النتائج
-  const [showResult, setShowResult] = useState(false);
-  const [lastResult, setLastResult] = useState(null);
-  const [gameOver, setGameOver] = useState(false);
-  const [winLine, setWinLine] = useState([]);
-  const [timeLeft, setTimeLeft] = useState(TURN_DURATION);
-  const timerBarAnim = useRef(new Animated.Value(1)).current;
-  const timerRef = useRef(null);
-  const timerAnimRef = useRef(null);
-
-  // من يبدأ هذه الجولة؟
-  // جولة 1,3,5,7 → xPlayer يبدأ (أي هو X)
-  // جولة 2,4,6   → الآخر يبدأ
-  const starterThisRound = round % 2 === 1 ? xPlayer : (xPlayer === 1 ? 2 : 1);
-  // اللاعب الحالي في الجولة (من يتحرك الآن)
-  const [currentMover, setCurrentMover] = useState(starterThisRound);
-
-  const startTimer = (mover, currentBoard, currentRound, currentScores, currentRoundResults) => {
-    // إيقاف أي مؤقت سابق
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (timerAnimRef.current) timerAnimRef.current.stop();
-
-    setTimeLeft(TURN_DURATION);
-    timerBarAnim.setValue(1);
-
-    timerAnimRef.current = Animated.timing(timerBarAnim, {
-      toValue: 0,
-      duration: TURN_DURATION * 1000,
-      useNativeDriver: false,
-    });
-    timerAnimRef.current.start();
-
-    let remaining = TURN_DURATION;
-    timerRef.current = setInterval(() => {
-      remaining -= 1;
-      setTimeLeft(remaining);
-      if (remaining <= 0) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-        // فقدان الدور — ننتقل للاعب الآخر
-        const nextMover = mover === 1 ? 2 : 1;
-        setCurrentMover(nextMover);
-        // نشغّل المؤقت للاعب التالي بعد تأخير بسيط
-        setTimeout(() => {
-          startTimer(nextMover, currentBoard, currentRound, currentScores, currentRoundResults);
-        }, 100);
+      if (res) {
+        const newScores = {
+          player1: scores.player1 + (res.winner === 'X' ? 1 : 0),
+          player2: scores.player2 + (res.winner === 'O' ? 1 : 0),
+        };
+        const isLastRound = currentRound >= TOTAL_ROUNDS;
+        if (isLastRound) {
+          await endGame({
+            player1: newScores.player1,
+            player2: newScores.player2,
+            extra: { board: newBoard, roundWinner: res.winner, winLine: res.line, scores: newScores },
+          });
+        } else {
+          await updateRoom({
+            board: newBoard, gameStatus: 'round_over',
+            roundWinner: res.winner, winLine: res.line, scores: newScores,
+          });
+        }
+      } else if (newBoard.every(c => c !== null)) {
+        const isLastRound = currentRound >= TOTAL_ROUNDS;
+        if (isLastRound) {
+          await endGame({ player1: scores.player1, player2: scores.player2, extra: { board: newBoard, scores } });
+        } else {
+          await updateRoom({ board: newBoard, gameStatus: 'round_over', roundWinner: null, winLine: null, scores });
+        }
+      } else {
+        await updateRoom({ board: newBoard, gameStatus: 'player1_turn' });
       }
-    }, 1000);
-  };
+      botPlayingRef.current = false;
+    }, delay);
+    return () => clearTimeout(t);
+  }, [gameStatus, board, roomData, roundResult, matchOver]);
 
-  const stopTimer = () => {
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    if (timerAnimRef.current) timerAnimRef.current.stop();
-  };
+  // ── حركة اللاعب ──────────────────────────────────────────────
+  const handleMove = async (index) => {
+    if (board[index] !== null) return;
+    if (roundResult || matchOver) return;
+    if (gameStatus === 'waiting') return;
+    if ((isPlayer1 && gameStatus !== 'player1_turn') ||
+        (!isPlayer1 && gameStatus !== 'player2_turn')) return;
 
-  // عند بداية جولة جديدة نعيد currentMover
-  useEffect(() => {
-    const starter = round % 2 === 1 ? xPlayer : (xPlayer === 1 ? 2 : 1);
-    setCurrentMover(starter);
-    setBoard(emptyBoard());
-    setWinLine([]);
-  }, [round]);
-
-  // نشغّل المؤقت عند تغيير currentMover أو board (بداية دور جديد)
-  useEffect(() => {
-    if (showResult || gameOver) { stopTimer(); return; }
-    startTimer(currentMover, board, round, scores, roundResults);
-    return () => stopTimer();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMover, showResult, gameOver, round]);
-
-  // من يبدأ الجولة الحالية = X
-  const getSymbol = (mover) => {
-    const starter = round % 2 === 1 ? xPlayer : (xPlayer === 1 ? 2 : 1);
-    return mover === starter ? 'X' : 'O';
-  };
-
-  const handleCell = (i) => {
-    if (board[i] || showResult) return;
-    stopTimer();
-    const symbol = getSymbol(currentMover);
+    const mySymbol = isPlayer1 ? 'X' : 'O';
     const newBoard = [...board];
-    newBoard[i] = symbol;
+    newBoard[index] = mySymbol;
     setBoard(newBoard);
 
-    const result = checkWinner(newBoard);
-    if (result) {
-      if (result.winner !== 'draw') setWinLine(result.line);
-      setTimeout(() => finishRound(result, newBoard), 500);
-    } else {
-      setCurrentMover(currentMover === 1 ? 2 : 1);
-    }
-  };
+    const res = calculateWinner(newBoard);
+    const currentRound = roomData?.currentRound || 1;
+    const scores       = roomData?.scores || { player1: 0, player2: 0 };
 
-  const finishRound = (result, finalBoard) => {
-    let roundWinner = null;
-    if (result.winner === 'X') {
-      const starter = round % 2 === 1 ? xPlayer : (xPlayer === 1 ? 2 : 1);
-      roundWinner = starter;
-    } else if (result.winner === 'O') {
-      const starter = round % 2 === 1 ? xPlayer : (xPlayer === 1 ? 2 : 1);
-      roundWinner = starter === 1 ? 2 : 1;
-    }
-
-    const newScores = [...scores];
-    if (roundWinner) newScores[roundWinner - 1] += 1;
-
-    setScores(newScores);
-    setRoundResults(prev => [...prev, { round, winner: roundWinner }]);
-    setLastResult({ winner: roundWinner, symbol: result.winner });
-    setShowResult(true);
-
-    if (round === TOTAL_ROUNDS) {
-      setTimeout(() => { setShowResult(false); setGameOver(true); }, 1800);
-    } else {
-      setTimeout(() => { setShowResult(false); setRound(r => r + 1); }, 1800);
-    }
-  };
-
-  const currentName = currentMover === 1 ? name1 : name2;
-  const currentSymbol = getSymbol(currentMover);
-
-  if (gameOver) {
-    const winner = scores[0] > scores[1] ? name1 : scores[1] > scores[0] ? name2 : null;
-    return <GameOverScreen
-      name1={name1} name2={name2}
-      score1={scores[0]} score2={scores[1]}
-      winner={winner}
-      roundResults={roundResults}
-      onRematch={() => {
-        setRound(1); setScores([0,0]); setRoundResults([]);
-        setShowResult(false); setGameOver(false); setBoard(emptyBoard()); setWinLine([]);
-      }}
-      onBack={onBack}
-    />;
-  }
-
-  const [showLeaveLocal, setShowLeaveLocal] = useState(false);
-
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-
-      {/* هيدر */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => setShowLeaveLocal(true)} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.roundLabel}>الجولة {round} / {TOTAL_ROUNDS}</Text>
-        <View style={{ width: 40 }} />
-      </View>
-      <LeaveModal visible={showLeaveLocal} onCancel={()=>setShowLeaveLocal(false)} onConfirm={onBack} />
-
-      {/* النقاط */}
-      <View style={styles.scoreboard}>
-        <View style={[styles.scoreCard, scores[0] > scores[1] && styles.scoreCardLeading]}>
-          <Text style={styles.scoreName}>{name1}</Text>
-          <Text style={styles.scoreNum}>{scores[0]}</Text>
-        </View>
-        <Text style={styles.scoreVs}>VS</Text>
-        <View style={[styles.scoreCard, scores[1] > scores[0] && styles.scoreCardLeading]}>
-          <Text style={styles.scoreName}>{name2}</Text>
-          <Text style={styles.scoreNum}>{scores[1]}</Text>
-        </View>
-      </View>
-
-      {/* مؤشر الدور */}
-      <View style={styles.turnIndicator}>
-        <Text style={styles.turnText}>
-          {showResult
-            ? (lastResult?.winner
-                ? `🏆 فاز ${lastResult.winner === 1 ? name1 : name2}!`
-                : '🤝 تعادل!')
-            : `دور ${currentName} (${currentSymbol})`}
-        </Text>
-      </View>
-
-      {/* شريط المؤقت */}
-      {!showResult && (
-        <View style={styles.timerBarWrap}>
-          <Animated.View style={[
-            styles.timerBarFill,
-            {
-              width: timerBarAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-              backgroundColor: timerBarAnim.interpolate({
-                inputRange: [0, 0.3, 1],
-                outputRange: ['#ef4444', '#f59e0b', '#34d399'],
-              }),
-            },
-          ]} />
-          <Text style={styles.timerBarText}>{timeLeft}s</Text>
-        </View>
-      )}
-
-      {/* الشبكة */}
-      <BoardGrid board={board} onPress={handleCell} disabled={showResult} winLine={winLine} />
-
-      {/* جولات صغيرة */}
-      <View style={styles.roundDots}>
-        {Array(TOTAL_ROUNDS).fill(0).map((_, i) => {
-          const res = roundResults[i];
-          return (
-            <View key={i} style={[styles.roundDot,
-              res?.winner === 1 ? styles.roundDotP1 :
-              res?.winner === 2 ? styles.roundDotP2 :
-              res?.winner === null ? styles.roundDotDraw :
-              i === round - 1 ? styles.roundDotCurrent : {}
-            ]}>
-              <Text style={styles.roundDotText}>{i + 1}</Text>
-            </View>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-// ══════════════════════════════════════════
-// شاشة الأونلاين
-// ══════════════════════════════════════════
-// ── بوت XO: Minimax بسيط ──────────────────────────────────
-function botMove(board) {
-  // 1. هل البوت يفوز؟
-  for (let i = 0; i < 9; i++) {
-    if (!board[i]) {
-      const b = [...board]; b[i] = 'O';
-      if (checkWinner(b)?.winner === 'O') return i;
-    }
-  }
-  // 2. هل يمنع اللاعب؟
-  for (let i = 0; i < 9; i++) {
-    if (!board[i]) {
-      const b = [...board]; b[i] = 'X';
-      if (checkWinner(b)?.winner === 'X') return i;
-    }
-  }
-  // 3. المركز
-  if (!board[4]) return 4;
-  // 4. زاوية عشوائية
-  const corners = [0,2,6,8].filter(i => !board[i]);
-  if (corners.length) return corners[Math.floor(Math.random()*corners.length)];
-  // 5. أي خلية فارغة
-  const empty = board.map((v,i)=>v?null:i).filter(v=>v!==null);
-  return empty[Math.floor(Math.random()*empty.length)];
-}
-
-const BOT_UID  = 'bot_xo';
-const BOT_NAME = '🤖 بوت';
-const BOT_WAIT = 60000; // 60 ثانية
-
-function OnlineXO({ onBack, currentUser }) {
-  const [phase, setPhase] = useState('searching');
-  const [roomId, setRoomId] = useState(null);
-  const [roomData, setRoomData] = useState(null);
-  const [isPlayer1, setIsPlayer1] = useState(false);
-  const [waitSeconds, setWaitSeconds] = useState(BOT_WAIT / 1000);
-  const [showLeave, setShowLeave] = useState(false);
-  const unsubRef   = useRef(null);
-  const botTimerRef = useRef(null);
-  const roomIdRef  = useRef(null);
-
-  const myUid = getOrCreateUid();
-  const myName = currentUser?.name || 'لاعب';
-
-  useEffect(() => {
-    findOrCreateRoom();
-    return () => {
-      if (unsubRef.current) unsubRef.current();
-      if (botTimerRef.current) clearTimeout(botTimerRef.current);
-    };
-  }, []);
-
-  // عداد ثواني الانتظار
-  useEffect(() => {
-    if (phase !== 'waiting') return;
-    setWaitSeconds(BOT_WAIT / 1000);
-    const iv = setInterval(() => {
-      setWaitSeconds(s => {
-        if (s <= 1) { clearInterval(iv); return 0; }
-        return s - 1;
-      });
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [phase]);
-
-  const findOrCreateRoom = async () => {
-    try {
-      const q = query(
-        collection(db, 'xo_rooms'),
-        where('status', '==', 'waiting'),
-        where('player2.uid', '==', null)
-      );
-      const snap = await getDocs(q);
-
-      if (!snap.empty) {
-        const roomDoc = snap.docs[0];
-        const rId = roomDoc.id;
-        await updateDoc(doc(db, 'xo_rooms', rId), {
-          'player2.uid': myUid,
-          'player2.name': myName,
-          status: 'playing',
+    if (res) {
+      const newScores = {
+        player1: scores.player1 + (res.winner === 'X' ? 1 : 0),
+        player2: scores.player2 + (res.winner === 'O' ? 1 : 0),
+      };
+      const isLastRound = currentRound >= TOTAL_ROUNDS;
+      if (isLastRound) {
+        await endGame({
+          player1: newScores.player1,
+          player2: newScores.player2,
+          extra: { board: newBoard, roundWinner: res.winner, winLine: res.line, scores: newScores },
         });
-        setRoomId(rId);
-        roomIdRef.current = rId;
-        setIsPlayer1(false);
-        listenRoom(rId);
       } else {
-        const rId = `xo_${Date.now()}_${myUid.slice(0,8)}`;
-        await setDoc(doc(db, 'xo_rooms', rId), {
-          status: 'waiting',
-          player1: { uid: myUid, name: myName, score: 0 },
-          player2: { uid: null, name: null, score: 0 },
-          round: 1,
-          board: emptyBoard(),
-          currentTurn: 1,
-          roundStarter: 1,
-          winner: null,
-          createdAt: serverTimestamp(),
+        await updateRoom({
+          board: newBoard, gameStatus: 'round_over',
+          roundWinner: res.winner, winLine: res.line, scores: newScores,
         });
-        setRoomId(rId);
-        roomIdRef.current = rId;
-        setIsPlayer1(true);
-        setPhase('waiting');
-        listenRoom(rId);
-
-        // ── بعد 60 ثانية: أضف البوت ──
-        botTimerRef.current = setTimeout(async () => {
-          const rIdNow = roomIdRef.current;
-          if (!rIdNow) return;
-          const roomSnap = await import('firebase/firestore').then(({getDoc,doc:d})=>getDoc(d(db,'xo_rooms',rIdNow)));
-          if (!roomSnap.exists()) return;
-          const rd = roomSnap.data();
-          if (rd.status !== 'waiting') return; // جاء لاعب حقيقي
-          await updateDoc(doc(db, 'xo_rooms', rIdNow), {
-            'player2.uid': BOT_UID,
-            'player2.name': BOT_NAME,
-            status: 'playing',
-            isVsBot: true,
-          });
-        }, BOT_WAIT);
       }
-    } catch (e) {
-      Alert.alert('خطأ', e.message);
+      return;
     }
+    if (newBoard.every(c => c !== null)) {
+      const isLastRound = currentRound >= TOTAL_ROUNDS;
+      if (isLastRound) {
+        await endGame({ player1: scores.player1, player2: scores.player2, extra: { board: newBoard, scores } });
+      } else {
+        await updateRoom({ board: newBoard, gameStatus: 'round_over', roundWinner: null, winLine: null, scores });
+      }
+      return;
+    }
+    await updateRoom({ board: newBoard, gameStatus: isPlayer1 ? 'player2_turn' : 'player1_turn' });
   };
 
-  const listenRoom = (rId) => {
-    const unsub = onSnapshot(doc(db, 'xo_rooms', rId), async (snap) => {
-      if (!snap.exists()) return;
-      const data = snap.data();
-      setRoomData(data);
-      if (data.status === 'playing') {
-        setPhase('playing');
-        // ── حركة البوت إذا كان الدور عليه ──
-        if (data.isVsBot && data.currentTurn === 2 && !checkWinner(data.board)) {
-          setTimeout(async () => {
-            const idx = botMove(data.board);
-            if (idx === null || idx === undefined) return;
-            const symbol = data.roundStarter === 2 ? 'X' : 'O';
-            const newBoard = [...data.board];
-            newBoard[idx] = symbol;
-            const result = checkWinner(newBoard);
-            const nextTurn = 1;
-            if (result) {
-              let roundWinner = null;
-              if (result.winner === 'X') roundWinner = data.roundStarter;
-              else if (result.winner === 'O') roundWinner = data.roundStarter === 1 ? 2 : 1;
-              const p1Score = data.player1.score + (roundWinner === 1 ? 1 : 0);
-              const p2Score = data.player2.score + (roundWinner === 2 ? 1 : 0);
-              if (data.round >= TOTAL_ROUNDS) {
-                let gameWinner = 'draw';
-                if (p1Score > p2Score) gameWinner = data.player1.name;
-                else if (p2Score > p1Score) gameWinner = BOT_NAME;
-                await updateDoc(doc(db, 'xo_rooms', rId), {
-                  board: newBoard, 'player1.score': p1Score, 'player2.score': p2Score,
-                  status: 'finished', winner: gameWinner,
-                });
-              } else {
-                const nextStarter = data.roundStarter === 1 ? 2 : 1;
-                await updateDoc(doc(db, 'xo_rooms', rId), {
-                  board: emptyBoard(), 'player1.score': p1Score, 'player2.score': p2Score,
-                  round: data.round + 1, roundStarter: nextStarter, currentTurn: nextStarter,
-                });
-              }
-            } else {
-              await updateDoc(doc(db, 'xo_rooms', rId), { board: newBoard, currentTurn: nextTurn });
-            }
-          }, 900); // تأخير 0.9 ث ليبدو طبيعياً
-        }
-      }
-      if (data.status === 'finished') setPhase('finished');
+  // ── الجولة التالية (player1 فقط يُرسل الأمر) ─────────────────
+  const handleNextRound = async () => {
+    if (!isPlayer1) return; // player2 ينتظر
+    const currentRound = roomData?.currentRound || 1;
+    await updateRoom({
+      board: Array(9).fill(null),
+      gameStatus: 'player1_turn',
+      currentRound: currentRound + 1,
+      roundWinner: null,
+      winLine: null,
     });
-    unsubRef.current = unsub;
   };
 
-  const handleCell = async (i) => {
-    if (!roomData || !roomId) return;
-    const myNum = isPlayer1 ? 1 : 2;
-    if (roomData.currentTurn !== myNum) return;
-    if (roomData.board[i]) return;
-
-    // رمزي: من يبدأ الجولة = X
-    const symbol = roomData.currentTurn === roomData.roundStarter ? 'X' : 'O';
-    const newBoard = [...roomData.board];
-    newBoard[i] = symbol;
-
-    const result = checkWinner(newBoard);
-    const nextTurn = roomData.currentTurn === 1 ? 2 : 1;
-
-    if (result) {
-      let roundWinner = null;
-      if (result.winner === 'X') roundWinner = roomData.roundStarter;
-      else if (result.winner === 'O') roundWinner = roomData.roundStarter === 1 ? 2 : 1;
-
-      const p1Score = roomData.player1.score + (roundWinner === 1 ? 1 : 0);
-      const p2Score = roomData.player2.score + (roundWinner === 2 ? 1 : 0);
-
-      if (roomData.round >= TOTAL_ROUNDS) {
-        let gameWinner = 'draw';
-        if (p1Score > p2Score) gameWinner = roomData.player1.name;
-        else if (p2Score > p1Score) gameWinner = roomData.player2.name;
-        await updateDoc(doc(db, 'xo_rooms', roomId), {
-          board: newBoard,
-          'player1.score': p1Score,
-          'player2.score': p2Score,
-          status: 'finished',
-          winner: gameWinner,
-        });
-      } else {
-        const nextRound = roomData.round + 1;
-        const nextStarter = roomData.roundStarter === 1 ? 2 : 1;
-        await updateDoc(doc(db, 'xo_rooms', roomId), {
-          board: emptyBoard(),
-          'player1.score': p1Score,
-          'player2.score': p2Score,
-          round: nextRound,
-          roundStarter: nextStarter,
-          currentTurn: nextStarter,
-        });
-      }
-    } else {
-      await updateDoc(doc(db, 'xo_rooms', roomId), {
-        board: newBoard,
-        currentTurn: nextTurn,
-      });
-    }
-  };
-
-  const handleLeave = () => setShowLeave(true);
-
-  const confirmLeave = async () => {
-    setShowLeave(false);
-    if (roomId) await deleteDoc(doc(db, 'xo_rooms', roomId));
+  const handleQuit = async () => {
+    await leaveRoom();
     onBack();
   };
 
-  // ── انتظار لاعب ──
-  if (phase === 'waiting') return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleLeave} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerEmoji}>✕○</Text>
-          <Text style={styles.headerTitle}>أونلاين</Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </View>
-      <View style={styles.centerContent}>
-        <ActivityIndicator color="#f59e0b" size="large" />
-        <Text style={styles.searchingText}>بانتظار خصم...</Text>
-        <Text style={styles.searchingHint}>سيتم المطابقة تلقائياً</Text>
-        {waitSeconds <= 30 && (
-          <Text style={styles.botHint}>
-            🤖 سيُضاف بوت خلال {waitSeconds} ثانية إذا لم يأتِ أحد
-          </Text>
-        )}
-      </View>
-      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
-    </View>
-  );
+  // ── بيانات اللاعبين والجولات ─────────────────────────────────
+  const myName        = currentUser?.name || 'أنت';
+  const mySymbol      = isPlayer1 ? 'X' : 'O';
+  const opponentData  = isPlayer1 ? roomData?.player2 : roomData?.player1;
+  const opponentName  = opponentData?.name || '...';
+  const opponentPhoto = opponentData?.photoURL || null;
+  const isVsBot       = opponentData?.uid === 'bot';
+  const isWaiting     = !opponentData?.uid;
+  const currentRound  = roomData?.currentRound || 1;
+  const scores        = roomData?.scores || { player1: 0, player2: 0 };
+  const myScore       = isPlayer1 ? scores.player1 : scores.player2;
+  const oppScore      = isPlayer1 ? scores.player2 : scores.player1;
 
-  if (phase === 'searching') return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={styles.centerContent}>
-        <ActivityIndicator color="#f59e0b" size="large" />
-        <Text style={styles.searchingText}>جارٍ البحث...</Text>
-      </View>
-    </View>
-  );
+  const winLine = roundResult && roundResult !== 'draw' ? roundResult.line : [];
 
-  // ── اللعبة ──
-  if (phase === 'playing' && roomData) {
-    const myNum = isPlayer1 ? 1 : 2;
-    const isMyTurn = roomData.currentTurn === myNum;
-    const mySymbol = roomData.currentTurn === roomData.roundStarter ? 'X' : 'O';
-    const opponentName = isPlayer1 ? roomData.player2?.name : roomData.player1?.name;
-    const myScore = isPlayer1 ? roomData.player1?.score : roomData.player2?.score;
-    const oppScore = isPlayer1 ? roomData.player2?.score : roomData.player1?.score;
-
-    const winResult = checkWinner(roomData.board);
-    const winLine = (winResult && winResult.winner !== 'draw') ? winResult.line : [];
-
-    return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleLeave} style={styles.backBtn}>
-            <Text style={styles.backText}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.roundLabel}>الجولة {roomData.round} / {TOTAL_ROUNDS}</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <View style={styles.scoreboard}>
-          <View style={[styles.scoreCard, myScore > oppScore && styles.scoreCardLeading]}>
-            <Text style={styles.scoreName}>{myName}</Text>
-            <Text style={styles.scoreNum}>{myScore}</Text>
-          </View>
-          <Text style={styles.scoreVs}>VS</Text>
-          <View style={[styles.scoreCard, oppScore > myScore && styles.scoreCardLeading]}>
-            <Text style={styles.scoreName}>{opponentName}</Text>
-            <Text style={styles.scoreNum}>{oppScore}</Text>
-          </View>
-        </View>
-
-        <View style={styles.turnIndicator}>
-          <Text style={styles.turnText}>
-            {isMyTurn ? `دورك (${mySymbol})` : `دور ${opponentName}...`}
-          </Text>
-        </View>
-
-        <BoardGrid
-          board={roomData.board}
-          onPress={handleCell}
-          disabled={!isMyTurn}
-          winLine={winLine}
-        />
-        <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} message="سيفوز خصمك إذا غادرت!" />
-      </View>
-    );
-  }
-
-  // ── انتهت اللعبة ──
-  if (phase === 'finished' && roomData) {
-    const myScore = isPlayer1 ? roomData.player1?.score : roomData.player2?.score;
-    const oppScore = isPlayer1 ? roomData.player2?.score : roomData.player1?.score;
-    const opponentName = isPlayer1 ? roomData.player2?.name : roomData.player1?.name;
-    const iWon = myScore > oppScore;
-    const isDraw = myScore === oppScore;
-
-    return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-        <View style={styles.centerContent}>
-          <Text style={styles.gameOverEmoji}>{isDraw ? '🤝' : iWon ? '🏆' : '😔'}</Text>
-          <Text style={styles.gameOverTitle}>
-            {isDraw ? 'تعادل!' : iWon ? 'فزت!' : 'فاز خصمك'}
-          </Text>
-          <View style={styles.finalScoreRow}>
-            <View style={styles.finalScoreBox}>
-              <Text style={styles.finalScoreName}>{myName}</Text>
-              <Text style={styles.finalScoreNum}>{myScore}</Text>
-            </View>
-            <Text style={styles.finalScoreVs}>—</Text>
-            <View style={styles.finalScoreBox}>
-              <Text style={styles.finalScoreName}>{opponentName}</Text>
-              <Text style={styles.finalScoreNum}>{oppScore}</Text>
-            </View>
-          </View>
-          <TouchableOpacity style={styles.backHomeBtn} onPress={onBack}>
-            <Text style={styles.backHomeBtnText}>العودة للقائمة</Text>
-          </TouchableOpacity>
-        </View>
-        <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} message="سيفوز خصمك إذا غادرت!" />
-      </View>
-    );
-  }
-
-  return (
-    <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} message="سيفوز خصمك إذا غادرت!" />
-  );
-}
-
-// ══════════════════════════════════════════
-// مكوّن الشبكة
-// ══════════════════════════════════════════
-function BoardGrid({ board, onPress, disabled, winLine = [] }) {
-  const cellAnims = useRef(board.map(() => new Animated.Value(0))).current;
-
-  const handlePress = (i) => {
-    if (board[i] || disabled) return;
-    Animated.spring(cellAnims[i], { toValue: 1, friction: 5, useNativeDriver: true }).start();
-    onPress(i);
+  // اسم فائز الجولة
+  const getRoundWinnerName = () => {
+    if (!roundResult || roundResult === 'draw') return null;
+    const w = roundResult.winner;
+    if (isPlayer1) return w === 'X' ? myName : opponentName;
+    return w === 'O' ? myName : opponentName;
   };
 
-  // reset animation when board resets
-  useEffect(() => {
-    board.forEach((cell, i) => {
-      if (!cell) cellAnims[i].setValue(0);
-    });
-  }, [board]);
+  // فائز المباراة كلها
+  const getMatchWinnerName = () => {
+    if (scores.player1 === scores.player2) return null; // تعادل
+    const p1Won = scores.player1 > scores.player2;
+    return isPlayer1 ? (p1Won ? myName : opponentName) : (p1Won ? opponentName : myName);
+  };
 
+  // ── شاشات التحميل / الخطأ ────────────────────────────────────
+  if (error) {
+    return (
+      <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <XOEngraving theme={theme} />
+        <StatusBar barStyle={theme.statusBar} />
+        <View style={s.center}>
+          <Text style={{ color: '#ef4444', fontSize: 15 }}>❌ {error}</Text>
+          <TouchableOpacity onPress={onBack} style={[s.smallBtn, { backgroundColor: theme.bgCard, marginTop: 16 }]}>
+            <Text style={{ color: theme.accent }}>رجوع</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+  if (loading) {
+    return (
+      <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <XOEngraving theme={theme} />
+        <StatusBar barStyle={theme.statusBar} />
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={theme.accent} />
+          <Text style={{ color: theme.textPrimary, marginTop: 12 }}>جاري الاتصال...</Text>
+        </View>
+      </View>
+    );
+  }
+  if (!roomId) {
+    return (
+      <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <XOEngraving theme={theme} />
+        <StatusBar barStyle={theme.statusBar} />
+        <View style={s.center}>
+          <Text style={{ color: theme.textPrimary }}>لا توجد غرفة</Text>
+          <TouchableOpacity onPress={onBack} style={[s.smallBtn, { backgroundColor: theme.bgCard, marginTop: 16 }]}>
+            <Text style={{ color: theme.accent }}>رجوع</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ── شاشة نهاية المباراة ──────────────────────────────────────
+  if (matchOver) {
+    const matchWinner = getMatchWinnerName();
+    return (
+      <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <XOEngraving theme={theme} />
+        <StatusBar barStyle={theme.statusBar} />
+        <View style={s.center}>
+          <Text style={{ fontSize: 52, marginBottom: 8 }}>
+            {matchWinner ? '🏆' : '🤝'}
+          </Text>
+          <Text style={[s.matchTitle, { color: theme.accent }]}>
+            {matchWinner ? `${matchWinner} فاز بالمباراة!` : 'تعادل!'}
+          </Text>
+          <View style={[s.finalScoreBox, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+            <Text style={[s.finalScoreLabel, { color: theme.textSecondary }]}>{myName}</Text>
+            <Text style={[s.finalScoreNum, { color: theme.accent }]}>{myScore} — {oppScore}</Text>
+            <Text style={[s.finalScoreLabel, { color: theme.textSecondary }]}>{opponentName}</Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleQuit}
+            style={[s.smallBtn, { backgroundColor: theme.bgCard, borderColor: theme.border, borderWidth: 1, marginTop: 20 }]}
+          >
+            <Text style={{ color: theme.textPrimary, fontWeight: '700' }}>خروج</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ── الشاشة الرئيسية ───────────────────────────────────────────
   return (
-    <View style={styles.boardWrap}>
-      <View style={styles.board}>
-        {board.map((cell, i) => {
-          const isWin = winLine.includes(i);
-          const scale = cellAnims[i].interpolate({ inputRange: [0,1], outputRange: [0.5, 1] });
+    <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <XOEngraving theme={theme} />
+      <StatusBar barStyle={theme.statusBar} />
+
+      {/* ── TopBar: زر خروج + بروفايل الخصم ── */}
+      <View style={s.topBar}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity
+            onPress={() => Alert.alert('خروج', 'هل تريد مغادرة اللعبة؟', [
+              { text: 'إلغاء', style: 'cancel' },
+              { text: 'خروج', style: 'destructive', onPress: handleQuit },
+            ])}
+            style={[s.quitSmall, { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)' }]}
+          >
+            <Text style={{ color: '#ef4444', fontSize: 16 }}>✕</Text>
+          </TouchableOpacity>
+          <GameInfoButton gameType="xo" lang={lang} />
+          <WebScreenButton
+            playerUid={currentUser?.uid || 'xo_p0'}
+            playerName={myName}
+            gameType="xo"
+            gameRoomId={roomId || ''}
+            getPublicData={() => ({ isMyTurn, myScore, oppScore })}
+            themeName={themeId || 'dark'}
+          />
+        </View>
+
+        <View style={[s.opponentBar, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+          <View style={s.avatarWrap}>
+            {opponentPhoto ? (
+              <Image source={{ uri: opponentPhoto }} style={s.avatar} />
+            ) : (
+              <View style={[s.avatarFallback, { backgroundColor: theme.bgElevated }]}>
+                <Text style={{ fontSize: 16 }}>
+                  {isVsBot ? '🤖' : (isWaiting ? '?' : opponentName.charAt(0))}
+                </Text>
+              </View>
+            )}
+            <View style={s.onlineDot} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.opponentName, { color: theme.textPrimary }]} numberOfLines={1}>
+              {isWaiting ? 'بانتظار خصم...' : opponentName}
+            </Text>
+            <Text style={[s.opponentSub, { color: theme.textSecondary }]}>
+              {isVsBot ? 'بوت' : 'متصل'}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 20 }}>{mySymbol === 'X' ? '⭕' : '❌'}</Text>
+        </View>
+      </View>
+
+      {/* ── شريط الجولة والنقاط ── */}
+      {!isWaiting && (
+        <View style={[s.roundBar, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+          <Text style={[s.scoreText, { color: theme.accent }]}>{myScore}</Text>
+          <View style={s.roundCenter}>
+            <Text style={[s.roundLabel, { color: theme.textSecondary }]}>الجولة</Text>
+            <Text style={[s.roundNum, { color: theme.textPrimary }]}>{currentRound} / {TOTAL_ROUNDS}</Text>
+          </View>
+          <Text style={[s.scoreText, { color: theme.accent }]}>{oppScore}</Text>
+        </View>
+      )}
+
+      {/* ── نتيجة الجولة ── */}
+      {roundResult && (
+        <View style={[s.resultBox, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+          <Text style={{ fontSize: 28, marginBottom: 2 }}>
+            {roundResult === 'draw' ? '🤝' : '🏆'}
+          </Text>
+          <Text style={[s.resultText, { color: theme.accent }]}>
+            {roundResult === 'draw' ? 'تعادل الجولة!' : `${getRoundWinnerName()} فاز بالجولة!`}
+          </Text>
+          {currentRound < TOTAL_ROUNDS && isPlayer1 && (
+            <TouchableOpacity
+              style={[s.resetBtn, { backgroundColor: theme.accent }]}
+              onPress={handleNextRound}
+            >
+              <Text style={{ color: theme.textOnAccent, fontWeight: '900', fontSize: 14 }}>
+                الجولة التالية ←
+              </Text>
+            </TouchableOpacity>
+          )}
+          {currentRound < TOTAL_ROUNDS && !isPlayer1 && (
+            <Text style={[s.waitingForNext, { color: theme.textSecondary }]}>بانتظار الجولة التالية...</Text>
+          )}
+        </View>
+      )}
+
+      {/* ── مؤشر الدور ── */}
+      {!roundResult && !isWaiting && (
+        <View style={s.turnRow}>
+          <View style={s.turnItem}>
+            {gameStatus === 'player1_turn' && (
+              <Text style={[s.turnLabel, { color: theme.success }]}>دور</Text>
+            )}
+            <Text style={[s.symbolBig, gameStatus === 'player1_turn' && s.symbolActive]}>❌</Text>
+          </View>
+          <Text style={[s.vsText, { color: theme.textMuted }]}>VS</Text>
+          <View style={s.turnItem}>
+            {gameStatus === 'player2_turn' && (
+              <Text style={[s.turnLabel, { color: theme.error }]}>دور</Text>
+            )}
+            <Text style={[s.symbolBig, gameStatus === 'player2_turn' && s.symbolActive]}>⭕</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ── اللوحة ── */}
+      <View style={s.board}>
+        {board.map((cell, index) => {
+          const isWinCell = winLine.includes(index);
           return (
             <TouchableOpacity
-              key={i}
+              key={index}
               style={[
-                styles.cell,
-                i % 3 !== 2 && styles.cellBorderRight,
-                i < 6 && styles.cellBorderBottom,
-                isWin && styles.cellWin,
+                s.cell,
+                { backgroundColor: theme.bgCard, borderColor: theme.border },
+                isWinCell && s.cellWin,
               ]}
-              onPress={() => handlePress(i)}
-              activeOpacity={cell ? 1 : 0.7}
+              onPress={() => handleMove(index)}
+              disabled={!!roundResult || isWaiting || matchOver}
             >
-              {cell && (
-                <Animated.Text style={[
-                  styles.cellText,
-                  cell === 'X' ? styles.cellX : styles.cellO,
-                  isWin && styles.cellTextWin,
-                  { transform: [{ scale }] },
-                ]}>
-                  {cell}
-                </Animated.Text>
-              )}
+              <Text style={[s.cellText, { opacity: cell ? 1 : 0.04 }]}>
+                {cell === 'X' ? '❌' : '⭕'}
+              </Text>
             </TouchableOpacity>
           );
         })}
       </View>
+
+      {/* ── رسالة انتظار الخصم ── */}
+      {isWaiting && (
+        <View style={[s.waitingBox, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+          <ActivityIndicator color={theme.accent} style={{ marginBottom: 8 }} />
+          <Text style={[s.waitingText, { color: theme.textPrimary }]}>بانتظار الخصم...</Text>
+          <Text style={[s.waitingSub, { color: theme.textSecondary }]}>ستبدأ اللعبة تلقائياً عند انضمامه</Text>
+        </View>
+      )}
     </View>
   );
 }
 
-// ══════════════════════════════════════════
-// شاشة نهاية اللعبة (محلي)
-// ══════════════════════════════════════════
-function GameOverScreen({ name1, name2, score1, score2, winner, roundResults, onRematch, onBack }) {
-  const isDraw = !winner;
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={styles.centerContent}>
-        <Text style={styles.gameOverEmoji}>{isDraw ? '🤝' : '🏆'}</Text>
-        <Text style={styles.gameOverTitle}>{isDraw ? 'تعادل!' : `فاز ${winner}!`}</Text>
+const s = StyleSheet.create({
+  container:  { flex: 1, paddingTop: 52, paddingHorizontal: 16 },
+  center:     { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-        <View style={styles.finalScoreRow}>
-          <View style={styles.finalScoreBox}>
-            <Text style={styles.finalScoreName}>{name1}</Text>
-            <Text style={[styles.finalScoreNum, score1 > score2 && { color: '#f59e0b' }]}>{score1}</Text>
-          </View>
-          <Text style={styles.finalScoreVs}>—</Text>
-          <View style={styles.finalScoreBox}>
-            <Text style={styles.finalScoreName}>{name2}</Text>
-            <Text style={[styles.finalScoreNum, score2 > score1 && { color: '#f59e0b' }]}>{score2}</Text>
-          </View>
-        </View>
+  // TopBar
+  topBar:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  quitSmall:  { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  opponentBar:{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1 },
+  avatarWrap: { position: 'relative' },
+  avatar:     { width: 34, height: 34, borderRadius: 17 },
+  avatarFallback: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  onlineDot:  { position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e', borderWidth: 1.5 },
+  opponentName: { fontSize: 13, fontWeight: '700' },
+  opponentSub:  { fontSize: 10, marginTop: 1 },
 
-        {/* سجل الجولات */}
-        <View style={styles.roundHistory}>
-          {roundResults.map((r, i) => (
-            <View key={i} style={styles.roundHistoryRow}>
-              <Text style={styles.roundHistoryLabel}>ج{r.round}</Text>
-              <Text style={styles.roundHistoryResult}>
-                {r.winner === 1 ? `🏆 ${name1}` : r.winner === 2 ? `🏆 ${name2}` : '🤝 تعادل'}
-              </Text>
-            </View>
-          ))}
-        </View>
+  // Round bar
+  roundBar:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 10, borderWidth: 1 },
+  scoreText:  { fontSize: 22, fontWeight: '900', minWidth: 28, textAlign: 'center' },
+  roundCenter:{ alignItems: 'center' },
+  roundLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  roundNum:   { fontSize: 16, fontWeight: '900' },
 
-        <TouchableOpacity style={styles.rematchBtn} onPress={onRematch}>
-          <Text style={styles.rematchBtnText}>🔄 إعادة</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.backHomeBtn} onPress={onBack}>
-          <Text style={styles.backHomeBtnText}>العودة للقائمة</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
+  // Round result
+  resultBox:  { borderRadius: 16, padding: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, gap: 2 },
+  resultText: { fontSize: 18, fontWeight: '900' },
+  resetBtn:   { marginTop: 8, paddingHorizontal: 22, paddingVertical: 9, borderRadius: 12 },
+  waitingForNext: { fontSize: 12, marginTop: 6 },
 
-// ══════════════════════════════════════════
-// الشاشة الرئيسية
-// ══════════════════════════════════════════
-export default function XOGameScreen({ onBack, currentUser, tokens, onSpendTokens }) {
-  const [view, setView] = useState('modeSelect'); // modeSelect | localSetup | localGame | onlineGame
-  const [localConfig, setLocalConfig] = useState(null);
+  // Turn indicator
+  turnRow:    { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 24, marginBottom: 10 },
+  turnItem:   { alignItems: 'center', gap: 2, minHeight: 50 },
+  turnLabel:  { fontSize: 12, fontWeight: '900', letterSpacing: 1 },
+  symbolBig:  { fontSize: 34, opacity: 0.4 },
+  symbolActive: { opacity: 1 },
+  vsText:     { fontSize: 14, fontWeight: '700', marginBottom: 6 },
 
-  const handleModeOnline = () => {
-    if (tokens < 5) {
-      Alert.alert('رصيد غير كافٍ', 'تحتاج 5 رصيد للعب');
-      return;
-    }
-    onSpendTokens(5);
-    setView('onlineGame');
-  };
+  // Board
+  board:      { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 12 },
+  cell:       { width: '31%', aspectRatio: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 1 },
+  cellWin:    { borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.15)' },
+  cellText:   { fontSize: 38 },
 
-  const handleStartLocal = (config) => {
-    if (tokens < 5) {
-      Alert.alert('رصيد غير كافٍ', 'تحتاج 5 رصيد للعب');
-      return;
-    }
-    onSpendTokens(5);
-    setLocalConfig(config);
-    setView('localGame');
-  };
+  // Waiting
+  waitingBox: { borderRadius: 14, padding: 20, alignItems: 'center', borderWidth: 1, gap: 4 },
+  waitingText:{ fontSize: 16, fontWeight: '700' },
+  waitingSub: { fontSize: 12 },
 
-  if (view === 'modeSelect') return (
-    <ModeSelect
-      onLocal={() => setView('localSetup')}
-      onOnline={handleModeOnline}
-      onBack={onBack}
-    />
-  );
+  // Match over screen
+  matchTitle:     { fontSize: 24, fontWeight: '900', marginBottom: 20, textAlign: 'center' },
+  finalScoreBox:  { flexDirection: 'row', alignItems: 'center', gap: 14, borderRadius: 16, paddingHorizontal: 24, paddingVertical: 14, borderWidth: 1 },
+  finalScoreLabel:{ fontSize: 13, fontWeight: '700' },
+  finalScoreNum:  { fontSize: 28, fontWeight: '900' },
 
-  if (view === 'localSetup') return (
-    <LocalSetup
-      onStart={handleStartLocal}
-      onBack={() => setView('modeSelect')}
-    />
-  );
-
-  if (view === 'localGame' && localConfig) return (
-    <LocalGame
-      name1={localConfig.name1}
-      name2={localConfig.name2}
-      xPlayer={localConfig.xPlayer}
-      onBack={() => setView('modeSelect')}
-    />
-  );
-
-  if (view === 'onlineGame') return (
-    <OnlineXO
-      onBack={() => setView('modeSelect')}
-      currentUser={currentUser}
-    />
-  );
-
-  return null;
-}
-
-// ══════════════════════════════════════════
-// الستايلات
-// ══════════════════════════════════════════
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#06061a', paddingTop: 56 },
-
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20, marginBottom: 16,
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: '#0f0f2e', borderWidth: 1,
-    borderColor: '#f59e0b30', alignItems: 'center', justifyContent: 'center',
-  },
-  backText: { color: '#f59e0b', fontSize: 20, fontWeight: '700' },
-  headerCenter: { alignItems: 'center', gap: 2 },
-  headerEmoji: { fontSize: 24 },
-  headerTitle: { color: '#f59e0b', fontSize: 18, fontWeight: '900' },
-  roundLabel: { color: '#f5c518', fontSize: 15, fontWeight: '800' },
-
-  // info box
-  infoBox: {
-    marginHorizontal: 20, backgroundColor: '#0f0f2e',
-    borderRadius: 18, borderWidth: 1, borderColor: '#f59e0b30',
-    padding: 18, gap: 10, marginBottom: 24,
-  },
-  infoTitle: { color: '#f59e0b', fontSize: 15, fontWeight: '800' },
-  infoText: { color: '#9090b0', fontSize: 13, lineHeight: 22, textAlign: 'right' },
-  infoMeta: { flexDirection: 'row', gap: 16, justifyContent: 'center', marginTop: 4 },
-  infoMetaText: { color: '#5a5a80', fontSize: 12, fontWeight: '600' },
-
-  // أزرار الوضع
-  modeButtons: { paddingHorizontal: 20, gap: 14 },
-  modeBtn: {
-    backgroundColor: '#0f0f2e', borderRadius: 18,
-    borderWidth: 1.5, borderColor: '#f59e0b40',
-    padding: 20, alignItems: 'center', gap: 6,
-  },
-  modeBtnOnline: { borderColor: '#34d39940' },
-  modeBtnEmoji: { fontSize: 30 },
-  modeBtnTitle: { color: '#f59e0b', fontSize: 17, fontWeight: '900' },
-  modeBtnDesc: { color: '#5a5a80', fontSize: 13 },
-
-  // setup
-  setupBody: { paddingHorizontal: 24, gap: 10, flex: 1, paddingTop: 10 },
-  setupLabel: { color: '#9090b0', fontSize: 13, fontWeight: '600', textAlign: 'right' },
-  setupInput: {
-    backgroundColor: '#0f0f2e', borderRadius: 14,
-    borderWidth: 1, borderColor: '#ffffff15',
-    color: '#e0e0ff', paddingHorizontal: 16,
-    paddingVertical: 14, fontSize: 16,
-  },
-  xChoiceRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
-  xChoiceBtn: {
-    flex: 1, backgroundColor: '#0f0f2e',
-    borderRadius: 14, borderWidth: 1.5,
-    borderColor: '#ffffff15', padding: 16,
-    alignItems: 'center', gap: 6,
-  },
-  xChoiceBtnActive: { borderColor: '#f59e0b', backgroundColor: '#f59e0b12' },
-  xChoiceMark: { color: '#f59e0b', fontSize: 24, fontWeight: '900' },
-  xChoiceName: { color: '#9090b0', fontSize: 13, fontWeight: '600' },
-  startBtn: {
-    backgroundColor: '#f59e0b', borderRadius: 16,
-    paddingVertical: 16, alignItems: 'center', marginTop: 20,
-  },
-  startBtnDisabled: { opacity: 0.4 },
-  startBtnText: { color: '#06061a', fontSize: 16, fontWeight: '900' },
-
-  // شريط المؤقت
-  timerBarWrap: {
-    marginHorizontal: 20, marginBottom: 16,
-    height: 10, backgroundColor: '#0f0f2e',
-    borderRadius: 8, overflow: 'hidden',
-    borderWidth: 1, borderColor: '#ffffff10',
-    flexDirection: 'row', alignItems: 'center',
-  },
-  timerBarFill: {
-    height: '100%', borderRadius: 8,
-    position: 'absolute', left: 0, top: 0,
-  },
-  timerBarText: {
-    position: 'absolute', right: 8,
-    color: '#ffffff60', fontSize: 9, fontWeight: '700',
-  },
-
-  // لوحة النقاط
-  scoreboard: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', gap: 16,
-    paddingHorizontal: 20, marginBottom: 14,
-  },
-  scoreCard: {
-    flex: 1, backgroundColor: '#0f0f2e',
-    borderRadius: 14, borderWidth: 1,
-    borderColor: '#ffffff10', padding: 12,
-    alignItems: 'center', gap: 4,
-  },
-  scoreCardLeading: { borderColor: '#f59e0b60', backgroundColor: '#f59e0b10' },
-  scoreName: { color: '#9090b0', fontSize: 12, fontWeight: '700' },
-  scoreNum: { color: '#f5c518', fontSize: 28, fontWeight: '900' },
-  scoreVs: { color: '#3a3a60', fontSize: 14, fontWeight: '700' },
-
-  // مؤشر الدور
-  turnIndicator: {
-    marginHorizontal: 20, backgroundColor: '#0f0f2e',
-    borderRadius: 12, borderWidth: 1,
-    borderColor: '#f59e0b30', paddingVertical: 10,
-    alignItems: 'center', marginBottom: 20,
-  },
-  turnText: { color: '#f5c518', fontSize: 15, fontWeight: '800' },
-
-  // الشبكة
-  boardWrap: { alignItems: 'center', marginBottom: 24 },
-  board: {
-    width: 300, height: 300,
-    flexDirection: 'row', flexWrap: 'wrap',
-  },
-  cell: {
-    width: 100, height: 100,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  cellBorderRight: { borderRightWidth: 2, borderRightColor: '#ffffff20' },
-  cellBorderBottom: { borderBottomWidth: 2, borderBottomColor: '#ffffff20' },
-  cellWin: { backgroundColor: '#f59e0b18' },
-  cellText: { fontSize: 42, fontWeight: '900' },
-  cellX: { color: '#f59e0b' },
-  cellO: { color: '#60a5fa' },
-  cellTextWin: { textShadowColor: '#f59e0b', textShadowRadius: 12, textShadowOffset: { width: 0, height: 0 } },
-
-  // نقاط الجولات
-  roundDots: {
-    flexDirection: 'row', justifyContent: 'center',
-    gap: 8, paddingHorizontal: 20,
-  },
-  roundDot: {
-    width: 30, height: 30, borderRadius: 10,
-    backgroundColor: '#0f0f2e', borderWidth: 1,
-    borderColor: '#ffffff10', alignItems: 'center', justifyContent: 'center',
-  },
-  roundDotP1: { backgroundColor: '#f59e0b30', borderColor: '#f59e0b60' },
-  roundDotP2: { backgroundColor: '#60a5fa30', borderColor: '#60a5fa60' },
-  roundDotDraw: { backgroundColor: '#ffffff10', borderColor: '#ffffff30' },
-  roundDotCurrent: { borderColor: '#f5c518', borderWidth: 2 },
-  roundDotText: { color: '#5a5a80', fontSize: 11, fontWeight: '700' },
-
-  // انتظار
-  centerContent: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 30 },
-  searchingText: { color: '#f5c518', fontSize: 18, fontWeight: '800' },
-  searchingHint: { color: '#5a5a80', fontSize: 13 },
-  botHint: { color: '#f59e0b99', fontSize: 12, textAlign: 'center', marginTop: 6 },
-
-  // نهاية اللعبة
-  gameOverEmoji: { fontSize: 60 },
-  gameOverTitle: { color: '#f5c518', fontSize: 26, fontWeight: '900', marginBottom: 8 },
-  finalScoreRow: { flexDirection: 'row', alignItems: 'center', gap: 24, marginVertical: 16 },
-  finalScoreBox: { alignItems: 'center', gap: 4 },
-  finalScoreName: { color: '#9090b0', fontSize: 14, fontWeight: '700' },
-  finalScoreNum: { color: '#e0e0ff', fontSize: 36, fontWeight: '900' },
-  finalScoreVs: { color: '#3a3a60', fontSize: 20 },
-  roundHistory: {
-    width: '100%', gap: 6, marginBottom: 16,
-    backgroundColor: '#0f0f2e', borderRadius: 14,
-    borderWidth: 1, borderColor: '#ffffff10', padding: 14,
-  },
-  roundHistoryRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  roundHistoryLabel: { color: '#5a5a80', fontSize: 12, fontWeight: '700' },
-  roundHistoryResult: { color: '#e0e0ff', fontSize: 13 },
-  rematchBtn: {
-    backgroundColor: '#f59e0b', borderRadius: 14,
-    paddingVertical: 14, paddingHorizontal: 40,
-  },
-  rematchBtnText: { color: '#06061a', fontSize: 15, fontWeight: '900' },
-  backHomeBtn: {
-    backgroundColor: '#0f0f2e', borderRadius: 14,
-    borderWidth: 1, borderColor: '#ffffff15',
-    paddingVertical: 12, paddingHorizontal: 32,
-  },
-  backHomeBtnText: { color: '#9090b0', fontSize: 14, fontWeight: '700' },
-});
+  smallBtn:   { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12, alignItems: 'center' },
+}); 

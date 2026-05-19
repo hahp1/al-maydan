@@ -51,7 +51,6 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-auth-session",
       "expo-apple-authentication",
       "react-native-svg",
       [

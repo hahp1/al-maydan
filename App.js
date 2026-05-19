@@ -50,7 +50,7 @@ import BullshitGameScreen   from './BullshitGameScreen';
 import MafiaGameScreen      from './MafiaGameScreen';
 import CodenamesGameScreen  from './CodenamesGameScreen';
 import KoutGameScreen       from './KoutGameScreen';
-import ManAnaScreen         from './ManAnaScren';
+import ManAnaScreen         from './ManAnaScreen';
 import ActItOutScreen       from './ActItOutScreen';
 import TruthDareScreen      from './TruthDareScreen';
 import DominoGameScreen     from './DominoGameScreen';

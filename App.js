@@ -141,6 +141,8 @@ const nhStyles = StyleSheet.create({
 const ADMIN_UIDS = [
   'Haho1',  // Expo account placeholder - استبدل بـ Firebase UID الفعلي
 ];
+
+const GAME_SCREENS = [
   'xo', 'bullshit', 'mafia', 'codenames', 'kout', 'manana', 'actitout',
   'wordle', 'truthdare', 'dominoes', 'biloot', 'rankfriends',
   'neverhaveiever', 'drawguess', 'board', 'solo', 'soloTournament', 'online',
@@ -151,7 +153,7 @@ const ADMIN_UIDS = [
 //  MainApp
 // ══════════════════════════════════════════════════════════════
 function MainApp() {
-  const { theme } = useTheme();
+  const { theme, themeId, setThemeId } = useTheme();
   const [experience,        setExperience]        = useState(null);
   const [bootLoading,       setBootLoading]       = useState(true);
   const [screen,            setScreen]            = useState('login');
@@ -162,8 +164,6 @@ function MainApp() {
   const [finalScores,       setFinalScores]       = useState(null);
   // ── الفئات: cache ذكي — تظهر فوراً من AsyncStorage ──
   const { categories } = useCachedCategories();
-
-  const { theme, themeId, setThemeId } = useTheme();
 
   // ── Pro status ──
   const { isPro }      = useProStatus(user);

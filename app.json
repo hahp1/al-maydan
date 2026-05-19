@@ -12,7 +12,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0d0d2b"
+      "backgroundColor": "#1e1040"
     },
     "assetBundlePatterns": [
       "assets/sounds/*",
@@ -36,7 +36,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0d0d2b"
+        "backgroundColor": "#1e1040"
       },
       "package": "com.almaydan.app",
       "versionCode": 3,

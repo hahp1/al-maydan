@@ -1,7 +1,19 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, StatusBar, ScrollView } from 'react-native';
+/**
+ * QuestionScreen.js — محدّث
+ * ════════════════════════════════════════════════
+ *  ✅ LifelineBar مدمج في الكلاسيك والـ MCQ
+ *  ✅ tokens و onSpendTokens ممررة من GameBoardScreen
+ *  ✅ swapSame / swapRandom / hint / eliminate مربوطة
+ *  ✅ تجميد الوقت في MCQ فقط (الكلاسيك بلا مؤقت ثابت)
+ *  ✅ usedLifelines تُصفَّر مع كل سؤال جديد
+ */
 
-// يخلط المصفوفة عشوائياً
+import { useState, useEffect, useCallback, memo, useMemo, useRef } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, StatusBar, ScrollView } from 'react-native';
+import { useTheme } from './ThemeContext';
+import { useT } from './I18n';
+import LifelinesBar from './LifelineBar';
+
 function shuffleArray(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -11,418 +23,378 @@ function shuffleArray(arr) {
   return a;
 }
 
-// ── نمط كلاسيك: المضيف يقرأ السؤال ويحكم ──
-function ClassicMode({ question, answer, points, team1, team2, currentTeam, onAnswer, onBack }) {
-  const [seconds, setSeconds] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
-  const [answered, setAnswered] = useState(false);
+function formatTime(s) {
+  const m = Math.floor(s / 60), sec = s % 60;
+  return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+}
 
+function useTimer() {
+  const [seconds, setSeconds] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setSeconds(s => s + 1), 1000);
     return () => clearInterval(timer);
   }, []);
+  return seconds;
+}
 
-  const formatTime = (s) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec < 10 ? '0' : ''}${sec}`;
-  };
+// ══════════════════════════════════════════════════════════════
+//  نمط كلاسيك — مع LifelineBar
+// ══════════════════════════════════════════════════════════════
+const ClassicMode = memo(({
+  question, answer, wrong, points, team1, team2, currentTeam,
+  onAnswer, onBack, onSwapSame, onSwapRandom,
+  tokens, onSpendTokens, onWatchAdLifeline,
+  theme, t,
+}) => {
+  const seconds = useTimer();
+  const [showAnswer,    setShowAnswer]    = useState(false);
+  const [answered,      setAnswered]      = useState(false);
+  const [usedLifelines, setUsedLifelines] = useState(new Set());
+  const [displayQ,      setDisplayQ]      = useState(question);
+  const [displayA,      setDisplayA]      = useState(answer);
+  const [hintText,      setHintText]      = useState(null);
+
+  const revealAnswer  = useCallback(() => setShowAnswer(true), []);
+  const handleTeam1   = useCallback(() => { setAnswered(true); onAnswer(1, points); }, [points, onAnswer]);
+  const handleTeam2   = useCallback(() => { setAnswered(true); onAnswer(2, points); }, [points, onAnswer]);
+  const handleNone    = useCallback(() => { setAnswered(true); onAnswer(null, 0); }, [onAnswer]);
+  const markUsed      = useCallback((key) => setUsedLifelines(prev => new Set([...prev, key])), []);
+
+  const handleHint = useCallback(() => {
+    if (displayA) setHintText(displayA[0]);
+    return displayA?.[0];
+  }, [displayA]);
+
+  const handleSwapSame = useCallback(() => {
+    const result = onSwapSame?.();
+    if (result) {
+      setDisplayQ(result.question);
+      setDisplayA(result.answer);
+      setHintText(null);
+    }
+  }, [onSwapSame]);
+
+  const handleSwapRandom = useCallback(() => {
+    const result = onSwapRandom?.();
+    if (result) {
+      setDisplayQ(result.question);
+      setDisplayA(result.answer);
+      setHintText(null);
+    }
+  }, [onSwapRandom]);
 
   return (
     <>
-      {/* Question */}
-      <View style={styles.questionBox}>
-        <Text style={styles.timerFloating}>⏱ {formatTime(seconds)}</Text>
-        <Text style={styles.questionText}>{question}</Text>
+      <View style={[styles.questionBox, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+        <Text style={[styles.timerFloating, { color: theme.accentBorder }]}>⏱ {formatTime(seconds)}</Text>
+        <Text style={[styles.questionText, { color: theme.textPrimary }]}>{displayQ}</Text>
       </View>
 
-      {/* Answer Section */}
+      {/* تلميح إذا استُخدم */}
+      {hintText && (
+        <View style={[styles.hintBox, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
+          <Text style={[styles.hintText, { color: theme.accent }]}>💡 الإجابة تبدأ بـ: "{hintText}"</Text>
+        </View>
+      )}
+
+      {/* وسائل المساعدة — الكلاسيك يدعم: hint, swapSame, swapRandom */}
+      {!answered && (
+        <LifelinesBar
+          mode="classic"
+          tokens={tokens}
+          onSpendTokens={onSpendTokens}
+          onWatchAd={onWatchAdLifeline}
+          onHint={handleHint}
+          onSwapSame={handleSwapSame}
+          onSwapRandom={handleSwapRandom}
+          usedLifelines={usedLifelines}
+          onLifelineUsed={markUsed}
+        />
+      )}
+
       {!showAnswer ? (
-        <TouchableOpacity style={styles.showAnswerBtn} onPress={() => setShowAnswer(true)}>
-          <Text style={styles.showAnswerText}>👁 عرض الإجابة</Text>
+        <TouchableOpacity style={[styles.showAnswerBtn, { backgroundColor: theme.accent }]} onPress={revealAnswer}>
+          <Text style={[styles.showAnswerText, { color: theme.textOnAccent }]}>{t('question.showAnswer')}</Text>
         </TouchableOpacity>
       ) : (
         <View style={styles.answerSection}>
-          <Text style={styles.answerLabel}>الإجابة الصحيحة:</Text>
-          <View style={styles.answerBox}>
-            <Text style={styles.answerText}>{answer}</Text>
+          <Text style={[styles.answerLabel, { color: theme.textSecondary }]}>{t('question.answer')}</Text>
+          <View style={[styles.answerBox, { backgroundColor: theme.bgCard, borderColor: theme.success }]}>
+            <Text style={[styles.answerText, { color: theme.success }]}>{displayA}</Text>
           </View>
-
           {!answered && (
             <View style={styles.whoAnswered}>
-              <Text style={styles.whoLabel}>من أجاب صح؟</Text>
+              <Text style={[styles.whoLabel, { color: theme.textPrimary }]}>{t('question.whoAnswered')}</Text>
               <View style={styles.whoButtons}>
-                <TouchableOpacity style={styles.btnTeam1} onPress={() => { setAnswered(true); onAnswer(1, points); }}>
-                  <Text style={styles.btnTeamText}>✅ {team1}</Text>
+                <TouchableOpacity style={[styles.btnTeam1, { backgroundColor: '#3b82f622', borderColor: '#3b82f655' }]} onPress={handleTeam1}>
+                  <Text style={[styles.btnTeamText, { color: theme.textPrimary }]}>✅ {team1}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.btnTeam2} onPress={() => { setAnswered(true); onAnswer(2, points); }}>
-                  <Text style={styles.btnTeamText}>✅ {team2}</Text>
+                <TouchableOpacity style={[styles.btnTeam2, { backgroundColor: theme.success + '22', borderColor: theme.success + '55' }]} onPress={handleTeam2}>
+                  <Text style={[styles.btnTeamText, { color: theme.textPrimary }]}>✅ {team2}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.btnNone} onPress={() => { setAnswered(true); onAnswer(null, 0); }}>
-                  <Text style={styles.btnNoneText}>❌ لا أحد</Text>
+                <TouchableOpacity style={[styles.btnNone, { backgroundColor: theme.error + '18', borderColor: theme.error + '44' }]} onPress={handleNone}>
+                  <Text style={[styles.btnNoneText, { color: theme.error }]}>❌ {t('question.nobody')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
-
-          {answered && (
-            <TouchableOpacity style={styles.continueBtn} onPress={onBack}>
-              <Text style={styles.continueBtnText}>← العودة للوحة</Text>
-            </TouchableOpacity>
-          )}
         </View>
       )}
     </>
   );
-}
+});
 
-// ── نمط MCQ: 4 خيارات، المستخدم يختار ──
-function MCQMode({ question, answer, wrong, points, team1, team2, currentTeam, onAnswer, onBack }) {
-  const [seconds, setSeconds] = useState(0);
-  const [selected, setSelected] = useState(null);
-  const [choices] = useState(() => shuffleArray([answer, ...wrong]));
+// ══════════════════════════════════════════════════════════════
+//  نمط MCQ — مع LifelineBar
+// ══════════════════════════════════════════════════════════════
+const MCQMode = memo(({
+  question, answer, wrong, points, team1, team2, currentTeam,
+  onAnswer, onBack, onSwapSame, onSwapRandom,
+  tokens, onSpendTokens, onWatchAdLifeline,
+  theme, t,
+}) => {
+  const ARABIC_LETTERS = ['أ', 'ب', 'ج', 'د'];
 
-  useEffect(() => {
-    const timer = setInterval(() => setSeconds(s => s + 1), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const [displayQ,      setDisplayQ]      = useState(question);
+  const [displayA,      setDisplayA]      = useState(answer);
+  const [displayWrong,  setDisplayWrong]  = useState(wrong);
+  const [choices,       setChoices]       = useState(() => shuffleArray([answer, ...wrong]));
+  const [selected,      setSelected]      = useState(null);
+  const [eliminated,    setEliminated]    = useState(new Set()); // خيارات محذوفة
+  const [usedLifelines, setUsedLifelines] = useState(new Set());
 
-  const formatTime = (s) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec < 10 ? '0' : ''}${sec}`;
-  };
+  const isAnswered = !!selected;
+  const markUsed   = useCallback((key) => setUsedLifelines(prev => new Set([...prev, key])), []);
 
-  const handleSelect = (choice) => {
-    if (selected) return;
-    setSelected(choice);
-  };
+  // حذف خيارين خاطئين
+  const handleEliminate = useCallback(() => {
+    const wrongChoices = choices.filter(c => c !== displayA && !eliminated.has(c));
+    const toRemove = shuffleArray(wrongChoices).slice(0, 2);
+    setEliminated(new Set([...eliminated, ...toRemove]));
+  }, [choices, displayA, eliminated]);
 
-  const isCorrect = selected === answer;
+  // تبديل نفس الفئة
+  const handleSwapSame = useCallback(() => {
+    const result = onSwapSame?.();
+    if (result) {
+      setDisplayQ(result.question);
+      setDisplayA(result.answer);
+      setDisplayWrong(result.wrong ?? []);
+      setChoices(shuffleArray([result.answer, ...(result.wrong ?? [])]));
+      setSelected(null);
+      setEliminated(new Set());
+    }
+  }, [onSwapSame]);
+
+  // تبديل عشوائي
+  const handleSwapRandom = useCallback(() => {
+    const result = onSwapRandom?.();
+    if (result) {
+      setDisplayQ(result.question);
+      setDisplayA(result.answer);
+      setDisplayWrong(result.wrong ?? []);
+      setChoices(shuffleArray([result.answer, ...(result.wrong ?? [])]));
+      setSelected(null);
+      setEliminated(new Set());
+    }
+  }, [onSwapRandom]);
 
   const getChoiceStyle = (choice) => {
-    if (!selected) return styles.choiceBtn;
-    if (choice === answer) return [styles.choiceBtn, styles.choiceCorrect];
-    if (choice === selected) return [styles.choiceBtn, styles.choiceWrong];
-    return [styles.choiceBtn, styles.choiceDim];
+    if (eliminated.has(choice)) return [styles.choiceBtn, { opacity: 0.2 }];
+    const base = { backgroundColor: theme.bgCard, borderColor: theme.borderCard };
+    if (!isAnswered) return [styles.choiceBtn, base];
+    if (choice === displayA) return [styles.choiceBtn, { backgroundColor: theme.success + '22', borderColor: '#4aff4a' }];
+    if (choice === selected) return [styles.choiceBtn, { backgroundColor: theme.error + '22', borderColor: '#ff4444' }];
+    return [styles.choiceBtn, base, { opacity: 0.4 }];
   };
 
-  const getChoiceTextStyle = (choice) => {
-    if (!selected) return styles.choiceText;
-    if (choice === answer) return [styles.choiceText, styles.choiceTextCorrect];
-    if (choice === selected) return [styles.choiceText, styles.choiceTextWrong];
-    return [styles.choiceText, styles.choiceTextDim];
+  const getTextColor = (choice) => {
+    if (eliminated.has(choice)) return theme.textMuted;
+    if (!isAnswered) return theme.textPrimary;
+    if (choice === displayA) return '#4aff4a';
+    if (choice === selected) return '#ff4444';
+    return theme.textMuted;
   };
 
   return (
     <>
-      {/* Question */}
-      <View style={styles.questionBox}>
-        <Text style={styles.timerFloating}>⏱ {formatTime(seconds)}</Text>
-        <Text style={styles.questionText}>{question}</Text>
+      <View style={[styles.questionBox, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+        <Text style={[styles.questionText, { color: theme.textPrimary }]}>{displayQ}</Text>
       </View>
 
-      {/* Choices */}
-      <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={styles.choicesContainer}>
+      {/* وسائل المساعدة — MCQ يدعم: eliminate, swapSame, swapRandom, freeze */}
+      {!isAnswered && (
+        <LifelinesBar
+          mode="mcq"
+          tokens={tokens}
+          onSpendTokens={onSpendTokens}
+          onWatchAd={onWatchAdLifeline}
+          onEliminate={handleEliminate}
+          onSwapSame={handleSwapSame}
+          onSwapRandom={handleSwapRandom}
+          usedLifelines={usedLifelines}
+          onLifelineUsed={markUsed}
+        />
+      )}
+
+      <View style={styles.choicesContainer}>
         {choices.map((choice, i) => (
           <TouchableOpacity
             key={i}
             style={getChoiceStyle(choice)}
-            onPress={() => handleSelect(choice)}
-            disabled={!!selected}
+            onPress={() => {
+              if (isAnswered || eliminated.has(choice)) return;
+              setSelected(choice);
+              onAnswer(choice === displayA ? currentTeam : null, choice === displayA ? points : 0);
+            }}
+            disabled={isAnswered || eliminated.has(choice)}
+            activeOpacity={0.85}
           >
-            <View style={styles.choiceRow}>
-              <Text style={styles.choiceLetter}>
-                {['أ', 'ب', 'ج', 'د'][i]}
-              </Text>
-              <Text style={getChoiceTextStyle(choice)}>{choice}</Text>
-              {selected && choice === answer && <Text style={styles.choiceIcon}>✅</Text>}
-              {selected && choice === selected && choice !== answer && <Text style={styles.choiceIcon}>❌</Text>}
-            </View>
+            <Text style={[styles.choiceLetter, { color: theme.accent }]}>{ARABIC_LETTERS[i]}</Text>
+            <Text style={[styles.choiceText, { color: getTextColor(choice) }]}>{choice}</Text>
+            {isAnswered && choice === displayA && <Text>✅</Text>}
+            {isAnswered && choice === selected && choice !== displayA && <Text>❌</Text>}
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
 
-      {/* Result after selection */}
-      {selected && (
-        <View style={styles.mcqResult}>
-          <Text style={[styles.mcqResultText, isCorrect ? styles.mcqCorrectText : styles.mcqWrongText]}>
-            {isCorrect ? '🎉 إجابة صحيحة!' : '💔 إجابة خاطئة!'}
-          </Text>
-          <View style={styles.whoButtons}>
-            {isCorrect && (
-              <>
-                <TouchableOpacity style={styles.btnTeam1} onPress={() => onAnswer(1, points)}>
-                  <Text style={styles.btnTeamText}>✅ {team1} أجاب</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.btnTeam2} onPress={() => onAnswer(2, points)}>
-                  <Text style={styles.btnTeamText}>✅ {team2} أجاب</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            <TouchableOpacity style={isCorrect ? styles.btnNone : styles.continueBtn} onPress={() => onAnswer(null, 0)}>
-              <Text style={isCorrect ? styles.btnNoneText : styles.continueBtnText}>
-                {isCorrect ? '❌ لا أحد' : '← العودة للوحة'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+      {isAnswered && (
+        <TouchableOpacity
+          style={[styles.continueBtn, { backgroundColor: theme.accent }]}
+          onPress={() => onAnswer(null, 0)}
+        >
+          <Text style={[styles.continueBtnText, { color: theme.textOnAccent }]}>{t('question.returnBoard')}</Text>
+        </TouchableOpacity>
       )}
     </>
   );
-}
+});
 
-// ── الشاشة الرئيسية ──
+// ══════════════════════════════════════════════════════════════
+//  الشاشة الرئيسية
+// ══════════════════════════════════════════════════════════════
 export default function QuestionScreen({
-  question,
-  answer,
-  wrong,          // مصفوفة الإجابات الخاطئة (من JSON الجديد)
-  points,
-  category,
-  team1,
-  team2,
-  currentTeam,
-  onAnswer,
-  onBack,
-  mode = 'classic', // 'classic' | 'mcq'
+  question, answer, wrong, points, category,
+  team1, team2, currentTeam, onAnswer, onBack,
+  mode = 'classic',
+  // وسائل المساعدة
+  tokens = 0,
+  onSpendTokens,
+  onSwapSame,
+  onSwapRandom,
+  allCategories,    // لـ swapRandom في الكلاسيك
+  currentCategoryId,
 }) {
+  const { theme } = useTheme();
+  const t = useT();
   const isMCQ = mode === 'mcq' && wrong && wrong.length >= 3;
 
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
+  // محاكاة مشاهدة إعلان — ستُستبدل بـ AdMob
+  const handleWatchAdLifeline = useCallback(async () => {
+    return new Promise(resolve => setTimeout(resolve, 2500));
+  }, []);
 
-      {/* Header */}
+  return (
+    <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
+
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>← رجوع</Text>
+        <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={HIT_SLOP}>
+          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.categoryText}>{category}</Text>
-          <View style={styles.pointsBadge}>
-            <Text style={styles.pointsText}>{points} نقطة</Text>
+          <Text style={[styles.categoryText, { color: theme.textSecondary }]}>{category}</Text>
+          <View style={[styles.pointsBadge, { backgroundColor: theme.accent }]}>
+            <Text style={[styles.pointsText, { color: theme.textOnAccent }]}>{points} {t('common.points')}</Text>
           </View>
         </View>
-        <View style={[styles.modeBadge, isMCQ && styles.modeBadgeMCQ]}>
-          <Text style={styles.modeText}>{isMCQ ? '🔤 MCQ' : '🎙 كلاسيك'}</Text>
+        <View style={[styles.modeBadge, { backgroundColor: theme.bgCard, borderColor: isMCQ ? '#4a8aff55' : theme.accentBorder }]}>
+          <Text style={[styles.modeText, { color: theme.accent }]}>{isMCQ ? t('question.mcq') : t('question.classic')}</Text>
         </View>
       </View>
 
-      {/* Turn indicator */}
-      <View style={styles.turnBar}>
-        <Text style={styles.turnText}>
-          دور فريق: <Text style={styles.turnTeam}>{currentTeam === 1 ? team1 : team2}</Text>
+      <View style={[styles.turnBar, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+        <Text style={[styles.turnText, { color: theme.textSecondary }]}>
+          {t('question.turnTeam')}{' '}
+          <Text style={[styles.turnTeam, { color: theme.accent }]}>{currentTeam === 1 ? team1 : team2}</Text>
         </Text>
       </View>
 
-      {/* Mode Content */}
-      {isMCQ ? (
-        <MCQMode
-          question={question}
-          answer={answer}
-          wrong={wrong}
-          points={points}
-          team1={team1}
-          team2={team2}
-          currentTeam={currentTeam}
-          onAnswer={onAnswer}
-          onBack={onBack}
-        />
-      ) : (
-        <ClassicMode
-          question={question}
-          answer={answer}
-          points={points}
-          team1={team1}
-          team2={team2}
-          currentTeam={currentTeam}
-          onAnswer={onAnswer}
-          onBack={onBack}
-        />
-      )}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {isMCQ ? (
+          <MCQMode
+            question={question} answer={answer} wrong={wrong} points={points}
+            team1={team1} team2={team2} currentTeam={currentTeam}
+            onAnswer={onAnswer} onBack={onBack}
+            onSwapSame={onSwapSame} onSwapRandom={onSwapRandom}
+            tokens={tokens} onSpendTokens={onSpendTokens}
+            onWatchAdLifeline={handleWatchAdLifeline}
+            theme={theme} t={t}
+          />
+        ) : (
+          <ClassicMode
+            question={question} answer={answer} wrong={wrong} points={points}
+            team1={team1} team2={team2} currentTeam={currentTeam}
+            onAnswer={onAnswer} onBack={onBack}
+            onSwapSame={onSwapSame} onSwapRandom={onSwapRandom}
+            tokens={tokens} onSpendTokens={onSpendTokens}
+            onWatchAdLifeline={handleWatchAdLifeline}
+            theme={theme} t={t}
+          />
+        )}
+      </ScrollView>
     </View>
   );
 }
 
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0d0d2b',
-    paddingTop: 50,
-    paddingHorizontal: 20,
-    gap: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backBtn: { padding: 8 },
-  backText: { color: '#f5c518', fontSize: 16, fontWeight: '700' },
-  headerCenter: { alignItems: 'center', gap: 6 },
-  categoryText: { color: '#a09060', fontSize: 16, fontWeight: '700' },
-  pointsBadge: {
-    backgroundColor: '#f5c518',
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  pointsText: { color: '#0d0d2b', fontSize: 14, fontWeight: '900' },
-  modeBadge: {
-    backgroundColor: '#1a1a3e',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#f5c51855',
-  },
-  modeBadgeMCQ: {
-    borderColor: '#4a8aff55',
-    backgroundColor: '#1a1a4e',
-  },
-  modeText: { color: '#f5c518', fontSize: 13, fontWeight: '700' },
-  turnBar: {
-    backgroundColor: '#1a1a3e',
-    padding: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#f5c51833',
-  },
-  turnText: { color: '#a09060', fontSize: 15, fontWeight: '600' },
-  turnTeam: { color: '#f5c518', fontWeight: '900' },
+  container:       { flex: 1, paddingTop: 50, paddingHorizontal: 20 },
+  scrollContent:   { gap: 14, paddingBottom: 30 },
+  header:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  backBtn:         { padding: 8 },
+  backText:        { fontSize: 16, fontWeight: '700' },
+  headerCenter:    { alignItems: 'center', gap: 6 },
+  categoryText:    { fontSize: 16, fontWeight: '700' },
+  pointsBadge:     { paddingHorizontal: 14, paddingVertical: 4, borderRadius: 20 },
+  pointsText:      { fontSize: 14, fontWeight: '900' },
+  modeBadge:       { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  modeText:        { fontSize: 13, fontWeight: '700' },
+  turnBar:         { padding: 12, borderRadius: 12, alignItems: 'center', borderWidth: 1, marginBottom: 4 },
+  turnText:        { fontSize: 15, fontWeight: '600' },
+  turnTeam:        { fontWeight: '900' },
 
-  // ── سؤال ──
-  questionBox: {
-    flex: 1,
-    maxHeight: 220,
-    backgroundColor: '#1a1a3e',
-    borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#2a2a55',
-    position: 'relative',
-  },
-  timerFloating: {
-    position: 'absolute',
-    top: 10,
-    right: 14,
-    color: '#f5c51888',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  questionText: {
-    color: '#ffffff',
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 34,
-  },
+  // سؤال
+  questionBox:     { borderRadius: 20, padding: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, minHeight: 110, position: 'relative' },
+  timerFloating:   { position: 'absolute', top: 10, right: 14, fontSize: 12, fontWeight: '700' },
+  questionText:    { fontSize: 20, fontWeight: '700', textAlign: 'center', lineHeight: 32 },
 
-  // ── كلاسيك ──
-  showAnswerBtn: {
-    backgroundColor: '#f5c518',
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    elevation: 8,
-  },
-  showAnswerText: { color: '#0d0d2b', fontSize: 18, fontWeight: '800' },
-  answerSection: { gap: 12 },
-  answerLabel: { color: '#a09060', fontSize: 14, fontWeight: '700', textAlign: 'center' },
-  answerBox: {
-    backgroundColor: '#1a3a1a',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#2a5a2a',
-  },
-  answerText: { color: '#4aff4a', fontSize: 20, fontWeight: '800', textAlign: 'center' },
-  whoAnswered: { gap: 10 },
-  whoLabel: { color: '#ffffff', fontSize: 16, fontWeight: '800', textAlign: 'center' },
-  whoButtons: { gap: 10 },
-  btnTeam1: {
-    backgroundColor: '#1a3a6e',
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#4a6aae',
-  },
-  btnTeam2: {
-    backgroundColor: '#1a5a3a',
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#4aaa6a',
-  },
-  btnNone: {
-    backgroundColor: '#3a1a1a',
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#7a3a3a',
-  },
-  btnTeamText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
-  btnNoneText: { color: '#ff6666', fontSize: 16, fontWeight: '700' },
-  continueBtn: {
-    backgroundColor: '#f5c518',
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    elevation: 8,
-  },
-  continueBtnText: { color: '#0d0d2b', fontSize: 18, fontWeight: '800' },
+  // تلميح
+  hintBox:         { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
+  hintText:        { fontSize: 14, fontWeight: '700' },
 
-  // ── MCQ ──
-  choicesContainer: { gap: 10 },
-  choiceBtn: {
-    backgroundColor: '#1a1a3e',
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1.5,
-    borderColor: '#2a2a55',
-  },
-  choiceCorrect: {
-    backgroundColor: '#1a3a1a',
-    borderColor: '#4aff4a',
-  },
-  choiceWrong: {
-    backgroundColor: '#3a1a1a',
-    borderColor: '#ff4444',
-  },
-  choiceDim: { opacity: 0.4 },
-  choiceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  choiceLetter: {
-    color: '#f5c518',
-    fontSize: 16,
-    fontWeight: '900',
-    width: 24,
-    textAlign: 'center',
-  },
-  choiceText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
-    textAlign: 'right',
-  },
-  choiceTextCorrect: { color: '#4aff4a' },
-  choiceTextWrong: { color: '#ff6666' },
-  choiceTextDim: { color: '#888' },
-  choiceIcon: { fontSize: 18 },
-  mcqResult: { gap: 12 },
-  mcqResultText: { fontSize: 20, fontWeight: '900', textAlign: 'center' },
-  mcqCorrectText: { color: '#4aff4a' },
-  mcqWrongText: { color: '#ff6666' },
+  // إجابة الكلاسيك
+  showAnswerBtn:   { paddingVertical: 16, borderRadius: 16, alignItems: 'center', elevation: 8 },
+  showAnswerText:  { fontSize: 18, fontWeight: '800' },
+  answerSection:   { gap: 12 },
+  answerLabel:     { fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  answerBox:       { borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1.5 },
+  answerText:      { fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  whoAnswered:     { gap: 10 },
+  whoLabel:        { fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  whoButtons:      { gap: 10 },
+  btnTeam1:        { paddingVertical: 14, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
+  btnTeam2:        { paddingVertical: 14, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
+  btnNone:         { paddingVertical: 14, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
+  btnTeamText:     { color: '#ffffff', fontSize: 16, fontWeight: '700' },
+  btnNoneText:     { color: '#ff6666', fontSize: 16, fontWeight: '700' },
+
+  // خيارات MCQ
+  choicesContainer:{ gap: 10 },
+  choiceBtn:       { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  choiceLetter:    { fontSize: 16, fontWeight: '900', width: 24, textAlign: 'center' },
+  choiceText:      { fontSize: 16, fontWeight: '600', flex: 1, textAlign: 'right' },
+  continueBtn:     { paddingVertical: 16, borderRadius: 16, alignItems: 'center', elevation: 8 },
+  continueBtnText: { fontSize: 18, fontWeight: '800' },
 });

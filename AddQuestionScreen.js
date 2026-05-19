@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, TextInput, StatusBar, ScrollView, Alert } from 'react-native';
+import { useTheme } from './ThemeContext';
 
 export default function AddQuestionScreen({ category, onBack, onSave, onRename }) {
+  const { theme } = useTheme();
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [difficulty, setDifficulty] = useState(100);
@@ -63,26 +65,26 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>→ رجوع</Text>
+          <Text style={[styles.backText, { color: theme.accent }]}>→ رجوع</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{catEmoji} {catName}</Text>
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{questions.length} سؤال</Text>
+        <Text style={[styles.title, { color: theme.accent }]}>{catEmoji} {catName}</Text>
+        <View style={[styles.countBadge, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+          <Text style={[styles.countText, { color: theme.accent }]}>{questions.length} سؤال</Text>
         </View>
       </View>
 
       {/* تعديل اسم الفئة */}
       <View style={styles.section}>
         <TouchableOpacity
-          style={styles.renameToggle}
+          style={[styles.renameToggle, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
           onPress={() => setEditingName(!editingName)}
         >
-          <Text style={styles.renameToggleText}>
+          <Text style={[styles.renameToggleText, { color: theme.accent }]}>
             {editingName ? '🔼 إخفاء تعديل الفئة' : '✏️ تعديل اسم الفئة'}
           </Text>
         </TouchableOpacity>
@@ -90,17 +92,17 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
         {editingName && (
           <View style={styles.renameRow}>
             <TextInput
-              style={[styles.input, { flex: 1 }]}
+              style={[styles.input, { flex: 1, backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
               placeholder="اسم الفئة"
-              placeholderTextColor="#555577"
+              placeholderTextColor={theme.textMuted}
               value={catName}
               onChangeText={setCatName}
               textAlign="right"
             />
             <TextInput
-              style={[styles.input, { width: 60 }]}
+              style={[styles.input, { width: 60, backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
               placeholder="🎯"
-              placeholderTextColor="#555577"
+              placeholderTextColor={theme.textMuted}
               value={catEmoji}
               onChangeText={setCatEmoji}
               textAlign="center"
@@ -111,9 +113,9 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
 
       {/* Add/Edit Question Form */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{editingId ? '✏️ تعديل سؤال' : '➕ إضافة سؤال'}</Text>
+        <Text style={[styles.sectionTitle, { color: theme.accent }]}>{editingId ? '✏️ تعديل سؤال' : '➕ إضافة سؤال'}</Text>
 
-        <Text style={styles.label}>مستوى الصعوبة</Text>
+        <Text style={[styles.label, { color: theme.textSecondary }]}>مستوى الصعوبة</Text>
         <View style={styles.diffRow}>
           {difficulties.map((d) => (
             <TouchableOpacity
@@ -126,11 +128,11 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
           ))}
         </View>
 
-        <Text style={styles.label}>السؤال</Text>
+        <Text style={[styles.label, { color: theme.textSecondary }]}>السؤال</Text>
         <TextInput
-          style={[styles.input, styles.inputMulti]}
+          style={[styles.input, styles.inputMulti, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
           placeholder="اكتب السؤال هنا"
-          placeholderTextColor="#555577"
+          placeholderTextColor={theme.textMuted}
           value={question}
           onChangeText={setQuestion}
           textAlign="right"
@@ -138,11 +140,11 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
           numberOfLines={3}
         />
 
-        <Text style={styles.label}>الإجابة</Text>
+        <Text style={[styles.label, { color: theme.textSecondary }]}>الإجابة</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
           placeholder="الإجابة الصحيحة"
-          placeholderTextColor="#555577"
+          placeholderTextColor={theme.textMuted}
           value={answer}
           onChangeText={setAnswer}
           textAlign="right"
@@ -150,14 +152,14 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
 
         <View style={styles.formButtons}>
           <TouchableOpacity
-            style={[styles.addBtn, (!question.trim() || !answer.trim()) && styles.addBtnDisabled]}
+            style={[styles.addBtn, { backgroundColor: theme.accent }, (!question.trim() || !answer.trim()) && { backgroundColor: theme.bgElevated }]}
             onPress={handleAdd}
           >
-            <Text style={styles.addBtnText}>{editingId ? '💾 حفظ التعديل' : '➕ إضافة السؤال'}</Text>
+            <Text style={[styles.addBtnText, { color: theme.textOnAccent }]}>{editingId ? '💾 حفظ التعديل' : '➕ إضافة السؤال'}</Text>
           </TouchableOpacity>
           {editingId && (
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => { setEditingId(null); setQuestion(''); setAnswer(''); }}>
-              <Text style={styles.cancelBtnText}>❌ إلغاء</Text>
+            <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: theme.bgElevated, borderColor: theme.error + "55" }]} onPress={() => { setEditingId(null); setQuestion(''); setAnswer(''); }}>
+              <Text style={[styles.cancelBtnText, { color: theme.error }]}>❌ إلغاء</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -166,15 +168,15 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
       {/* Questions List */}
       {questions.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📋 الأسئلة ({questions.length})</Text>
+          <Text style={[styles.sectionTitle, { color: theme.accent }]}>📋 الأسئلة ({questions.length})</Text>
           {questions.map((q) => (
-            <View key={q.id} style={styles.questionCard}>
+            <View key={q.id} style={[styles.questionCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
               <View style={[styles.diffBadge, { backgroundColor: difficultyColors[q.difficulty] }]}>
                 <Text style={styles.diffBadgeText}>{q.difficulty}</Text>
               </View>
               <View style={styles.questionInfo}>
-                <Text style={styles.questionText} numberOfLines={2}>{q.text}</Text>
-                <Text style={styles.answerText}>✅ {q.answer}</Text>
+                <Text style={[styles.questionText, { color: theme.textPrimary }]} numberOfLines={2}>{q.text}</Text>
+                <Text style={[styles.answerText, { color: theme.success }]}>✅ {q.answer}</Text>
               </View>
               <View style={styles.qActions}>
                 <TouchableOpacity onPress={() => handleEdit(q)}>
@@ -189,8 +191,8 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
         </View>
       )}
 
-      <TouchableOpacity style={styles.saveBtn} onPress={handleSaveAll}>
-        <Text style={styles.saveBtnText}>💾 حفظ الكل ({questions.length})</Text>
+      <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.bgCard, borderColor: theme.success + "66" }]} onPress={handleSaveAll}>
+        <Text style={[styles.saveBtnText, { color: theme.success }]}>💾 حفظ الكل ({questions.length})</Text>
       </TouchableOpacity>
 
     </ScrollView>
@@ -200,7 +202,7 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#0d0d2b',
+    
     paddingHorizontal: 24,
     paddingVertical: 50,
     gap: 24,
@@ -211,22 +213,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   backBtn: { padding: 8 },
-  backText: { color: '#f5c518', fontSize: 16, fontWeight: '700' },
-  title: { fontSize: 18, fontWeight: '900', color: '#f5c518' },
+  backText: { color: "#f5c518", fontSize: 16, fontWeight: '700' },
+  title: { fontSize: 18, fontWeight: '900', color: "#f5c518" },
   countBadge: {
-    backgroundColor: '#1a1a3e',
+    
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#f5c51855',
   },
-  countText: { color: '#f5c518', fontSize: 13, fontWeight: '700' },
+  countText: { color: "#f5c518", fontSize: 13, fontWeight: '700' },
   section: { gap: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#f5c518' },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: "#f5c518" },
   label: { color: '#a09060', fontSize: 14, fontWeight: '600' },
   renameToggle: {
-    backgroundColor: '#1a1a3e',
+    
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
@@ -234,7 +236,7 @@ const styles = StyleSheet.create({
     borderColor: '#f5c51833',
     alignItems: 'center',
   },
-  renameToggleText: { color: '#f5c518', fontSize: 15, fontWeight: '700' },
+  renameToggleText: { color: "#f5c518", fontSize: 15, fontWeight: '700' },
   renameRow: { flexDirection: 'row', gap: 8 },
   diffRow: { flexDirection: 'row', gap: 8 },
   diffBtn: {
@@ -248,7 +250,7 @@ const styles = StyleSheet.create({
   diffBtnActive: { borderColor: '#f5c518' },
   diffBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
   input: {
-    backgroundColor: '#1a1a3e',
+    
     borderWidth: 1.5,
     borderColor: '#2a2a55',
     borderRadius: 14,
@@ -269,21 +271,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 8,
   },
-  addBtnDisabled: { backgroundColor: '#2a2a45' },
+  addBtnDisabled: {  },
   addBtnText: { color: '#0d0d2b', fontSize: 17, fontWeight: '800' },
   cancelBtn: {
-    backgroundColor: '#3a1a1a',
+    
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#7a3a3a',
+    ,
   },
-  cancelBtnText: { color: '#ff6666', fontSize: 16, fontWeight: '700' },
+  cancelBtnText: { , fontSize: 16, fontWeight: '700' },
   questionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a3e',
+    
     borderRadius: 14,
     padding: 12,
     gap: 12,
@@ -299,13 +301,13 @@ const styles = StyleSheet.create({
   },
   diffBadgeText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
   questionInfo: { flex: 1, gap: 4 },
-  questionText: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
-  answerText: { color: '#4aff4a', fontSize: 12, fontWeight: '600' },
+  questionText: { fontSize: 14, fontWeight: '600' },
+  answerText: { , fontSize: 12, fontWeight: '600' },
   qActions: { gap: 8, alignItems: 'center' },
   editIcon: { fontSize: 20 },
   deleteIcon: { fontSize: 20 },
   saveBtn: {
-    backgroundColor: '#1a5a3a',
+    
     paddingVertical: 18,
     borderRadius: 16,
     alignItems: 'center',

@@ -1,138 +1,49 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Animated, StatusBar, ScrollView, Alert
+  Animated, StatusBar, ScrollView, TextInput,
 } from 'react-native';
+import { useTheme } from './ThemeContext';
+import { ManAnaEngraving } from './GameEngraving';
+import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { useT, useLanguage } from './I18n';
+import { playSound } from './SoundService';
 
-// ── بنك الكلمات ──────────────────────────────────────────────
-const WORDS = {
-  // ── مشاهير عالميون (60) ──────────────────────────────────────
-  مشاهير: [
-    'محمد علي كلاي', 'ميسي', 'كريستيانو رونالدو', 'أم كلثوم', 'فيروز',
-    'عادل إمام', 'براد بيت', 'ستيف جوبز', 'إيلون ماسك', 'نيلسون مانديلا',
-    'ألبرت أينشتاين', 'نابليون', 'كليوباترا', 'شكسبير', 'بيتهوفن',
-    'مايكل جاكسون', 'مارادونا', 'محمد صلاح', 'أوباما', 'هيتلر',
-    'بيل غيتس', 'ماريلين مونرو', 'ليوناردو دافنشي', 'غاندي', 'ماريا كوري',
-    'ستيفن هوكينج', 'إلفيس بريسلي', 'أرسطو', 'سقراط', 'يوليوس قيصر',
-    'تايغر وودز', 'لبرون جيمس', 'أوبرا وينفري', 'جاكي شان', 'بروس لي',
-    'تشارلي شابلن', 'ألفريد هيتشكوك', 'ستيفن سبيلبرغ', 'بيكاسو', 'موزارت',
-    'إسحاق نيوتن', 'داروين', 'فرويد', 'ماركوني', 'توماس إيديسون',
-    'رايت براذرز', 'نيل أرمسترونغ', 'يوري غاغارين', 'مدام تيريزا', 'لينكولن',
-    'تشي غيفارا', 'فيدل كاسترو', 'لينين', 'ستالين', 'ملكة إليزابيث',
-    'ديانا', 'هاري بوتر', 'جاستن بيبر', 'ريهانا', 'بيونسيه',
-  ],
-
-  // ── مشاهير عرب (50) ──────────────────────────────────────────
-  مشاهير_عرب: [
-    'عبدالحليم حافظ', 'وردة الجزائرية', 'نجاة الصغيرة', 'صباح', 'ماجدة الرومي',
-    'كاظم الساهر', 'عمرو دياب', 'محمد عبده', 'طلال مداح', 'فيصل علوي',
-    'رابح صقر', 'عبادي الجوهر', 'نوال الكويتية', 'ديانا حداد', 'أصالة',
-    'نانسي عجرم', 'إليسا', 'هيفاء وهبي', 'نجوى كرم', 'ماجدة',
-    'يوسف شاهين', 'عمر الشريف', 'فاتن حمامة', 'سعاد حسني', 'نادية لطفي',
-    'أحمد زكي', 'محمود عبدالعزيز', 'نور الشريف', 'يحيى الفخراني', 'حسين فهمي',
-    'مني زكي', 'غادة عادل', 'هند صبري', 'يسرا', 'ليلى علوي',
-    'جمال عبدالناصر', 'أنور السادات', 'ياسر عرفات', 'الملك فيصل', 'الملك عبدالعزيز',
-    'زياد الرحباني', 'مرسيل خليفة', 'فيروز', 'وديع الصافي', 'صباح فخري',
-    'أبو بكر سالم', 'محمد حمام', 'حسين الجسمي', 'عبدالله الرويشد', 'ميحد حمد',
-  ],
-
-  // ── شخصيات تاريخية (40) ──────────────────────────────────────
-  تاريخيون: [
-    'صلاح الدين الأيوبي', 'هارون الرشيد', 'المعتصم بالله', 'عمر بن الخطاب', 'خالد بن الوليد',
-    'طارق بن زياد', 'ابن بطوطة', 'ابن خلدون', 'ابن سينا', 'الخوارزمي',
-    'الرازي', 'البيروني', 'عمر الخيام', 'المتنبي', 'الجاحظ',
-    'هولاكو', 'جنكيز خان', 'تيمورلنك', 'سليمان القانوني', 'محمد الفاتح',
-    'ملكة سبأ', 'هرقل', 'الإسكندر الأكبر', 'أغسطس قيصر', 'هانيبال',
-    'ريتشارد قلب الأسد', 'جان دارك', 'كريستوف كولومبس', 'ماجلان', 'فاسكو دي غاما',
-    'شارلمان', 'أتيلا', 'سبارتاكوس', 'رمسيس الثاني', 'أخناتون',
-    'نفرتيتي', 'توت عنخ آمون', 'بطليموس', 'أرخميدس', 'أفلاطون',
-  ],
-
-  // ── رياضيون (40) ─────────────────────────────────────────────
-  رياضيون: [
-    'محمد صلاح', 'ميسي', 'كريستيانو رونالدو', 'مارادونا', 'بيليه',
-    'زيدان', 'رونالدو البرازيلي', 'رونالدينيو', 'كاكا', 'نيمار',
-    'مبابي', 'هالاند', 'لبرون جيمس', 'مايكل جوردان', 'كوبي براينت',
-    'محمد علي كلاي', 'تايسون', 'أنتوني جوشوا', 'تايغر وودز', 'روجر فيدرر',
-    'رافاييل نادال', 'نوفاك ديوكوفيتش', 'سيرينا ويليامز', 'ماريا شارابوفا', 'مايكل فيلبس',
-    'يوسين بولت', 'كارل لويس', 'أيرتون سينا', 'مايكل شوماخر', 'لويس هاميلتون',
-    'غريتزكي', 'كريستيان روسي', 'لانس أرمسترونغ', 'علي بن محمد', 'عمر عبدالرحمن',
-    'عبدالله الطيب', 'سامي الجابر', 'ياسر القحطاني', 'شلبي حسن', 'عمر السومة',
-  ],
-
-  // ── حيوانات (50) ─────────────────────────────────────────────
-  حيوانات: [
-    'أسد', 'فيل', 'زرافة', 'بطريق', 'دلفين', 'قرد', 'نمر', 'تمساح',
-    'ببغاء', 'خروف', 'جمل', 'حصان', 'ذئب', 'ثعلب', 'أرنب',
-    'قنفذ', 'خفاش', 'حوت', 'قرش', 'كنغر',
-    'غوريلا', 'فهد', 'دب قطبي', 'حمار وحشي', 'وحيد القرن',
-    'أخطبوط', 'سلحفاة', 'طاووس', 'نعامة', 'حمامة',
-    'عقرب', 'كوالا', 'باندا', 'بومة', 'أفعى',
-    'غزال', 'فقمة', 'دب بني', 'يمامة', 'خنزير بري',
-    'كركدن', 'لبؤة', 'ضبع', 'نمس', 'وعل',
-    'جرو', 'قطة برية', 'سمكة قرش', 'ثعبان الملك', 'طائر الفلامينغو',
-  ],
-
-  // ── أماكن وصروح (50) ─────────────────────────────────────────
-  أماكن: [
-    'برج إيفل', 'الكعبة المشرفة', 'الأهرامات', 'برج خليفة', 'تمثال الحرية',
-    'الكولوسيوم', 'سور الصين', 'أبو سمبل', 'بيج بن', 'ساحة تيانانمن',
-    'شلالات نياغارا', 'جبل فوجي', 'البتراء', 'ماتشو بيتشو', 'برج بيزا المائل',
-    'تاج محل', 'الكرملين', 'البيت الأبيض', 'أوبرا سيدني', 'جسر البوابة الذهبية',
-    'أنغكور وات', 'جبل إيفرست', 'الصحراء الكبرى', 'الحرم النبوي', 'البحر الميت',
-    'جزيرة المالديف', 'الأكروبول', 'برج لندن', 'قصر باكنغهام', 'مدينة البندقية',
-    'مدينة بومبي', 'الريف الأيرلندي', 'منطقة الساحل العاجي', 'جزيرة هاواي', 'جزيرة سنتوريني',
-    'نهر الأمازون', 'نهر النيل', 'بحيرة تيتيكاكا', 'غابة الأمازون', 'منطقة الفيوم',
-    'مدينة شنغهاي', 'برج سيول', 'جسر البوسفور', 'بازار إسطنبول', 'متحف اللوفر',
-    'قصر فرساي', 'كازينو مونت كارلو', 'جزيرة سنغافورة', 'بوابة الهند', 'خليج هالونغ',
-  ],
-
-  // ── دول (60) ──────────────────────────────────────────────────
-  دول: [
-    'السعودية', 'مصر', 'فرنسا', 'أمريكا', 'الصين',
-    'اليابان', 'البرازيل', 'روسيا', 'ألمانيا', 'إيطاليا',
-    'الهند', 'أستراليا', 'كندا', 'المكسيك', 'إسبانيا',
-    'تركيا', 'إيران', 'باكستان', 'نيجيريا', 'جنوب أفريقيا',
-    'إندونيسيا', 'تايلاند', 'المغرب', 'الجزائر', 'العراق',
-    'الكويت', 'الإمارات', 'قطر', 'سويسرا', 'السويد',
-    'البرتغال', 'هولندا', 'اليونان', 'بولندا', 'كوريا الجنوبية',
-    'الأرجنتين', 'كولومبيا', 'كينيا', 'إثيوبيا', 'نيوزيلندا',
-    'ليبيا', 'تونس', 'سوريا', 'لبنان', 'الأردن',
-    'اليمن', 'عُمان', 'البحرين', 'أذربيجان', 'أوكرانيا',
-    'بلجيكا', 'النمسا', 'المجر', 'تشيكيا', 'رومانيا',
-    'الفلبين', 'ماليزيا', 'فيتنام', 'بنغلاديش', 'سريلانكا',
-  ],
-
-  // ── عواصم (50) ───────────────────────────────────────────────
-  عواصم: [
-    'الرياض', 'القاهرة', 'باريس', 'واشنطن', 'بكين',
-    'طوكيو', 'برازيليا', 'موسكو', 'برلين', 'روما',
-    'نيودلهي', 'كانبيرا', 'أوتاوا', 'مكسيكو سيتي', 'مدريد',
-    'أنقرة', 'طهران', 'إسلام آباد', 'أبوجا', 'بريتوريا',
-    'جاكرتا', 'بانكوك', 'الرباط', 'الجزائر', 'بغداد',
-    'الكويت', 'أبوظبي', 'الدوحة', 'برن', 'ستوكهولم',
-    'لشبونة', 'أمستردام', 'أثينا', 'وارسو', 'سيول',
-    'بوينس آيريس', 'بوغوتا', 'نيروبي', 'أديس أبابا', 'ويلينغتون',
-    'طرابلس', 'تونس', 'دمشق', 'بيروت', 'عمان',
-    'صنعاء', 'مسقط', 'المنامة', 'باكو', 'كييف',
-  ],
-
-  // ── شخصيات خيالية (50) ───────────────────────────────────────
-  شخصيات_خيالية: [
-    'سوبرمان', 'باتمان', 'سبايدرمان', 'الرجل الحديدي', 'الهالك',
-    'شيرلوك هولمز', 'جيمس بوند', 'إنديانا جونز', 'جاك سبارو', 'هاري بوتر',
-    'هيرميون غرينجر', 'فرودو', 'غاندالف', 'دراكولا', 'فرانكنشتاين',
-    'زورو', 'روبن هود', 'تارزان', 'سوبرمان', 'وندر وومن',
-    'كابتن أمريكا', 'ثور', 'هالك', 'ديدبول', 'ووفرين',
-    'يودا', 'دارث فيدر', 'لوك سكايووكر', 'أوبي وان', 'ر2-د2',
-    'شرك', 'سمبا', 'موانا', 'الأميرة ياسمين', 'علاء الدين',
-    'سندريلا', 'بياض الثلج', 'الجميلة والوحش', 'رابونزيل', 'أليس',
-    'نيمو', 'دوري', 'وودي', 'باز لايتيير', 'ميكي ماوس',
-    'دونالد داك', 'توم وجيري', 'باغز باني', 'سكوبي دو', 'أستريكس',
-  ],
+// ══════════════════════════════════════════════════════════════
+//  قوائم الكلمات — التجربة العربية
+// ══════════════════════════════════════════════════════════════
+const WORDS_AR = {
+  مشاهير: ['محمد علي كلاي','ميسي','كريستيانو رونالدو','أم كلثوم','فيروز','عادل إمام','براد بيت','ستيف جوبز','إيلون ماسك','نيلسون مانديلا','ألبرت أينشتاين','نابليون','كليوباترا','شكسبير','بيتهوفن','مايكل جاكسون','مارادونا','محمد صلاح','أوباما','هيتلر','بيل غيتس','ماريلين مونرو','ليوناردو دافنشي','غاندي','ماريا كوري','ستيفن هوكينج','إلفيس بريسلي','أرسطو','سقراط','يوليوس قيصر','تايغر وودز','لبرون جيمس','أوبرا وينفري','جاكي شان','بروس لي','تشارلي شابلن','ألفريد هيتشكوك','ستيفن سبيلبرغ','بيكاسو','موزارت','إسحاق نيوتن','داروين','فرويد','توماس إيديسون','نيل أرمسترونغ','يوري غاغارين','مدام تيريزا','لينكولن','جاستن بيبر','ريهانا'],
+  مشاهير_عرب: ['عبدالحليم حافظ','وردة الجزائرية','نجاة الصغيرة','صباح','ماجدة الرومي','كاظم الساهر','عمرو دياب','محمد عبده','طلال مداح','فيصل علوي','رابح صقر','عبادي الجوهر','نوال الكويتية','ديانا حداد','أصالة','نانسي عجرم','إليسا','هيفاء وهبي','نجوى كرم','ماجدة','يوسف شاهين','عمر الشريف','فاتن حمامة','سعاد حسني','نادية لطفي','أحمد زكي','محمود عبدالعزيز','نور الشريف','يحيى الفخراني','حسين فهمي','مني زكي','غادة عادل','هند صبري','يسرا','ليلى علوي'],
+  تاريخيون: ['صلاح الدين الأيوبي','هارون الرشيد','عمر بن الخطاب','خالد بن الوليد','طارق بن زياد','ابن بطوطة','ابن خلدون','ابن سينا','الخوارزمي','الرازي','عمر الخيام','المتنبي','هولاكو','جنكيز خان','سليمان القانوني','محمد الفاتح','ملكة سبأ','الإسكندر الأكبر','يوليوس قيصر','هانيبال','ريتشارد قلب الأسد','جان دارك','كريستوف كولومبس','رمسيس الثاني','توت عنخ آمون'],
+  رياضيون: ['محمد صلاح','ميسي','كريستيانو رونالدو','مارادونا','بيليه','زيدان','رونالدو البرازيلي','رونالدينيو','كاكا','نيمار','مبابي','هالاند','لبرون جيمس','مايكل جوردان','كوبي براينت','محمد علي كلاي','تايسون','تايغر وودز','روجر فيدرر','رافاييل نادال','يوسين بولت','كارل لويس','مايكل شوماخر','لويس هاميلتون','سامي الجابر'],
+  حيوانات: ['أسد','فيل','زرافة','بطريق','دلفين','قرد','نمر','تمساح','ببغاء','خروف','جمل','حصان','ذئب','ثعلب','أرنب','قنفذ','خفاش','حوت','قرش','كنغر','غوريلا','فهد','دب قطبي','حمار وحشي','وحيد القرن','أخطبوط','سلحفاة','طاووس','نعامة','حمامة','عقرب','كوالا','باندا','بومة','أفعى'],
+  أماكن: ['برج إيفل','الكعبة المشرفة','الأهرامات','برج خليفة','تمثال الحرية','الكولوسيوم','سور الصين','أبو سمبل','بيج بن','شلالات نياغارا','جبل فوجي','البتراء','ماتشو بيتشو','برج بيزا المائل','أنغكور وات','تاج محل','أكروبوليس','ستونهنج','جبل إيفرست','الصحراء الكبرى','نهر النيل','نهر الأمازون','البحر الميت','مضيق هرمز'],
+  أفلام: ['تيتانيك','أفاتار','الأسد الملك','شيرلوك هولمز','هاري بوتر','سبيدرمان','باتمان','سوبرمان','آيرون مان','كابتن أمريكا','إنترستيلار','ذا ماتريكس','جوراسيك بارك','لوردز أوف ذا رينجز','ستار وورز','ذا أفنجرز','فروزن','فايندينغ نيمو','شريك','كارز'],
+  مهن: ['طبيب','مهندس','محامٍ','معلم','طيار','رجل إطفاء','شرطي','جراح','عالم','فنان','موسيقار','ممثل','مصمم','صحفي','مبرمج','مدير','رياضي','شيف','معماري','عازف'],
+  كرتون: ['توم وجيري','باجز باني','سكوبي دو','سبونج بوب','ميكي ماوس','دونالد داك','أسماء','الملك سمبا','علاء الدين','سيندريلا','بياض الثلج','بينوكيو','دمبو','باماي','تارزان'],
 };
 
-const ALL_WORDS = Object.values(WORDS).flat();
+const WORDS_EN = {
+  celebrities: ['Muhammad Ali','Messi','Cristiano Ronaldo','Taylor Swift','Beyoncé','Tom Hanks','Brad Pitt','Steve Jobs','Elon Musk','Nelson Mandela','Albert Einstein','Napoleon','Cleopatra','Shakespeare','Beethoven','Michael Jackson','Maradona','Mohamed Salah','Obama','Hitler','Bill Gates','Marilyn Monroe','Leonardo da Vinci','Gandhi','Marie Curie','Stephen Hawking','Elvis Presley','Aristotle','Socrates','Julius Caesar','Tiger Woods','LeBron James','Oprah Winfrey','Jackie Chan','Bruce Lee','Charlie Chaplin','Alfred Hitchcock','Steven Spielberg','Picasso','Mozart','Isaac Newton','Darwin','Freud','Thomas Edison','Neil Armstrong','Yuri Gagarin','Mother Teresa','Lincoln','Justin Bieber','Rihanna'],
+  celebrities2: ['Lady Gaga','Madonna','Ariana Grande','Adele','Ed Sheeran','Drake','Eminem','Kanye West','Jay-Z','Justin Timberlake','Leonardo DiCaprio','Johnny Depp','Robert Downey Jr','Scarlett Johansson','Jennifer Lawrence','Angelina Jolie','Will Smith','Denzel Washington','Morgan Freeman','Robert De Niro','Al Pacino','Tom Cruise','Keanu Reeves','Dwayne Johnson','Chris Hemsworth','Ryan Reynolds','Emma Watson','Kim Kardashian','Kylie Jenner','Cardi B','Billie Eilish','Selena Gomez','Harry Styles','BTS','Shakira'],
+  historical: ['Saladin','Charlemagne','George Washington','Winston Churchill','Abraham Lincoln','Christopher Columbus','Marco Polo','Ibn Battuta','Ibn Sina','Leonardo da Vinci','Omar Khayyam','Galileo','Genghis Khan','Attila the Hun','Suleiman the Magnificent','Mehmed the Conqueror','Queen Elizabeth I','Alexander the Great','Julius Caesar','Hannibal','Richard the Lionheart','Joan of Arc','Napoleon Bonaparte','Ramses II','Tutankhamun'],
+  athletes: ['Mohamed Salah','Messi','Cristiano Ronaldo','Maradona','Pelé','Zidane','Ronaldo (Brazil)','Ronaldinho','Kaká','Neymar','Mbappé','Haaland','LeBron James','Michael Jordan','Kobe Bryant','Muhammad Ali','Mike Tyson','Tiger Woods','Roger Federer','Rafael Nadal','Usain Bolt','Carl Lewis','Michael Schumacher','Lewis Hamilton','Serena Williams'],
+  animals: ['Lion','Elephant','Giraffe','Penguin','Dolphin','Monkey','Tiger','Crocodile','Parrot','Sheep','Camel','Horse','Wolf','Fox','Rabbit','Hedgehog','Bat','Whale','Shark','Kangaroo','Gorilla','Cheetah','Polar Bear','Zebra','Rhinoceros','Octopus','Turtle','Peacock','Ostrich','Pigeon','Scorpion','Koala','Panda','Owl','Snake'],
+  places: ['Eiffel Tower','Statue of Liberty','Pyramids of Giza','Burj Khalifa','White House','Colosseum','Great Wall of China','Mount Rushmore','Big Ben','Niagara Falls','Mount Fuji','Petra','Machu Picchu','Leaning Tower of Pisa','Angkor Wat','Taj Mahal','Acropolis','Stonehenge','Grand Canyon','Mount Everest','Sahara Desert','Nile River','Amazon River','Dead Sea','Sydney Opera House'],
+  movies: ['Titanic','Avatar','The Lion King','Sherlock Holmes','Harry Potter','Spider-Man','Batman','Superman','Iron Man','Captain America','Interstellar','The Matrix','Jurassic Park','Lord of the Rings','Star Wars','The Avengers','Frozen','Finding Nemo','Shrek','Cars'],
+  professions: ['Doctor','Engineer','Lawyer','Teacher','Pilot','Firefighter','Police Officer','Surgeon','Scientist','Artist','Musician','Actor','Designer','Journalist','Programmer','Manager','Athlete','Chef','Architect','Dancer'],
+  cartoons: ['Tom and Jerry','Bugs Bunny','Scooby-Doo','SpongeBob','Mickey Mouse','Donald Duck','Pikachu','Simba','Aladdin','Cinderella','Snow White','Pinocchio','Dumbo','Bambi','Tarzan'],
+};
+
+const ALL_WORDS_AR = Object.values(WORDS_AR).flat();
+const ALL_WORDS_EN = Object.values(WORDS_EN).flat();
+
+// ─── نقاط ───────────────────────────────────────────────────
+const POINTS_CORRECT = 10;
+const POINTS_SKIP    = -2;
+// ─── ثواني العداد قبل ظهور الكلمة ──────────────────────────
+const REVEAL_COUNTDOWN = 3;
 
 function shuffle(arr) {
   const a = [...arr];
@@ -143,341 +54,546 @@ function shuffle(arr) {
   return a;
 }
 
-// ── شاشة الإعداد ─────────────────────────────────────────────
-function SetupScreen({ onStart }) {
+// ══════════════════════════════════════════════════════════════
+//  شاشة الإعداد — إدخال أسماء اللاعبين
+// ══════════════════════════════════════════════════════════════
+function SetupScreen({ onStart, theme, t, isGlobal }) {
   const [playerCount, setPlayerCount] = useState(4);
-  const [timeLimit, setTimeLimit] = useState(60);
+  const [timeLimit,   setTimeLimit]   = useState(120);
+  const [names,       setNames]       = useState(['','','','']);
+
+  const updateName = (i, v) => setNames(prev => { const n = [...prev]; n[i] = v; return n; });
+
+  const syncCount = (count) => {
+    setPlayerCount(count);
+    setNames(prev => {
+      const n = [...prev];
+      while (n.length < count) n.push('');
+      return n.slice(0, count);
+    });
+  };
+
+  const handleStart = () => {
+    const finalNames = names.map((nm, i) =>
+      nm.trim() ? nm.trim() : (isGlobal ? `Player ${i + 1}` : `لاعب ${i + 1}`)
+    );
+    onStart({ playerCount, timeLimit, names: finalNames });
+  };
 
   return (
-    <ScrollView style={setup.container} contentContainerStyle={setup.content}>
-      <Text style={setup.title}>🤔 من أنا؟</Text>
-      <Text style={setup.subtitle}>ارفع الهاتف على جبهتك وخمّن من أنت</Text>
+    <ScrollView contentContainerStyle={[styles.setupContainer, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
+      <Text style={[styles.title, { color: theme.accent }]}>
+        {isGlobal ? '🤔 Who Am I?' : '🤔 من أنا؟'}
+      </Text>
+      <Text style={[styles.subtitle, { color: theme.textMuted }]}>
+        {isGlobal ? 'Hold phone to forehead and guess' : 'ارفع الهاتف على جبهتك وخمّن الشخصية'}
+      </Text>
 
       {/* عدد اللاعبين */}
-      <View style={setup.section}>
-        <Text style={setup.label}>عدد اللاعبين</Text>
-        <View style={setup.options}>
-          {[2, 3, 4, 5, 6, 7, 8].map(n => (
+      <View style={styles.section}>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+          {isGlobal ? 'Number of Players' : 'عدد اللاعبين'}
+        </Text>
+        <View style={styles.options}>
+          {[2,3,4,5,6,7,8].map(n => (
             <TouchableOpacity
               key={n}
-              style={[setup.optBtn, playerCount === n && setup.optBtnActive]}
-              onPress={() => setPlayerCount(n)}
+              style={[styles.optBtn, { backgroundColor: theme.bgCard, borderColor: theme.border },
+                playerCount === n && { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}
+              onPress={() => syncCount(n)}
+              activeOpacity={0.8}
             >
-              <Text style={[setup.optText, playerCount === n && setup.optTextActive]}>{n}</Text>
+              <Text style={[styles.optText, { color: playerCount === n ? theme.accent : theme.textMuted }]}>{n}</Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
+      {/* أسماء اللاعبين */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+          {isGlobal ? 'Player Names' : 'أسماء اللاعبين'}
+        </Text>
+        {names.map((nm, i) => (
+          <TextInput
+            key={i}
+            style={[styles.nameInput, { backgroundColor: theme.bgCard, borderColor: theme.border, color: theme.textPrimary }]}
+            placeholder={isGlobal ? `Player ${i + 1}` : `لاعب ${i + 1}`}
+            placeholderTextColor={theme.textMuted}
+            value={nm}
+            onChangeText={v => updateName(i, v)}
+            maxLength={20}
+          />
+        ))}
+      </View>
+
       {/* الوقت */}
-      <View style={setup.section}>
-        <Text style={setup.label}>وقت كل جولة</Text>
-        <View style={setup.options}>
-          {[60, 90, 120].map(t => (
+      <View style={styles.section}>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+          {isGlobal ? 'Time Per Turn' : 'وقت كل دور'}
+        </Text>
+        <View style={styles.options}>
+          {[60,90,120].map(tv => (
             <TouchableOpacity
-              key={t}
-              style={[setup.optBtn, timeLimit === t && setup.optBtnActive]}
-              onPress={() => setTimeLimit(t)}
+              key={tv}
+              style={[styles.optBtn, { backgroundColor: theme.bgCard, borderColor: theme.border },
+                timeLimit === tv && { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}
+              onPress={() => setTimeLimit(tv)}
+              activeOpacity={0.8}
             >
-              <Text style={[setup.optText, timeLimit === t && setup.optTextActive]}>
-                {t}ث
+              <Text style={[styles.optText, { color: timeLimit === tv ? theme.accent : theme.textMuted }]}>
+                {isGlobal ? `${tv}s` : `${tv}ث`}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
-      <TouchableOpacity style={setup.startBtn} onPress={() => onStart({ playerCount, timeLimit })}>
-        <Text style={setup.startText}>ابدأ اللعبة ←</Text>
+      <TouchableOpacity style={[styles.startBtn, { backgroundColor: theme.accent }]} onPress={handleStart} activeOpacity={0.85}>
+        <Text style={[styles.startText, { color: theme.textOnAccent }]}>
+          {isGlobal ? 'Start Game →' : 'ابدأ اللعبة ←'}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
-// ── شاشة اللعب ───────────────────────────────────────────────
-function PlayScreen({ playerCount, timeLimit, onBack }) {
-  const words = useRef(shuffle(ALL_WORDS)).current;
-  const [wordIndex, setWordIndex] = useState(0);
-  const [currentPlayer, setCurrentPlayer] = useState(1);
-  const [scores, setScores] = useState(Array(playerCount).fill(0));
-  const [timeLeft, setTimeLeft] = useState(timeLimit);
-  const [phase, setPhase] = useState('ready'); // ready | playing | result
-  const [revealed, setRevealed] = useState(false);
-  const tiltAnim = useRef(new Animated.Value(0)).current;
+// ══════════════════════════════════════════════════════════════
+//  شاشة اللعب الرئيسية
+// ══════════════════════════════════════════════════════════════
+function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isGlobal, themeId }) {
+  const { lang } = useLanguage();
+  const wordsPool = isGlobal ? ALL_WORDS_EN : ALL_WORDS_AR;
+  const words = useRef(shuffle(wordsPool)).current;
 
-  // تايمر
+  // ترتيب اللاعبين عشوائي
+  const playerOrder = useRef(shuffle([...Array(playerCount).keys()])).current; // indices 0..n-1
+
+  const [turnIndex,    setTurnIndex]    = useState(0);       // index في playerOrder
+  const [wordIndex,    setWordIndex]    = useState(0);
+  const [scores,       setScores]       = useState(() => Array(playerCount).fill(0));
+  const [timeLeft,     setTimeLeft]     = useState(timeLimit);
+  // phases: 'between' | 'countdown' | 'playing' | 'result' | 'finished'
+  const [phase,        setPhase]        = useState('between');
+  const [revealCount,  setRevealCount]  = useState(0); // عداد 3 ثواني قبل الكلمة
+
+  const tiltAnim = useRef(new Animated.Value(0)).current;
+  const tiltLoop = useRef(null);
+
+  const currentPlayerIdx  = playerOrder[turnIndex]; // 0-based index في scores/names
+  const currentPlayerName = playerNames[currentPlayerIdx];
+  const totalTurns        = playerCount;
+
+  // ─── مؤقت اللعب ────────────────────────────────────────────
   useEffect(() => {
     if (phase !== 'playing') return;
     if (timeLeft <= 0) { setPhase('result'); return; }
-    const t = setTimeout(() => setTimeLeft(s => s - 1), 1000);
-    return () => clearTimeout(t);
+    if (timeLeft <= 5) playSound('countdown');
+    const timer = setTimeout(() => setTimeLeft(s => s - 1), 1000);
+    return () => clearTimeout(timer);
   }, [phase, timeLeft]);
 
-  // أنيميشن إمالة الهاتف
+  // ─── عداد الـ 3 ثواني قبل ظهور الكلمة ──────────────────────
+  useEffect(() => {
+    if (phase !== 'countdown') return;
+    if (revealCount <= 0) { setPhase('playing'); return; }
+    const timer = setTimeout(() => setRevealCount(c => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [phase, revealCount]);
+
+  // ─── حركة الهاتف ───────────────────────────────────────────
   useEffect(() => {
     if (phase === 'playing') {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(tiltAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
-          Animated.timing(tiltAnim, { toValue: 0, duration: 1200, useNativeDriver: true }),
-        ])
-      ).start();
+      tiltLoop.current = Animated.loop(Animated.sequence([
+        Animated.timing(tiltAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+        Animated.timing(tiltAnim, { toValue: 0, duration: 1200, useNativeDriver: true }),
+      ]));
+      tiltLoop.current.start();
     } else {
+      tiltLoop.current?.stop();
       tiltAnim.setValue(0);
     }
+    return () => tiltLoop.current?.stop();
   }, [phase]);
 
-  function startRound() {
+  const startReveal = useCallback(() => {
+    setRevealCount(REVEAL_COUNTDOWN);
+    setPhase('countdown');
+  }, []);
+
+  const startRound = useCallback(() => {
     setPhase('playing');
     setTimeLeft(timeLimit);
-    setRevealed(false);
-  }
+  }, [timeLimit]);
 
-  function gotIt() {
-    const newScores = [...scores];
-    newScores[currentPlayer - 1] += 1;
-    setScores(newScores);
-    nextWord();
-  }
-
-  function skip() {
-    nextWord();
-  }
-
-  function nextWord() {
-    if (wordIndex + 1 >= words.length) {
-      setPhase('result');
-      return;
-    }
+  const nextWord = useCallback(() => {
+    if (wordIndex + 1 >= words.length) { setPhase('result'); return; }
+    setRevealCount(REVEAL_COUNTDOWN);
+    setPhase('countdown');
     setWordIndex(i => i + 1);
-  }
+  }, [wordIndex, words.length]);
 
-  function nextPlayer() {
-    const next = (currentPlayer % playerCount) + 1;
-    setCurrentPlayer(next);
-    setPhase('ready');
-    setRevealed(false);
-  }
+  const gotIt = useCallback(() => {
+    setScores(prev => { const n = [...prev]; n[currentPlayerIdx] += POINTS_CORRECT; return n; });
+    nextWord();
+  }, [currentPlayerIdx, nextWord]);
 
-  const rotate = tiltAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['-5deg', '5deg'],
-  });
+  const skip = useCallback(() => {
+    setScores(prev => { const n = [...prev]; n[currentPlayerIdx] = Math.max(0, n[currentPlayerIdx] + POINTS_SKIP); return n; });
+    nextWord();
+  }, [currentPlayerIdx, nextWord]);
 
-  // شاشة النتائج النهائية
-  if (words.length === 0 || (phase === 'result' && currentPlayer === playerCount)) {
-    const maxScore = Math.max(...scores);
-    const winner = scores.indexOf(maxScore) + 1;
-    return (
-      <View style={play.container}>
-        <Text style={play.bigEmoji}>🏆</Text>
-        <Text style={play.winnerText}>اللاعب {winner} فاز!</Text>
-        <Text style={play.winnerScore}>{maxScore} نقطة</Text>
-        <View style={play.allScores}>
-          {scores.map((s, i) => (
-            <Text key={i} style={play.scoreRow}>
-              اللاعب {i + 1}: {s} نقطة {i + 1 === winner ? '👑' : ''}
-            </Text>
-          ))}
-        </View>
-        <TouchableOpacity style={play.actionBtn} onPress={onBack}>
-          <Text style={play.actionText}>العودة للقائمة</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // شاشة النتيجة بعد الجولة
-  if (phase === 'result') {
-    return (
-      <View style={play.container}>
-        <Text style={play.bigEmoji}>⏱️</Text>
-        <Text style={play.roundTitle}>انتهى وقت اللاعب {currentPlayer}</Text>
-        <Text style={play.scoreNow}>نقاطه: {scores[currentPlayer - 1]}</Text>
-        <TouchableOpacity style={play.actionBtn} onPress={nextPlayer}>
-          <Text style={play.actionText}>دور اللاعب {(currentPlayer % playerCount) + 1} ←</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // شاشة الاستعداد
-  if (phase === 'ready') {
-    return (
-      <View style={play.container}>
-        <Text style={play.bigEmoji}>📱</Text>
-        <Text style={play.roundTitle}>دور اللاعب {currentPlayer}</Text>
-        <Text style={play.instruction}>
-          ارفع الهاتف على جبهتك{'\n'}ثم اضغط ابدأ
-        </Text>
-        <TouchableOpacity style={play.actionBtn} onPress={startRound}>
-          <Text style={play.actionText}>ابدأ ←</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // شاشة اللعب الفعلية
-  return (
-    <View style={play.container}>
-      {/* تايمر */}
-      <View style={[play.timerWrap, timeLeft <= 10 && play.timerWrapRed]}>
-        <Text style={[play.timer, timeLeft <= 10 && play.timerRed]}>{timeLeft}</Text>
-      </View>
-
-      {/* الكلمة */}
-      <Animated.View style={[play.wordCard, { transform: [{ rotate }] }]}>
-        <Text style={play.word}>{words[wordIndex]}</Text>
-      </Animated.View>
-
-      {/* أزرار */}
-      <View style={play.btns}>
-        <TouchableOpacity style={play.skipBtn} onPress={skip}>
-          <Text style={play.skipText}>تخطي ⏭</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={play.correctBtn} onPress={gotIt}>
-          <Text style={play.correctText}>✓ صح</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={play.scoreHint}>نقاط اللاعب {currentPlayer}: {scores[currentPlayer - 1]}</Text>
-    </View>
-  );
-}
-
-// ── المكوّن الرئيسي ─────────────────────────────────────────
-export default function ManAnaScreen({ onBack, tokens = 0, onSpendTokens, onOpenTokenModal }) {
-  const [gameStarted, setGameStarted] = useState(false);
-  const [config, setConfig] = useState(null);
-
-  function handleStart(cfg) {
-    if (tokens < 10) {
-      Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز لبدء اللعبة', [
-        { text: 'اذهب إلى السوق', onPress: () => onOpenTokenModal && onOpenTokenModal() },
-        { text: 'إلغاء', style: 'cancel' },
-      ]);
-      return;
+  const nextTurn = useCallback(() => {
+    const next = turnIndex + 1;
+    if (next >= totalTurns) {
+      setPhase('finished');
+    } else {
+      setTurnIndex(next);
+      setPhase('between');
+      setWordIndex(wi => wi); // keep global word index advancing
     }
-    onSpendTokens && onSpendTokens(10);
-    setConfig(cfg);
-    setGameStarted(true);
-  }
+  }, [turnIndex, totalTurns]);
 
-  return (
-    <View style={{ flex: 1, backgroundColor: '#06061a' }}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={topBar.header}>
-        <TouchableOpacity style={topBar.backBtn} onPress={onBack}>
-          <Text style={topBar.backText}>←</Text>
+  const rotate = tiltAnim.interpolate({ inputRange: [0, 1], outputRange: ['-5deg', '5deg'] });
+
+  // ─── شريط تقدم اللعبة + زر خروج (مشترك في الأعلى) ─────────
+  const TopBar = ({ showProgress = true }) => (
+    <View style={styles.topBar}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+        <TouchableOpacity onPress={onBack} hitSlop={HIT_SLOP} style={styles.exitBtn}>
+          <Text style={[styles.exitText, { color: theme.accent }]}>
+            {isGlobal ? '✕ Exit' : '✕ خروج'}
+          </Text>
         </TouchableOpacity>
-        <Text style={topBar.title}>🤔 من أنا؟</Text>
-        <View style={topBar.tokenBadge}>
-          <Text style={topBar.tokenText}>🪙 {tokens}</Text>
-        </View>
-      </View>
-
-      {!gameStarted ? (
-        <SetupScreen onStart={handleStart} />
-      ) : (
-        <PlayScreen
-          playerCount={config.playerCount}
-          timeLimit={config.timeLimit}
-          onBack={onBack}
+        <GameInfoButton gameType="man_ana" lang={lang} />
+        <WebScreenButton
+          playerUid={`mana_${playerNames?.[0] || 'p0'}`}
+          playerName={currentPlayerName || ''}
+          gameType="man_ana"
+          getPublicData={() => ({ currentWord: word, turnIndex, currentPlayer: currentPlayerName })}
+          themeName={themeId || 'dark'}
         />
+      </View>
+      {showProgress && (
+        <View style={styles.progressWrap}>
+          <Text style={[styles.turnLabel, { color: theme.textMuted }]}>
+            {isGlobal ? `Turn ${turnIndex + 1}/${totalTurns}` : `دور ${turnIndex + 1}/${totalTurns}`}
+          </Text>
+          <View style={[styles.progressTrack, { backgroundColor: theme.border }]}>
+            <View style={[styles.progressFill, { backgroundColor: theme.accent, width: `${((turnIndex) / totalTurns) * 100}%` }]} />
+          </View>
+        </View>
       )}
     </View>
   );
+
+  // ══════════════════════════════════════════════════════════════
+  // ── 🏁 الشاشة النهائية ──────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  if (phase === 'finished') {
+    const ranked = scores
+      .map((s, i) => ({ name: playerNames[i], score: s, idx: i }))
+      .sort((a, b) => b.score - a.score);
+    const medals = ['🥇','🥈','🥉'];
+    return (
+      <View style={[styles.screen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <TopBar showProgress={false} />
+        <ScrollView contentContainerStyle={styles.finishedContent}>
+          <Text style={styles.trophyEmoji}>🏆</Text>
+          <Text style={[styles.winnerName, { color: theme.accent }]}>{ranked[0].name}</Text>
+          <Text style={[styles.winnerScore, { color: theme.textPrimary }]}>
+            {ranked[0].score} {isGlobal ? 'pts' : 'نقطة'}
+          </Text>
+          <View style={[styles.rankList, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+            {ranked.map((r, i) => (
+              <View key={r.idx} style={[styles.rankRow, i < ranked.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border }]}>
+                <Text style={styles.rankMedal}>{medals[i] ?? `#${i + 1}`}</Text>
+                <Text style={[styles.rankName, { color: theme.textPrimary }]}>{r.name}</Text>
+                <Text style={[styles.rankScore, { color: theme.accent }]}>
+                  {r.score} {isGlobal ? 'pts' : 'نقطة'}
+                </Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity style={[styles.startBtn, { backgroundColor: theme.accent, marginTop: 24 }]} onPress={onBack} activeOpacity={0.85}>
+            <Text style={[styles.startText, { color: theme.textOnAccent }]}>
+              {isGlobal ? 'Return Home' : 'العودة للرئيسية'}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ── بين الأدوار — يظهر النقاط وزر التالي ──────────────────
+  // ══════════════════════════════════════════════════════════════
+  if (phase === 'between') {
+    const nextPlayerIdx = playerOrder[turnIndex];
+    const nextPlayerName = playerNames[nextPlayerIdx];
+    const sortedScores = scores
+      .map((s, i) => ({ name: playerNames[i], score: s }))
+      .sort((a, b) => b.score - a.score);
+
+    return (
+      <View style={[styles.screen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <TopBar />
+        <ScrollView contentContainerStyle={styles.betweenContent}>
+          <Text style={styles.phoneEmoji}>📱</Text>
+          <Text style={[styles.roundTitle, { color: theme.textPrimary }]}>
+            {isGlobal ? `${nextPlayerName}'s Turn` : `دور ${nextPlayerName}`}
+          </Text>
+          <Text style={[styles.instruction, { color: theme.textMuted }]}>
+            {isGlobal
+              ? 'Hold the phone up so other players\ncan see it and answer your questions'
+              : 'احمل الهاتف بيدك ليراه اللاعبون الآخرون\nويجيبوا عن الشخصية التي تمثّلها'}
+          </Text>
+
+          {/* نقاط اللاعبين بين الأدوار */}
+          {turnIndex > 0 && (
+            <View style={[styles.scoreboard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+              <Text style={[styles.scoreboardTitle, { color: theme.textSecondary }]}>
+                {isGlobal ? 'Scores' : 'النقاط'}
+              </Text>
+              {sortedScores.map((r, i) => (
+                <View key={i} style={styles.scoreboardRow}>
+                  <Text style={[styles.scoreboardName, { color: theme.textPrimary }]}>{r.name}</Text>
+                  <Text style={[styles.scoreboardScore, { color: theme.accent }]}>
+                    {r.score} {isGlobal ? 'pts' : 'نقطة'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#22c55e' }]} onPress={startReveal} activeOpacity={0.85}>
+            <Text style={[styles.startText, { color: '#fff' }]}>
+              {isGlobal ? '▶ Start Turn' : '▶ ابدأ الدور'}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ── عداد 3 ثواني قبل ظهور الكلمة ──────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  if (phase === 'countdown') {
+    return (
+      <View style={[styles.screen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <TopBar />
+        <View style={styles.centeredContent}>
+          <Text style={[styles.countdownNumber, { color: theme.accent }]}>
+            {revealCount > 0 ? revealCount : ''}
+          </Text>
+          <Text style={[styles.instruction, { color: theme.textMuted }]}>
+            {isGlobal ? 'Get ready...' : 'استعد...'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ── نهاية الدور — انتهى الوقت ──────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  if (phase === 'result') {
+    const isLast = turnIndex + 1 >= totalTurns;
+    return (
+      <View style={[styles.screen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <TopBar />
+        <View style={styles.centeredContent}>
+          <Text style={styles.phoneEmoji}>⏱️</Text>
+          <Text style={[styles.roundTitle, { color: theme.textPrimary }]}>
+            {isGlobal
+              ? `Time's up for ${currentPlayerName}!`
+              : `انتهى وقت ${currentPlayerName}!`}
+          </Text>
+          <Text style={[styles.scoreBig, { color: theme.accent }]}>
+            {scores[currentPlayerIdx]} {isGlobal ? 'pts' : 'نقطة'}
+          </Text>
+          <TouchableOpacity
+            style={[styles.startBtn, { backgroundColor: theme.accent }]}
+            onPress={nextTurn}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.startText, { color: theme.textOnAccent }]}>
+              {isLast
+                ? (isGlobal ? 'See Results 🏆' : 'عرض النتائج 🏆')
+                : (isGlobal
+                    ? `Next: ${playerNames[playerOrder[turnIndex + 1]]} →`
+                    : `→ دور ${playerNames[playerOrder[turnIndex + 1]]}`)}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ── أثناء اللعب ────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  const word = words[wordIndex] || '';
+  const timerPct = (timeLeft / timeLimit) * 100;
+  const timerColor = timeLeft > timeLimit * 0.4 ? theme.accent : timeLeft > timeLimit * 0.2 ? '#f59e0b' : '#ef4444';
+
+  return (
+    <View style={[styles.screen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <TopBar />
+
+      {/* شريط الوقت */}
+      <View style={[styles.timerTrack, { backgroundColor: theme.border }]}>
+        <Animated.View style={[styles.timerFill, { backgroundColor: timerColor, width: `${timerPct}%` }]} />
+      </View>
+
+      <View style={styles.playContent}>
+        <Text style={[styles.timerText, { color: timerColor }]}>{timeLeft}{isGlobal ? 's' : 'ث'}</Text>
+
+        <Animated.View style={[styles.phoneWrap, { transform: [{ rotate }] }]}>
+          <View style={[styles.phoneCard, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+            <Text style={[styles.wordText, { color: theme.textPrimary }]}>{word}</Text>
+          </View>
+        </Animated.View>
+
+        <Text style={[styles.playerLabel, { color: theme.textSecondary }]}>
+          {isGlobal ? currentPlayerName : currentPlayerName}
+        </Text>
+
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#22c55e' }]} onPress={gotIt} activeOpacity={0.85}>
+            <Text style={[styles.actionText, { color: '#fff' }]}>
+              {isGlobal ? '✅ Correct\n+10' : '✅ عرّفها\n+١٠'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.bgCard, borderWidth: 1.5, borderColor: theme.border }]} onPress={skip} activeOpacity={0.85}>
+            <Text style={[styles.actionText, { color: theme.textSecondary }]}>
+              {isGlobal ? '⏭ Skip\n-2' : '⏭ تخطي\n-٢'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
 }
 
-// ── الستايلات ────────────────────────────────────────────────
-const topBar = StyleSheet.create({
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingTop: 56, paddingBottom: 8,
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: '#0f0f2e', borderWidth: 1,
-    borderColor: '#a78bfa30', alignItems: 'center', justifyContent: 'center',
-  },
-  backText: { color: '#a78bfa', fontSize: 20, fontWeight: '700' },
-  title: { color: '#a78bfa', fontSize: 17, fontWeight: '900' },
-  tokenBadge: {
-    backgroundColor: '#f59e0b22', borderWidth: 1,
-    borderColor: '#f59e0b50', borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 5,
-  },
-  tokenText: { color: '#f59e0b', fontSize: 13, fontWeight: '700' },
-});
+// ══════════════════════════════════════════════════════════════
+//  الجذر
+// ══════════════════════════════════════════════════════════════
+export default function ManAnaScreen({ onBack, isGlobal = false }) {
+  const { theme, themeId } = useTheme();
+  const t = useT();
+  const [gameConfig, setGameConfig] = useState(null);
 
-const setup = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#06061a' },
-  content: { padding: 24, paddingBottom: 60, alignItems: 'center', gap: 28 },
-  title: { color: '#fff', fontSize: 32, fontWeight: '900', marginTop: 8 },
-  subtitle: { color: '#5a5a80', fontSize: 14, textAlign: 'center' },
-  section: { width: '100%', gap: 12 },
-  label: { color: '#a78bfa', fontSize: 16, fontWeight: '700', textAlign: 'right' },
-  options: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-end' },
-  optBtn: {
-    paddingHorizontal: 18, paddingVertical: 10,
-    borderRadius: 12, borderWidth: 1.5, borderColor: '#a78bfa30',
-    backgroundColor: '#0f0f2e',
-  },
-  optBtnActive: { borderColor: '#a78bfa', backgroundColor: '#1e1b4b' },
-  optText: { color: '#5a5a80', fontSize: 15, fontWeight: '700' },
-  optTextActive: { color: '#a78bfa' },
-  startBtn: {
-    backgroundColor: '#7c3aed', borderRadius: 16,
-    paddingVertical: 16, paddingHorizontal: 48, marginTop: 8,
-  },
-  startText: { color: '#fff', fontSize: 18, fontWeight: '900' },
-});
+  const handleStart = useCallback((config) => setGameConfig(config), []);
+  const handleBack  = useCallback(() => {
+    if (gameConfig) setGameConfig(null);
+    else onBack();
+  }, [gameConfig, onBack]);
 
-const play = StyleSheet.create({
-  container: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    padding: 24, gap: 24,
-  },
-  bigEmoji: { fontSize: 64 },
-  roundTitle: { color: '#fff', fontSize: 24, fontWeight: '900', textAlign: 'center' },
-  instruction: { color: '#5a5a80', fontSize: 16, textAlign: 'center', lineHeight: 26 },
-  scoreNow: { color: '#a78bfa', fontSize: 20, fontWeight: '700' },
-  timerWrap: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: '#0f0f2e', borderWidth: 2, borderColor: '#a78bfa50',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  timerWrapRed: { borderColor: '#ef444480' },
-  timer: { color: '#a78bfa', fontSize: 32, fontWeight: '900' },
-  timerRed: { color: '#ef4444' },
-  wordCard: {
-    backgroundColor: '#1e1b4b', borderRadius: 24,
-    borderWidth: 2, borderColor: '#a78bfa50',
-    paddingVertical: 40, paddingHorizontal: 32,
-    minWidth: 280, alignItems: 'center',
-  },
-  word: { color: '#fff', fontSize: 36, fontWeight: '900', textAlign: 'center' },
-  btns: { flexDirection: 'row', gap: 16 },
-  skipBtn: {
-    flex: 1, paddingVertical: 16, borderRadius: 16,
-    backgroundColor: '#1e1b4b', borderWidth: 1.5, borderColor: '#ffffff20',
-    alignItems: 'center',
-  },
-  skipText: { color: '#5a5a80', fontSize: 16, fontWeight: '700' },
-  correctBtn: {
-    flex: 1, paddingVertical: 16, borderRadius: 16,
-    backgroundColor: '#10b981', alignItems: 'center',
-  },
-  correctText: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  scoreHint: { color: '#3a3a60', fontSize: 13 },
-  actionBtn: {
-    backgroundColor: '#7c3aed', borderRadius: 16,
-    paddingVertical: 16, paddingHorizontal: 48,
-  },
-  actionText: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  allScores: { gap: 8, alignItems: 'center' },
-  scoreRow: { color: '#a78bfa', fontSize: 16, fontWeight: '600' },
-  winnerText: { color: '#fff', fontSize: 28, fontWeight: '900' },
-  winnerScore: { color: '#f59e0b', fontSize: 22, fontWeight: '700' },
+  return (
+    <View style={[styles.root, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <ManAnaEngraving theme={theme} />
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
+      {!gameConfig
+        ? (
+          <>
+            <SetupScreen onStart={handleStart} theme={theme} t={t} isGlobal={isGlobal} />
+            <TouchableOpacity style={styles.backBtn} onPress={onBack} hitSlop={HIT_SLOP}>
+              <Text style={[styles.backText, { color: theme.accent }]}>{t('common.back')}</Text>
+            </TouchableOpacity>
+          </>
+        )
+        : (
+          <PlayScreen
+            playerCount={gameConfig.playerCount}
+            timeLimit={gameConfig.timeLimit}
+            playerNames={gameConfig.names}
+            onBack={handleBack}
+            theme={theme}
+            t={t}
+            isGlobal={isGlobal}
+            themeId={themeId}
+          />
+        )
+      }
+    </View>
+  );
+}
+
+const HIT_SLOP = { top: 10, bottom: 10, left: 10, right: 10 };
+
+const styles = StyleSheet.create({
+  root:             { flex: 1 },
+  screen:           { flex: 1 },
+
+  // TopBar
+  topBar:           { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 52, paddingBottom: 10, gap: 12 },
+  exitBtn:          { paddingVertical: 6, paddingHorizontal: 4 },
+  exitText:         { fontSize: 15, fontWeight: '700' },
+  progressWrap:     { flex: 1, gap: 4 },
+  turnLabel:        { fontSize: 12, fontWeight: '600', textAlign: 'right' },
+  progressTrack:    { height: 6, borderRadius: 3, overflow: 'hidden' },
+  progressFill:     { height: '100%', borderRadius: 3 },
+
+  // Timer bar
+  timerTrack:       { height: 5, marginHorizontal: 16, borderRadius: 3, overflow: 'hidden' },
+  timerFill:        { height: '100%', borderRadius: 3 },
+
+  // Setup
+  backBtn:          { position: 'absolute', top: 52, right: 20, padding: 8 },
+  backText:         { fontSize: 15, fontWeight: '700' },
+  setupContainer:   { flexGrow: 1, padding: 24, paddingTop: 60, gap: 24 },
+  title:            { fontSize: 30, fontWeight: '900', textAlign: 'center' },
+  subtitle:         { fontSize: 14, textAlign: 'center' },
+  section:          { gap: 10 },
+  sectionLabel:     { fontSize: 15, fontWeight: '700' },
+  options:          { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  optBtn:           { borderRadius: 12, paddingHorizontal: 18, paddingVertical: 10, borderWidth: 1.5 },
+  optText:          { fontSize: 15, fontWeight: '700' },
+  nameInput:        { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, textAlign: 'right' },
+  startBtn:         { paddingVertical: 18, borderRadius: 16, alignItems: 'center', elevation: 8 },
+  startText:        { fontSize: 18, fontWeight: '800' },
+
+  // Between turns
+  betweenContent:   { flexGrow: 1, alignItems: 'center', padding: 24, gap: 20 },
+  phoneEmoji:       { fontSize: 64, marginTop: 10 },
+  roundTitle:       { fontSize: 24, fontWeight: '800', textAlign: 'center' },
+  instruction:      { fontSize: 15, textAlign: 'center', lineHeight: 24 },
+  scoreboard:       { width: '100%', borderRadius: 16, borderWidth: 1.5, padding: 16, gap: 10 },
+  scoreboardTitle:  { fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 },
+  scoreboardRow:    { flexDirection: 'row', justifyContent: 'space-between' },
+  scoreboardName:   { fontSize: 15, fontWeight: '600' },
+  scoreboardScore:  { fontSize: 15, fontWeight: '800' },
+
+  // Countdown
+  centeredContent:  { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 20 },
+  countdownNumber:  { fontSize: 96, fontWeight: '900' },
+
+  // Playing
+  playContent:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20, padding: 24 },
+  timerText:        { fontSize: 48, fontWeight: '900' },
+  phoneWrap:        { width: '100%' },
+  phoneCard:        { borderRadius: 24, padding: 32, alignItems: 'center', borderWidth: 2, minHeight: 160, justifyContent: 'center' },
+  wordText:         { fontSize: 32, fontWeight: '900', textAlign: 'center', lineHeight: 44 },
+  playerLabel:      { fontSize: 16, fontWeight: '700' },
+  actionRow:        { flexDirection: 'row', gap: 12, width: '100%' },
+  actionBtn:        { flex: 1, paddingVertical: 18, borderRadius: 16, alignItems: 'center', elevation: 6 },
+  actionText:       { fontSize: 16, fontWeight: '800', textAlign: 'center', lineHeight: 22 },
+
+  // Result
+  scoreBig:         { fontSize: 36, fontWeight: '900' },
+
+  // Finished
+  finishedContent:  { flexGrow: 1, alignItems: 'center', padding: 24, paddingTop: 10, gap: 16 },
+  trophyEmoji:      { fontSize: 72 },
+  winnerName:       { fontSize: 28, fontWeight: '900' },
+  winnerScore:      { fontSize: 22, fontWeight: '700' },
+  rankList:         { width: '100%', borderRadius: 16, borderWidth: 1.5, overflow: 'hidden' },
+  rankRow:          { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
+  rankMedal:        { fontSize: 22, width: 36, textAlign: 'center' },
+  rankName:         { flex: 1, fontSize: 16, fontWeight: '700' },
+  rankScore:        { fontSize: 16, fontWeight: '800' },
 });
+ 

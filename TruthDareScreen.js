@@ -1,17 +1,27 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Animated, StatusBar, ScrollView, TextInput,
-  KeyboardAvoidingView, Platform, Alert,
+  Animated, Easing, StatusBar, ScrollView, TextInput,
+  KeyboardAvoidingView, Platform, Dimensions,
 } from 'react-native';
+import Svg, { Path, Circle, Line, Text as SvgText, G } from 'react-native-svg';
+import { useTheme } from './ThemeContext';
+import { useT, useRTLStyles, useLanguage } from './I18n';
+import { TruthDareEngraving } from './GameEngraving';
+import { WebScreenButton, GameInfoButton } from './WebRoomService';
 
-// ── ثوابت ────────────────────────────────────────────────────
-const TURNS_PER_PLAYER = 3;   // كل لاعب يستلم الدور كضحية 3 مرات
-const TRUTH_PTS  = 7;
-const DARE_PTS   = 10;
-const FAIL_PTS   = 0;
+// ── ثوابت ───────────────────────────────────────────────────────────
+const TURNS_PER_PLAYER = 3;          // كل لاعب يُسأل/يُتحدى 3 مرات
+const TRUTH_PTS = 10;
+const DARE_PTS  = 10;
+const { width: SW } = Dimensions.get('window');
+const WHEEL_SIZE = Math.min(SW * 0.78, 300);
+const WHEEL_R    = WHEEL_SIZE / 2;
 
-// ── مساعدات ──────────────────────────────────────────────────
+// ── ألوان العجلة (تتناوب) ───────────────────────────────────────────
+const SLICE_COLORS_DARK  = ['#7c3aed','#db2777','#0891b2','#d97706','#059669','#dc2626','#2563eb','#7c3aed'];
+const SLICE_COLORS_LIGHT = ['#8b5cf6','#ec4899','#0ea5e9','#f59e0b','#10b981','#ef4444','#3b82f6','#a855f7'];
+
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -21,642 +31,643 @@ function shuffle(arr) {
   return a;
 }
 
-/** يبني قائمة أدوار: كل لاعب يظهر TURNS_PER_PLAYER مرات، مرتبة عشوائياً */
-function buildTurnQueue(players) {
-  let queue = [];
-  players.forEach(p => {
-    for (let i = 0; i < TURNS_PER_PLAYER; i++) queue.push(p.id);
-  });
-  return shuffle(queue);
+// بناء queue: كل لاعب يظهر TURNS_PER_PLAYER مرات → يُعشوشل
+function buildVictimQueue(players) {
+  let q = [];
+  players.forEach(p => { for (let i = 0; i < TURNS_PER_PLAYER; i++) q.push(p.id); });
+  return shuffle(q);
 }
 
-// ── مكوّن العجلة ─────────────────────────────────────────────
-function SpinWheel({ names, onDone, excludeId, label }) {
-  const [current, setCurrent] = useState(null);
+// ─────────────────────────────────────────────────────────────────────
+// SpinWheel — عجلة دائرية حقيقية بـ SVG + Animated
+// ─────────────────────────────────────────────────────────────────────
+const SpinWheel = memo(({ players, excludeId, onDone, label, theme }) => {
+  const COLORS = theme.isLight ? SLICE_COLORS_LIGHT : SLICE_COLORS_DARK;
+
+  const eligible  = players.filter(p => p.id !== excludeId);
+  const names     = eligible;
+  const count     = names.length;
+
+  const rotAnim   = useRef(new Animated.Value(0)).current;
+  const totalRot  = useRef(0);
   const [spinning, setSpinning] = useState(false);
-  const [done, setDone] = useState(false);
-  const intervalRef = useRef(null);
+  const [winner,   setWinner]   = useState(null);
 
-  const eligible = names.filter(n => n.id !== excludeId);
+  // حساب شرائح SVG
+  const sliceAngle = 360 / count;
 
-  function spin() {
-    if (spinning || done) return;
-    setSpinning(true);
-    let count = 0;
-    const total = 20 + Math.floor(Math.random() * 15);
-    intervalRef.current = setInterval(() => {
-      setCurrent(eligible[Math.floor(Math.random() * eligible.length)]);
-      count++;
-      if (count >= total) {
-        clearInterval(intervalRef.current);
-        const winner = eligible[Math.floor(Math.random() * eligible.length)];
-        setCurrent(winner);
-        setSpinning(false);
-        setDone(true);
-        setTimeout(() => onDone(winner), 600);
-      }
-    }, 80);
+  function polarToXY(angle, r) {
+    const rad = ((angle - 90) * Math.PI) / 180;
+    return { x: WHEEL_R + r * Math.cos(rad), y: WHEEL_R + r * Math.sin(rad) };
   }
 
-  useEffect(() => () => clearInterval(intervalRef.current), []);
+  function buildSlicePath(index) {
+    const start = index * sliceAngle;
+    const end   = start + sliceAngle;
+    const p1    = polarToXY(start, WHEEL_R - 2);
+    const p2    = polarToXY(end,   WHEEL_R - 2);
+    const large = sliceAngle > 180 ? 1 : 0;
+    return `M ${WHEEL_R} ${WHEEL_R} L ${p1.x} ${p1.y} A ${WHEEL_R - 2} ${WHEEL_R - 2} 0 ${large} 1 ${p2.x} ${p2.y} Z`;
+  }
+
+  // زاوية مركز كل شريحة لوضع النص
+  function sliceMidAngle(index) {
+    return index * sliceAngle + sliceAngle / 2;
+  }
+
+  const spin = useCallback(() => {
+    if (spinning || winner) return;
+    setSpinning(true);
+
+    // اختر الفائز عشوائياً
+    const winnerIdx = Math.floor(Math.random() * count);
+    const winnerPlayer = names[winnerIdx];
+
+    // الزاوية المطلوبة لإيقاف الفائز تحت المؤشر (المؤشر في الأعلى = 270°)
+    // كل شريحة عرضها sliceAngle، مركز شريحة الفائز = winnerIdx * sliceAngle + sliceAngle/2
+    // نريد هذا المركز أن يصبح في موضع المؤشر (الأعلى) بعد دوران عكسي
+    // الدوران يكون في اتجاه عقارب الساعة → نحسب الكمية
+    const targetSliceCenter = winnerIdx * sliceAngle + sliceAngle / 2;
+    // المؤشر عند الأعلى → موضعه الفعلي بعد تحويل = 0° (top)
+    // لإيقاف الشريحة عند الأعلى: totalRotation mod 360 = 360 - targetSliceCenter
+    const stopAngle = 360 - targetSliceCenter;
+    const currentMod = totalRot.current % 360;
+    let delta = stopAngle - currentMod;
+    if (delta < 0) delta += 360;
+    // أضف 5-8 لفات كاملة
+    const fullSpins = (5 + Math.floor(Math.random() * 3)) * 360;
+    const targetTotal = totalRot.current + fullSpins + delta;
+
+    totalRot.current = targetTotal;
+
+    Animated.timing(rotAnim, {
+      toValue: targetTotal,
+      duration: 4000 + Math.random() * 1000,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      setSpinning(false);
+      setWinner(winnerPlayer);
+      setTimeout(() => onDone(winnerPlayer), 700);
+    });
+  }, [spinning, winner, count, names, rotAnim, onDone]);
+
+  const rotate = rotAnim.interpolate({
+    inputRange:  [0, 360],
+    outputRange: ['0deg', '360deg'],
+  });
 
   return (
-    <View style={wh.wrap}>
-      <Text style={wh.label}>{label}</Text>
-      <View style={wh.wheel}>
-        <Text style={wh.emoji}>🎡</Text>
-        <Text style={wh.name}>
-          {current ? current.name : '؟'}
-        </Text>
+    <View style={styles.wheelSection}>
+      <Text style={[styles.wheelLabel, { color: theme.textSecondary }]}>{label}</Text>
+
+      {/* حاوية العجلة + المؤشر */}
+      <View style={[styles.wheelContainer, { width: WHEEL_SIZE + 24, height: WHEEL_SIZE + 40 }]}>
+
+        {/* مؤشر ▼ في الأعلى */}
+        <View style={[styles.pointer, { borderBottomColor: theme.accent }]} />
+
+        {/* العجلة الدوارة */}
+        <Animated.View style={[styles.wheelSvgWrap, { transform: [{ rotate }], width: WHEEL_SIZE, height: WHEEL_SIZE, borderRadius: WHEEL_R }]}>
+          <Svg width={WHEEL_SIZE} height={WHEEL_SIZE}>
+            {/* خلفية دائرية */}
+            <Circle cx={WHEEL_R} cy={WHEEL_R} r={WHEEL_R - 2} fill={theme.bgCard} />
+
+            {/* الشرائح */}
+            {names.map((player, i) => {
+              const color     = COLORS[i % COLORS.length];
+              const midAngle  = sliceMidAngle(i);
+              const labelR    = WHEEL_R * 0.62;
+              const labelPos  = polarToXY(midAngle, labelR);
+              const shortName = player.name.length > 7 ? player.name.slice(0, 6) + '…' : player.name;
+              return (
+                <G key={player.id}>
+                  <Path d={buildSlicePath(i)} fill={color} stroke={theme.bg} strokeWidth={1.5} />
+                  <SvgText
+                    x={labelPos.x}
+                    y={labelPos.y}
+                    fill="#ffffff"
+                    fontSize={count > 6 ? 10 : count > 4 ? 12 : 14}
+                    fontWeight="bold"
+                    textAnchor="middle"
+                    alignmentBaseline="middle"
+                    rotation={midAngle - 90}
+                    origin={`${labelPos.x}, ${labelPos.y}`}
+                  >
+                    {shortName}
+                  </SvgText>
+                </G>
+              );
+            })}
+
+            {/* دائرة مركزية */}
+            <Circle cx={WHEEL_R} cy={WHEEL_R} r={WHEEL_R * 0.18} fill={theme.bg} stroke={theme.accent} strokeWidth={2} />
+          </Svg>
+        </Animated.View>
+
+        {/* حلقة خارجية */}
+        <View style={[styles.wheelRing, { width: WHEEL_SIZE + 8, height: WHEEL_SIZE + 8, borderRadius: (WHEEL_SIZE + 8) / 2, borderColor: theme.accentBorder }]} />
       </View>
-      {!done && (
-        <TouchableOpacity style={wh.btn} onPress={spin} disabled={spinning}>
-          <Text style={wh.btnTxt}>{spinning ? 'جاري...' : 'أدّر العجلة'}</Text>
+
+      {/* زر الدوران */}
+      {!winner && (
+        <TouchableOpacity
+          style={[styles.spinBtn, { backgroundColor: spinning ? theme.bgCard : theme.accent, borderColor: theme.accentBorder }]}
+          onPress={spin}
+          disabled={spinning}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.spinBtnText, { color: spinning ? theme.textMuted : theme.textOnAccent }]}>
+            {spinning ? '⏳ جاري الدوران...' : '🎰 دوّر العجلة'}
+          </Text>
         </TouchableOpacity>
+      )}
+
+      {/* اسم الفائز */}
+      {winner && (
+        <View style={[styles.winnerBadge, { backgroundColor: theme.bgCard, borderColor: theme.accent }]}>
+          <Text style={[styles.winnerBadgeText, { color: theme.accent }]}>🎯 {winner.name}</Text>
+        </View>
       )}
     </View>
   );
-}
-
-const wh = StyleSheet.create({
-  wrap:  { alignItems: 'center', gap: 16, paddingVertical: 24 },
-  label: { color: '#a78bfa', fontSize: 15, fontWeight: '700' },
-  wheel: {
-    width: 180, height: 180, borderRadius: 90,
-    backgroundColor: '#1e1b4b',
-    borderWidth: 3, borderColor: '#a78bfa50',
-    alignItems: 'center', justifyContent: 'center', gap: 8,
-  },
-  emoji: { fontSize: 40 },
-  name:  { color: '#fff', fontSize: 22, fontWeight: '900', textAlign: 'center' },
-  btn:   {
-    backgroundColor: '#a855f7', borderRadius: 16,
-    paddingHorizontal: 32, paddingVertical: 14,
-  },
-  btnTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });
 
-// ── الشاشة الرئيسية ──────────────────────────────────────────
-export default function TruthDareScreen({ onBack, tokens = 0, onSpendTokens, onOpenTokenModal }) {
+// ─────────────────────────────────────────────────────────────────────
+// SetupScreen
+// ─────────────────────────────────────────────────────────────────────
+function SetupScreen({ onStart, onBack, theme, t, rs }) {
+  const [names, setNames] = useState(['', '']);
 
-  // مراحل: setup | spin_asker | spin_target | choose | confirm | results
-  const [phase, setPhase]         = useState('setup');
-  const [players, setPlayers]     = useState([]);
-  const [nameInput, setNameInput] = useState('');
-  const [scores, setScores]       = useState({});
-  const [turnQueue, setTurnQueue] = useState([]);
-  const [turnIndex, setTurnIndex] = useState(0);
-  const [asker, setAsker]         = useState(null);
-  const [target, setTarget]       = useState(null);
-  const [choice, setChoice]       = useState(null); // 'truth' | 'dare'
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const updateName   = useCallback((i, val) => setNames(prev => { const n = [...prev]; n[i] = val; return n; }), []);
+  const addPlayer    = useCallback(() => { if (names.length < 10) setNames(prev => [...prev, '']); }, [names.length]);
+  const removePlayer = useCallback((i) => { setNames(prev => prev.filter((_, idx) => idx !== i)); }, []);
 
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, [phase]);
+  const handleStart = useCallback(() => {
+    const valid = names.map(n => n.trim()).filter(Boolean);
+    if (valid.length < 2) return;
+    onStart(valid.map((name, i) => ({ id: i + 1, name })));
+  }, [names, onStart]);
 
-  function fadeIn() {
-    fadeAnim.setValue(0);
-    Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-  }
+  const canStart = names.filter(n => n.trim()).length >= 2;
 
-  // ── إضافة لاعب ────────────────────────────────────────────
-  function addPlayer() {
-    const name = nameInput.trim();
-    if (!name) return;
-    if (players.find(p => p.name === name)) {
-      Alert.alert('', 'هذا الاسم موجود بالفعل');
-      return;
-    }
-    const id = Date.now().toString();
-    setPlayers(prev => [...prev, { id, name }]);
-    setScores(prev => ({ ...prev, [id]: 0 }));
-    setNameInput('');
-  }
-
-  function removePlayer(id) {
-    setPlayers(prev => prev.filter(p => p.id !== id));
-    setScores(prev => { const s = { ...prev }; delete s[id]; return s; });
-  }
-
-  function startGame() {
-    if (players.length < 2) {
-      Alert.alert('', 'أضف لاعبَين على الأقل');
-      return;
-    }
-    if (tokens < 10) {
-      Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز لبدء اللعبة', [
-        { text: 'اذهب إلى السوق', onPress: () => onOpenTokenModal && onOpenTokenModal() },
-        { text: 'إلغاء', style: 'cancel' },
-      ]);
-      return;
-    }
-    onSpendTokens && onSpendTokens(10);
-    const queue = buildTurnQueue(players);
-    setTurnQueue(queue);
-    setTurnIndex(0);
-    fadeIn();
-    setPhase('spin_asker');
-  }
-
-  // ── دور جديد ─────────────────────────────────────────────
-  function nextTurn() {
-    const nextIdx = turnIndex + 1;
-    if (nextIdx >= turnQueue.length) {
-      setPhase('results');
-      return;
-    }
-    setTurnIndex(nextIdx);
-    setAsker(null);
-    setTarget(null);
-    setChoice(null);
-    fadeIn();
-    setPhase('spin_asker');
-  }
-
-  // اللاعب الضحية في هذا الدور
-  const currentTargetId = turnQueue[turnIndex];
-  const currentTarget   = players.find(p => p.id === currentTargetId);
-
-  // ── تسجيل النتيجة ────────────────────────────────────────
-  function recordResult(success) {
-    const pts = success ? (choice === 'dare' ? DARE_PTS : TRUTH_PTS) : FAIL_PTS;
-    setScores(prev => ({ ...prev, [currentTargetId]: (prev[currentTargetId] || 0) + pts }));
-    nextTurn();
-  }
-
-  // ── ترتيب النتائج ────────────────────────────────────────
-  const sortedPlayers = [...players].sort((a, b) => (scores[b.id] || 0) - (scores[a.id] || 0));
-
-  // ── الـ progress ─────────────────────────────────────────
-  const totalTurns    = players.length * TURNS_PER_PLAYER;
-  const progress      = Math.min(turnIndex / totalTurns, 1);
-
-  // ─────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────
-
-  // ── شاشة الإعداد ─────────────────────────────────────────
-  if (phase === 'setup') return (
-    <KeyboardAvoidingView
-      style={s.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-
-      <View style={s.header}>
-        <TouchableOpacity onPress={onBack} style={s.backBtn}>
-          <Text style={s.backTxt}>←</Text>
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <TouchableOpacity onPress={onBack} style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]} hitSlop={HIT_SLOP}>
+          <Text style={[styles.backBtnText, { color: theme.accent }]}>→</Text>
         </TouchableOpacity>
-        <Text style={s.headerTitle}>😈 صراحة أو تحدي</Text>
-        <View style={s.tokenBadge}>
-          <Text style={s.tokenText}>🪙 {tokens}</Text>
-        </View>
+        <Text style={[styles.headerTitle, { color: theme.accent }]}>😈 صراحة أو تحدي</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={s.setupScroll} keyboardShouldPersistTaps="handled">
-        <Text style={s.sectionTitle}>أضف اللاعبين</Text>
+      <ScrollView contentContainerStyle={[styles.setupContent, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]} keyboardShouldPersistTaps="handled">
+        <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
-        <View style={s.inputRow}>
-          <TextInput
-            style={s.input}
-            placeholder="اسم اللاعب..."
-            placeholderTextColor="#3a3a60"
-            value={nameInput}
-            onChangeText={setNameInput}
-            onSubmitEditing={addPlayer}
-            returnKeyType="done"
-          />
-          <TouchableOpacity style={s.addBtn} onPress={addPlayer}>
-            <Text style={s.addBtnTxt}>+</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={[styles.setupSubtitle, { color: theme.textMuted }]}>أدخل أسماء اللاعبين (2-10)</Text>
 
-        {players.map(p => (
-          <View key={p.id} style={s.playerRow}>
-            <Text style={s.playerName}>👤 {p.name}</Text>
-            <TouchableOpacity onPress={() => removePlayer(p.id)}>
-              <Text style={s.removeBtn}>✕</Text>
-            </TouchableOpacity>
+        {names.map((name, i) => (
+          <View key={i} style={styles.nameRow}>
+            <View style={[styles.playerNumBadge, { backgroundColor: theme.accent + '22' }]}>
+              <Text style={[styles.playerNumText, { color: theme.accent }]}>{i + 1}</Text>
+            </View>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.bgCard, borderColor: theme.border, color: theme.textPrimary }, rs.textInput]}
+              placeholder={`اللاعب ${i + 1}`}
+              placeholderTextColor={theme.textMuted}
+              value={name}
+              onChangeText={v => updateName(i, v)}
+              returnKeyType="next"
+            />
+            {names.length > 2 && (
+              <TouchableOpacity style={[styles.removeBtn, { backgroundColor: theme.error + '18', borderColor: theme.error + '30' }]} onPress={() => removePlayer(i)} hitSlop={HIT_SLOP}>
+                <Text style={styles.removeBtnText}>✕</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ))}
 
-        {players.length >= 2 && (
-          <TouchableOpacity style={s.startBtn} onPress={startGame}>
-            <Text style={s.startBtnTxt}>ابدأ اللعبة 🎲  🪙 10</Text>
+        {names.length < 10 && (
+          <TouchableOpacity style={[styles.addBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]} onPress={addPlayer} activeOpacity={0.8}>
+            <Text style={[styles.addBtnText, { color: theme.accent }]}>＋ أضف لاعباً</Text>
           </TouchableOpacity>
         )}
 
-        <View style={s.rulesBox}>
-          <Text style={s.rulesTitle}>القواعد</Text>
-          <Text style={s.rulesLine}>🎡 عجلة أولى: من يسأل</Text>
-          <Text style={s.rulesLine}>🎡 عجلة ثانية: من يُسأل</Text>
-          <Text style={s.rulesLine}>✅ نجح التحدي = +{DARE_PTS} نقاط</Text>
-          <Text style={s.rulesLine}>✅ أجاب بصراحة = +{TRUTH_PTS} نقاط</Text>
-          <Text style={s.rulesLine}>❌ فشل = +{FAIL_PTS} نقاط</Text>
-          <Text style={s.rulesLine}>🔄 كل لاعب يُسأل {TURNS_PER_PLAYER} مرات</Text>
-        </View>
+        <TouchableOpacity
+          style={[styles.startBtn, { backgroundColor: canStart ? theme.accent : theme.bgCard, borderColor: theme.border, borderWidth: canStart ? 0 : 1 }]}
+          onPress={handleStart}
+          disabled={!canStart}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.startBtnText, { color: canStart ? theme.textOnAccent : theme.textMuted }]}>
+            ابدأ اللعبة ←
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
-
-  // ── عجلة من يسأل ──────────────────────────────────────────
-  if (phase === 'spin_asker') return (
-    <Animated.View style={[s.container, { opacity: fadeAnim }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={s.header}>
-        <View style={{ width: 40 }} />
-        <Text style={s.headerTitle}>😈 صراحة أو تحدي</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <View style={s.progressWrap}>
-        <View style={s.progressBg}>
-          <Animated.View style={[s.progressFill, { width: `${progress * 100}%` }]} />
-        </View>
-        <Text style={s.progressTxt}>{turnIndex + 1} / {totalTurns}</Text>
-      </View>
-
-      <View style={s.turnInfo}>
-        <Text style={s.turnLabel}>الضحية في هذا الدور</Text>
-        <Text style={s.turnTarget}>🎯 {currentTarget?.name}</Text>
-      </View>
-
-      <SpinWheel
-        names={players}
-        excludeId={currentTargetId}
-        label="أدِّر العجلة لاختيار من يسأل"
-        onDone={(winner) => {
-          setAsker(winner);
-          fadeIn();
-          setPhase('spin_target');
-        }}
-      />
-    </Animated.View>
-  );
-
-  // ── عجلة الضحية (التأكيد) ──────────────────────────────────
-  if (phase === 'spin_target') return (
-    <Animated.View style={[s.container, { opacity: fadeAnim }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={s.header}>
-        <View style={{ width: 40 }} />
-        <Text style={s.headerTitle}>😈 صراحة أو تحدي</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <View style={s.askerCard}>
-        <Text style={s.askerLabel}>من يسأل</Text>
-        <Text style={s.askerName}>🗣 {asker?.name}</Text>
-      </View>
-
-      {/* العجلة الثانية تدور وتستقر على الضحية المحددة مسبقاً */}
-      <SpinWheelFixed
-        names={players}
-        targetId={currentTargetId}
-        label="أدِّر العجلة لاختيار من يُسأل"
-        onDone={(winner) => {
-          setTarget(winner);
-          setChoice('truth'); // default
-          fadeIn();
-          setPhase('choose');
-        }}
-      />
-    </Animated.View>
-  );
-
-  // ── اختيار صراحة أو تحدي ──────────────────────────────────
-  if (phase === 'choose') return (
-    <Animated.View style={[s.container, { opacity: fadeAnim }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={s.header}>
-        <View style={{ width: 40 }} />
-        <Text style={s.headerTitle}>😈 صراحة أو تحدي</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <View style={s.matchupCard}>
-        <View style={s.matchupPlayer}>
-          <Text style={s.matchupRole}>يسأل</Text>
-          <Text style={s.matchupName}>🗣 {asker?.name}</Text>
-        </View>
-        <Text style={s.matchupVs}>←</Text>
-        <View style={s.matchupPlayer}>
-          <Text style={s.matchupRole}>يُسأل</Text>
-          <Text style={s.matchupName}>🎯 {target?.name}</Text>
-        </View>
-      </View>
-
-      <Text style={s.chooseLabel}>اختر النوع</Text>
-
-      <View style={s.choiceRow}>
-        <TouchableOpacity
-          style={[s.choiceBtn, choice === 'truth' && s.choiceBtnActive, { borderColor: '#3b82f6' }]}
-          onPress={() => setChoice('truth')}
-        >
-          <Text style={s.choiceEmoji}>🤍</Text>
-          <Text style={[s.choiceTxt, { color: choice === 'truth' ? '#3b82f6' : '#5a5a80' }]}>صراحة</Text>
-          <Text style={s.choicePts}>+{TRUTH_PTS} نقاط</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[s.choiceBtn, choice === 'dare' && s.choiceBtnActive, { borderColor: '#ef4444' }]}
-          onPress={() => setChoice('dare')}
-        >
-          <Text style={s.choiceEmoji}>🔥</Text>
-          <Text style={[s.choiceTxt, { color: choice === 'dare' ? '#ef4444' : '#5a5a80' }]}>تحدي</Text>
-          <Text style={s.choicePts}>+{DARE_PTS} نقاط</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={s.chooseHint}>
-        {asker?.name} يوجّه {choice === 'truth' ? 'سؤالاً' : 'تحدياً'} إلى {target?.name}
-      </Text>
-
-      <TouchableOpacity
-        style={s.confirmBtn}
-        onPress={() => { fadeIn(); setPhase('confirm'); }}
-      >
-        <Text style={s.confirmBtnTxt}>جاهز ✓</Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-
-  // ── تأكيد النتيجة ─────────────────────────────────────────
-  if (phase === 'confirm') return (
-    <Animated.View style={[s.container, s.confirmCenter, { opacity: fadeAnim }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-
-      {choice === 'dare' ? (
-        <>
-          <Text style={s.bigEmoji}>🔥</Text>
-          <Text style={s.confirmQ}>هل نجح <Text style={s.highlight}>{target?.name}</Text> بالتحدي؟</Text>
-        </>
-      ) : (
-        <>
-          <Text style={s.bigEmoji}>🤍</Text>
-          <Text style={s.confirmQ}>هل أجاب <Text style={s.highlight}>{target?.name}</Text> بصراحة؟</Text>
-        </>
-      )}
-
-      {/* زر التبديل */}
-      <TouchableOpacity
-        style={s.switchBtn}
-        onPress={() => {
-          setChoice(c => c === 'truth' ? 'dare' : 'truth');
-        }}
-      >
-        <Text style={s.switchTxt}>
-          تبديل إلى {choice === 'truth' ? '🔥 تحدي' : '🤍 صراحة'}
-        </Text>
-      </TouchableOpacity>
-
-      <View style={s.resultRow}>
-        <TouchableOpacity style={[s.resultBtn, { backgroundColor: '#22c55e22', borderColor: '#22c55e' }]}
-          onPress={() => recordResult(true)}>
-          <Text style={s.resultEmoji}>✅</Text>
-          <Text style={[s.resultTxt, { color: '#22c55e' }]}>نجح!</Text>
-          <Text style={s.resultPts}>+{choice === 'dare' ? DARE_PTS : TRUTH_PTS}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[s.resultBtn, { backgroundColor: '#ef444422', borderColor: '#ef4444' }]}
-          onPress={() => recordResult(false)}>
-          <Text style={s.resultEmoji}>❌</Text>
-          <Text style={[s.resultTxt, { color: '#ef4444' }]}>فشل</Text>
-          <Text style={s.resultPts}>+{FAIL_PTS}</Text>
-        </TouchableOpacity>
-      </View>
-    </Animated.View>
-  );
-
-  // ── النتائج النهائية ──────────────────────────────────────
-  if (phase === 'results') return (
-    <Animated.View style={[s.container, { opacity: fadeAnim }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={s.header}>
-        <View style={{ width: 40 }} />
-        <Text style={s.headerTitle}>🏆 النتائج</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <ScrollView contentContainerStyle={s.resultsScroll}>
-        {sortedPlayers.map((p, i) => (
-          <View key={p.id} style={[s.resultCard, i === 0 && s.resultCard1]}>
-            <Text style={s.rankEmoji}>
-              {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}
-            </Text>
-            <Text style={s.resultPlayerName}>{p.name}</Text>
-            <Text style={[s.resultScore, i === 0 && { color: '#fbbf24' }]}>
-              {scores[p.id] || 0}
-            </Text>
-          </View>
-        ))}
-
-        <TouchableOpacity style={s.startBtn} onPress={() => {
-          setScores(Object.fromEntries(players.map(p => [p.id, 0])));
-          const queue = buildTurnQueue(players);
-          setTurnQueue(queue);
-          setTurnIndex(0);
-          setAsker(null); setTarget(null); setChoice(null);
-          fadeIn();
-          setPhase('spin_asker');
-        }}>
-          <Text style={s.startBtnTxt}>لعبة جديدة 🔄</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={s.backFullBtn} onPress={onBack}>
-          <Text style={s.backFullTxt}>الخروج</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </Animated.View>
-  );
-
-  return null;
 }
 
-// ── عجلة ثانية: تدور وتستقر على الضحية المحددة ──────────────
-function SpinWheelFixed({ names, targetId, label, onDone }) {
-  const [current, setCurrent] = useState(null);
-  const [spinning, setSpinning] = useState(false);
-  const [done, setDone] = useState(false);
-  const intervalRef = useRef(null);
-  const target = names.find(n => n.id === targetId);
+// ─────────────────────────────────────────────────────────────────────
+// GameScreen
+// ─────────────────────────────────────────────────────────────────────
+function GameScreen({ players, onBack, theme, t, rs }) {
+  const { lang } = useLanguage();
+  // كل دورة في queue = id لاعب سيُسأل/يُتحدى
+  const victimQueue = useRef(buildVictimQueue(players)).current;
+  const totalTurns  = victimQueue.length;  // players.length * TURNS_PER_PLAYER
 
-  function spin() {
-    if (spinning || done) return;
-    setSpinning(true);
-    let count = 0;
-    const total = 20 + Math.floor(Math.random() * 15);
-    intervalRef.current = setInterval(() => {
-      setCurrent(names[Math.floor(Math.random() * names.length)]);
-      count++;
-      if (count >= total) {
-        clearInterval(intervalRef.current);
-        setCurrent(target);
-        setSpinning(false);
-        setDone(true);
-        setTimeout(() => onDone(target), 600);
-      }
-    }, 80);
+  const [turnIdx,  setTurnIdx]  = useState(0);
+  const [phase,    setPhase]    = useState('spin_victim'); // spin_victim | spin_asker | choose | action | final
+  const [victim,   setVictim]   = useState(null);
+  const [asker,    setAsker]    = useState(null);
+  const [choice,   setChoice]   = useState(null);         // 'truth' | 'dare'
+  const [scores,   setScores]   = useState(() => Object.fromEntries(players.map(p => [p.id, 0])));
+
+  // الجولات (round): كل جولة = players.length دورة
+  const turnsPerRound = players.length;
+  const totalRounds   = TURNS_PER_PLAYER;
+  const currentRound  = Math.min(Math.floor(turnIdx / turnsPerRound) + 1, totalRounds);
+  const progress      = turnIdx / totalTurns;
+
+  // الضحية الحالية حسب الـ queue
+  const currentVictimId = victimQueue[turnIdx];
+  const currentVictimPlayer = players.find(p => p.id === currentVictimId);
+
+  // السائل: أي لاعب آخر عشوائي بالكامل (لا تتبع أي قيد)
+  function pickRandomAsker(excludeId) {
+    const eligible = players.filter(p => p.id !== excludeId);
+    return eligible[Math.floor(Math.random() * eligible.length)];
   }
 
-  useEffect(() => () => clearInterval(intervalRef.current), []);
+  // ── handlers ──
+  const handleVictimDone = useCallback((p) => {
+    setVictim(p);
+    // السائل يُختار تلقائياً عشوائياً بدون عجلة ثانية؟
+    // ← حسب المواصفات: عجلة ثانية تستثني الضحية
+    setPhase('spin_asker');
+  }, []);
+
+  const handleAskerDone = useCallback((p) => {
+    setAsker(p);
+    setPhase('choose');
+  }, []);
+
+  const chooseOption = useCallback((opt) => {
+    setChoice(opt);
+    setPhase('action');
+  }, []);
+
+  const markDone = useCallback((success) => {
+    if (success && victim) {
+      const pts = choice === 'truth' ? TRUTH_PTS : DARE_PTS;
+      setScores(prev => ({ ...prev, [victim.id]: (prev[victim.id] || 0) + pts }));
+    }
+    const nextIdx = turnIdx + 1;
+    if (nextIdx >= totalTurns) {
+      setPhase('final');
+      return;
+    }
+    setTurnIdx(nextIdx);
+    setPhase('spin_victim');
+    setVictim(null);
+    setAsker(null);
+    setChoice(null);
+  }, [victim, choice, turnIdx, totalTurns]);
+
+  // ── phase: نتائج نهائية ──
+  if (phase === 'final') {
+    const sorted = [...players].sort((a, b) => (scores[b.id] || 0) - (scores[a.id] || 0));
+    return (
+      <View style={[styles.finalContainer, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
+        <Text style={[styles.finalEmoji]}>🏆</Text>
+        <Text style={[styles.finalTitle, { color: theme.accent }]}>النتائج النهائية</Text>
+        <ScrollView style={{ width: '100%' }} contentContainerStyle={{ gap: 10, paddingBottom: 20 }}>
+          {sorted.map((p, i) => (
+            <View key={p.id} style={[styles.scoreRow, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+              <Text style={styles.scoreRankEmoji}>{i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</Text>
+              <Text style={[styles.scoreRowName, { color: theme.textPrimary }]}>{p.name}</Text>
+              <Text style={[styles.scoreRowPts, { color: theme.accent }]}>{scores[p.id] || 0} نقطة</Text>
+            </View>
+          ))}
+        </ScrollView>
+        <TouchableOpacity style={[styles.startBtn, { backgroundColor: theme.accent }]} onPress={onBack} activeOpacity={0.85}>
+          <Text style={[styles.startBtnText, { color: theme.textOnAccent }]}>العودة ←</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
-    <View style={wh.wrap}>
-      <Text style={wh.label}>{label}</Text>
-      <View style={wh.wheel}>
-        <Text style={wh.emoji}>🎡</Text>
-        <Text style={wh.name}>{current ? current.name : '؟'}</Text>
+    <View style={[styles.gameRoot, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
+
+      {/* ── Header: زر خروج + جولة + شريط تقدم ── */}
+      <View style={[styles.gameHeader, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+          <TouchableOpacity onPress={onBack} style={[styles.exitBtn, { backgroundColor: theme.bgCard, borderColor: '#ef444430' }]} hitSlop={HIT_SLOP}>
+            <Text style={[styles.exitBtnText, { color: '#ef4444' }]}>✕</Text>
+          </TouchableOpacity>
+          <GameInfoButton gameType="truth_dare" lang={lang} />
+          <WebScreenButton
+            playerUid="td_p0"
+            playerName=""
+            gameType="truth_dare"
+            getPublicData={() => ({ currentRound, totalRounds })}
+            themeName={themeId || 'dark'}
+          />
+        </View>
+        <View style={styles.roundInfo}>
+          <Text style={[styles.roundText, { color: theme.textSecondary }]}>
+            جولة {currentRound} / {totalRounds}
+          </Text>
+        </View>
+        <View style={{ width: 40 }} />
       </View>
-      {!done && (
-        <TouchableOpacity style={wh.btn} onPress={spin} disabled={spinning}>
-          <Text style={wh.btnTxt}>{spinning ? 'جاري...' : 'أدّر العجلة'}</Text>
-        </TouchableOpacity>
-      )}
+
+      {/* شريط التقدم */}
+      <View style={[styles.progressBar, { backgroundColor: theme.bgCard }]}>
+        <View style={[styles.progressFill, { backgroundColor: theme.accent, width: `${progress * 100}%` }]} />
+      </View>
+
+      {/* ── المحتوى حسب الـ phase ── */}
+      <ScrollView contentContainerStyle={styles.gameContent} showsVerticalScrollIndicator={false}>
+
+        {/* عجلة الضحية */}
+        {phase === 'spin_victim' && (
+          <SpinWheel
+            players={players}
+            onDone={handleVictimDone}
+            label="من هي الضحية هذه الدورة؟"
+            theme={theme}
+          />
+        )}
+
+        {/* عجلة المحقق (تستثني الضحية) */}
+        {phase === 'spin_asker' && victim && (
+          <SpinWheel
+            players={players}
+            excludeId={victim.id}
+            onDone={handleAskerDone}
+            label={`من هو المحقق مع ${victim.name}؟`}
+            theme={theme}
+          />
+        )}
+
+        {/* اختيار صراحة أو تحدي */}
+        {phase === 'choose' && victim && asker && (
+          <View style={styles.chooseSection}>
+            <Text style={[styles.chooseMeta, { color: theme.textMuted }]}>
+              🔍 المحقق: {asker.name}  •  🎯 الضحية: {victim.name}
+            </Text>
+            <Text style={[styles.chooseTitle, { color: theme.textPrimary }]}>
+              {victim.name}، اختر:
+            </Text>
+            <TouchableOpacity
+              style={[styles.chooseCard, { backgroundColor: theme.purple + '22', borderColor: theme.purple }]}
+              onPress={() => chooseOption('truth')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.chooseCardEmoji}>🗣</Text>
+              <Text style={styles.chooseCardLabel}>صراحة</Text>
+              <Text style={[styles.chooseCardPts, { color: '#93c5fd' }]}>+{TRUTH_PTS} نقطة إذا أجبت</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.chooseCard, { backgroundColor: theme.error + '22', borderColor: theme.error }]}
+              onPress={() => chooseOption('dare')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.chooseCardEmoji}>😈</Text>
+              <Text style={styles.chooseCardLabel}>تحدي</Text>
+              <Text style={[styles.chooseCardPts, { color: '#fca5a5' }]}>+{DARE_PTS} نقطة إذا نفّذت</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* مرحلة الفعل (صراحة أو تحدي) */}
+        {phase === 'action' && victim && asker && (
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%' }}>
+            <View style={styles.actionSection}>
+              {/* بطاقة المحقق والضحية */}
+              <View style={[styles.actionCard, { backgroundColor: theme.bgCard, borderColor: choice === 'truth' ? '#3b82f6' : '#ef4444' }]}>
+                <Text style={[styles.actionLabel, { color: theme.textMuted }]}>
+                  {choice === 'truth' ? '🗣 صراحة — المحقق يسأل الضحية' : '😈 تحدي — المحقق يتحدى الضحية'}
+                </Text>
+                <View style={styles.actionPlayers}>
+                  <View style={[styles.playerPill, { backgroundColor: choice === 'truth' ? theme.purple + '33' : theme.error + '33' }]}>
+                    <Text style={styles.playerPillText}>{asker.name}</Text>
+                  </View>
+                  <Text style={[styles.actionArrow, { color: theme.textMuted }]}>
+                    {choice === 'truth' ? '⟶ يسأل' : '⟶ يتحدى'}
+                  </Text>
+                  <View style={[styles.playerPill, { backgroundColor: theme.bgCard, borderWidth: 1, borderColor: theme.accent }]}>
+                    <Text style={[styles.playerPillText, { color: theme.accent }]}>{victim.name}</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* زرا النتيجة */}
+              <View style={styles.resultBtns}>
+                <TouchableOpacity
+                  style={[styles.resultBtn, { backgroundColor: theme.success + '22', borderColor: theme.success }]}
+                  onPress={() => markDone(true)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.resultBtnText}>
+                    {choice === 'truth' ? '✅  أجاب صادقاً' : '✅  نفّذ التحدي'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.resultBtn, { backgroundColor: theme.error + '22', borderColor: theme.error }]}
+                  onPress={() => markDone(false)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.resultBtnText}>
+                    {choice === 'truth' ? '❌  رفض الإجابة' : '❌  لم يكمل التحدي'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        )}
+
+        {/* نقاط اللاعبين */}
+        <View style={[styles.scoreboard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+          <Text style={[styles.scoreboardTitle, { color: theme.textMuted }]}>النقاط</Text>
+          <View style={styles.scoreboardGrid}>
+            {players.map(p => (
+              <View key={p.id} style={[styles.scoreChip, { borderColor: p.id === currentVictimId ? theme.accent : theme.border }]}>
+                <Text style={[styles.scoreChipName, { color: p.id === currentVictimId ? theme.accent : theme.textSecondary }]} numberOfLines={1}>
+                  {p.name}
+                </Text>
+                <Text style={[styles.scoreChipPts, { color: theme.accent }]}>{scores[p.id] || 0}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+      </ScrollView>
     </View>
   );
 }
 
-// ── الستايلات ────────────────────────────────────────────────
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#06061a', paddingTop: 56 },
+// ─────────────────────────────────────────────────────────────────────
+// Root
+// ─────────────────────────────────────────────────────────────────────
+export default function TruthDareScreen({ onBack }) {
+  const { theme, themeId } = useTheme();
+  const t  = useT();
+  const rs = useRTLStyles();
+  const [players, setPlayers] = useState(null);
+
+  const handleStart = useCallback((p) => setPlayers(p), []);
+  const handleBack  = useCallback(() => {
+    if (players) setPlayers(null);
+    else onBack();
+  }, [players, onBack]);
+
+  return (
+    <View style={[styles.root, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <TruthDareEngraving theme={theme} />
+      {!players
+        ? <SetupScreen onStart={handleStart} onBack={handleBack} theme={theme} t={t} rs={rs} />
+        : <GameScreen   players={players}    onBack={handleBack} theme={theme} t={t} rs={rs} />
+      }
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────
+const HIT_SLOP = { top: 10, bottom: 10, left: 10, right: 10 };
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+
+  // ── Setup ──
   header: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 56 : 44, paddingBottom: 12,
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: '#0f0f2e', borderWidth: 1, borderColor: '#a78bfa30',
-    alignItems: 'center', justifyContent: 'center',
+    width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1,
   },
-  backTxt:    { color: '#a78bfa', fontSize: 20, fontWeight: '700' },
-  headerTitle:{ color: '#a78bfa', fontSize: 18, fontWeight: '900' },
-  tokenBadge: {
-    backgroundColor: '#f59e0b22', borderWidth: 1,
-    borderColor: '#f59e0b50', borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 5,
-  },
-  tokenText: { color: '#f59e0b', fontSize: 13, fontWeight: '700' },
+  backBtnText:   { fontSize: 18, fontWeight: '700' },
+  headerTitle:   { fontSize: 18, fontWeight: '900', textAlign: 'center' },
+  setupContent:  { flexGrow: 1, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32, gap: 12, alignItems: 'center' },
+  setupSubtitle: { fontSize: 13, textAlign: 'center', marginBottom: 4 },
+  nameRow:       { flexDirection: 'row', gap: 8, width: '100%', alignItems: 'center' },
+  playerNumBadge:{ width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  playerNumText: { fontSize: 13, fontWeight: '800' },
+  input:         { flex: 1, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15 },
+  removeBtn:     { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  removeBtnText: { color: '#ef4444', fontSize: 15, fontWeight: '700' },
+  addBtn:        { borderRadius: 14, paddingVertical: 11, paddingHorizontal: 24, borderWidth: 1.5, width: '100%', alignItems: 'center' },
+  addBtnText:    { fontSize: 14, fontWeight: '700' },
+  startBtn:      { paddingVertical: 16, borderRadius: 16, alignItems: 'center', width: '100%', marginTop: 8, elevation: 6 },
+  startBtnText:  { fontSize: 17, fontWeight: '800' },
 
-  // progress
-  progressWrap: { paddingHorizontal: 20, gap: 4, marginBottom: 8 },
-  progressBg: {
-    height: 6, backgroundColor: '#1e1b4b', borderRadius: 3, overflow: 'hidden',
-  },
-  progressFill: { height: 6, backgroundColor: '#a855f7', borderRadius: 3 },
-  progressTxt:  { color: '#3a3a60', fontSize: 11, textAlign: 'center' },
-
-  // turn info
-  turnInfo: { alignItems: 'center', marginBottom: 8 },
-  turnLabel:  { color: '#5a5a80', fontSize: 13 },
-  turnTarget: { color: '#ef4444', fontSize: 22, fontWeight: '900', marginTop: 4 },
-
-  // asker card
-  askerCard: {
-    marginHorizontal: 20, backgroundColor: '#1e1b4b',
-    borderRadius: 16, padding: 14, alignItems: 'center',
-    borderWidth: 1, borderColor: '#a78bfa30', marginBottom: 8,
-  },
-  askerLabel: { color: '#5a5a80', fontSize: 12 },
-  askerName:  { color: '#a78bfa', fontSize: 20, fontWeight: '800', marginTop: 4 },
-
-  // setup
-  setupScroll: { paddingHorizontal: 20, paddingBottom: 40, gap: 12 },
-  sectionTitle: { color: '#a78bfa', fontSize: 18, fontWeight: '900', textAlign: 'center' },
-  inputRow: { flexDirection: 'row', gap: 10 },
-  input: {
-    flex: 1, backgroundColor: '#0f0f2e', borderRadius: 14,
-    borderWidth: 1.5, borderColor: '#a78bfa30',
-    color: '#fff', fontSize: 15, paddingHorizontal: 16, paddingVertical: 12,
-    textAlign: 'right',
-  },
-  addBtn: {
-    width: 48, height: 48, borderRadius: 14,
-    backgroundColor: '#a855f7', alignItems: 'center', justifyContent: 'center',
-  },
-  addBtnTxt: { color: '#fff', fontSize: 28, fontWeight: '700', lineHeight: 32 },
-  playerRow: {
+  // ── Game header ──
+  gameRoot:   { flex: 1 },
+  gameHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#0f0f2e', borderRadius: 14, padding: 14,
-    borderWidth: 1, borderColor: '#a78bfa20',
+    paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 52 : 40, paddingBottom: 8,
   },
-  playerName: { color: '#fff', fontSize: 15 },
-  removeBtn:  { color: '#ef4444', fontSize: 18, fontWeight: '700', padding: 4 },
-  startBtn: {
-    backgroundColor: '#a855f7', borderRadius: 18,
-    paddingVertical: 16, alignItems: 'center', marginTop: 8,
-  },
-  startBtnTxt: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  rulesBox: {
-    backgroundColor: '#0f0f2e', borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: '#a78bfa20', gap: 6, marginTop: 4,
-  },
-  rulesTitle: { color: '#a78bfa', fontSize: 14, fontWeight: '800', marginBottom: 4 },
-  rulesLine:  { color: '#5a5a80', fontSize: 13 },
+  exitBtn:      { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  exitBtnText:  { fontSize: 16, fontWeight: '700' },
+  roundInfo:    { alignItems: 'center' },
+  roundText:    { fontSize: 15, fontWeight: '700' },
+  progressBar:  { height: 5, marginHorizontal: 16, borderRadius: 4, overflow: 'hidden', marginBottom: 4 },
+  progressFill: { height: '100%', borderRadius: 4 },
 
-  // matchup
-  matchupCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
-    marginHorizontal: 20, backgroundColor: '#0f0f2e',
-    borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#a78bfa30',
-    marginBottom: 20,
+  gameContent: {
+    flexGrow: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 24,
+    alignItems: 'center', gap: 20,
   },
-  matchupPlayer: { alignItems: 'center', gap: 4 },
-  matchupRole:   { color: '#5a5a80', fontSize: 12 },
-  matchupName:   { color: '#fff', fontSize: 16, fontWeight: '800' },
-  matchupVs:     { color: '#a78bfa', fontSize: 22, fontWeight: '900' },
 
-  // choose
-  chooseLabel: { color: '#a78bfa', fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 16 },
-  choiceRow:   { flexDirection: 'row', gap: 16, paddingHorizontal: 20, marginBottom: 20 },
-  choiceBtn: {
-    flex: 1, backgroundColor: '#0f0f2e', borderRadius: 18,
-    borderWidth: 2, padding: 20, alignItems: 'center', gap: 6,
+  // ── Wheel ──
+  wheelSection:   { alignItems: 'center', gap: 14, width: '100%' },
+  wheelLabel:     { fontSize: 15, textAlign: 'center', fontWeight: '600' },
+  wheelContainer: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  pointer: {
+    position: 'absolute', top: 0, zIndex: 10,
+    width: 0, height: 0,
+    borderLeftWidth: 12, borderRightWidth: 12, borderBottomWidth: 22,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent',
+    marginTop: -4,
   },
-  choiceBtnActive: { backgroundColor: '#1e1b4b' },
-  choiceEmoji: { fontSize: 32 },
-  choiceTxt:   { fontSize: 18, fontWeight: '900' },
-  choicePts:   { color: '#5a5a80', fontSize: 12 },
-  chooseHint:  { color: '#3a3a60', fontSize: 13, textAlign: 'center', marginBottom: 24, paddingHorizontal: 20 },
-  confirmBtn: {
-    marginHorizontal: 20, backgroundColor: '#a855f7', borderRadius: 18,
-    paddingVertical: 16, alignItems: 'center',
+  wheelSvgWrap: { overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 12 },
+  wheelRing: {
+    position: 'absolute', borderWidth: 3,
+    top: 16, left: 8,
   },
-  confirmBtnTxt: { color: '#fff', fontSize: 18, fontWeight: '900' },
+  spinBtn: {
+    paddingVertical: 15, paddingHorizontal: 40, borderRadius: 18,
+    elevation: 6, borderWidth: 1.5,
+  },
+  spinBtnText:   { fontSize: 16, fontWeight: '800' },
+  winnerBadge:   { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 16, borderWidth: 2 },
+  winnerBadgeText: { fontSize: 18, fontWeight: '900' },
 
-  // confirm phase
-  confirmCenter: { justifyContent: 'center', alignItems: 'center', gap: 20 },
-  bigEmoji:   { fontSize: 72 },
-  confirmQ:   { color: '#fff', fontSize: 20, fontWeight: '700', textAlign: 'center', paddingHorizontal: 30 },
-  highlight:  { color: '#fbbf24', fontWeight: '900' },
-  switchBtn: {
-    backgroundColor: '#1e1b4b', borderRadius: 14, borderWidth: 1, borderColor: '#a78bfa40',
-    paddingHorizontal: 20, paddingVertical: 10,
+  // ── Choose ──
+  chooseSection: { width: '100%', gap: 14, alignItems: 'center' },
+  chooseMeta:    { fontSize: 13, textAlign: 'center' },
+  chooseTitle:   { fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  chooseCard: {
+    width: '100%', paddingVertical: 22, borderRadius: 20, alignItems: 'center',
+    gap: 6, borderWidth: 1.5, elevation: 4,
   },
-  switchTxt: { color: '#a78bfa', fontSize: 14, fontWeight: '700' },
-  resultRow: { flexDirection: 'row', gap: 16, paddingHorizontal: 20, marginTop: 8 },
+  chooseCardEmoji: { fontSize: 36 },
+  chooseCardLabel: { color: '#ffffff', fontSize: 24, fontWeight: '900' },
+  chooseCardPts:   { fontSize: 12, fontWeight: '600' },
+
+  // ── Action ──
+  actionSection: { width: '100%', gap: 16, alignItems: 'center' },
+  actionCard: {
+    width: '100%', borderRadius: 20, padding: 20, gap: 12,
+    borderWidth: 2, alignItems: 'center',
+  },
+  actionLabel:   { fontSize: 14, fontWeight: '700' },
+  actionPlayers: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'center' },
+  playerPill:    { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  playerPillText: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
+  actionArrow:   { fontSize: 13, fontWeight: '600' },
+  resultBtns:    { flexDirection: 'column', gap: 10, width: '100%' },
   resultBtn: {
-    flex: 1, borderRadius: 18, borderWidth: 2,
-    paddingVertical: 20, alignItems: 'center', gap: 4,
+    paddingVertical: 16, borderRadius: 16, alignItems: 'center',
+    borderWidth: 1.5, elevation: 3,
   },
-  resultEmoji: { fontSize: 32 },
-  resultTxt:   { fontSize: 18, fontWeight: '900' },
-  resultPts:   { color: '#5a5a80', fontSize: 13 },
+  resultBtnText: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
 
-  // results
-  resultsScroll: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
-  resultCard: {
+  // ── Scoreboard ──
+  scoreboard: {
+    width: '100%', borderRadius: 16, padding: 14, borderWidth: 1, gap: 10,
+  },
+  scoreboardTitle: { fontSize: 12, textAlign: 'center', fontWeight: '600', letterSpacing: 0.5 },
+  scoreboardGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  scoreChip: {
+    borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6,
+    alignItems: 'center', borderWidth: 1.5, minWidth: 70,
+  },
+  scoreChipName: { fontSize: 11, maxWidth: 80 },
+  scoreChipPts:  { fontSize: 15, fontWeight: '900' },
+
+  // ── Final ──
+  finalContainer: {
+    flex: 1, padding: 24, paddingTop: Platform.OS === 'ios' ? 60 : 48,
+    alignItems: 'center', gap: 16,
+  },
+  finalEmoji:  { fontSize: 64 },
+  finalTitle:  { fontSize: 26, fontWeight: '900', textAlign: 'center', marginBottom: 4 },
+  scoreRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#0f0f2e', borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: '#a78bfa20',
+    borderRadius: 14, padding: 14, borderWidth: 1,
   },
-  resultCard1: { borderColor: '#fbbf2440', backgroundColor: '#1e1b0a' },
-  rankEmoji:   { fontSize: 24, width: 32 },
-  resultPlayerName: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '700' },
-  resultScore: { color: '#a78bfa', fontSize: 22, fontWeight: '900' },
-  backFullBtn: {
-    backgroundColor: '#1e1b4b', borderRadius: 18, paddingVertical: 14, alignItems: 'center',
-  },
-  backFullTxt: { color: '#5a5a80', fontSize: 16, fontWeight: '700' },
+  scoreRankEmoji: { fontSize: 22, width: 30, textAlign: 'center' },
+  scoreRowName:   { flex: 1, fontSize: 15, fontWeight: '700' },
+  scoreRowPts:    { fontSize: 16, fontWeight: '900' },
 });

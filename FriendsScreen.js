@@ -1,298 +1,232 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, TextInput,
   FlatList, KeyboardAvoidingView, Platform, Animated,
-  ActivityIndicator, StatusBar
+  ActivityIndicator, StatusBar,
 } from 'react-native';
 import { db } from './firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 import {
   searchUsers, sendFriendRequest,
   listenIncomingRequests, acceptFriendRequest, declineFriendRequest,
-  listenConversations, listenMessages, sendMessage, createGroup
+  listenConversations, listenMessages, sendMessage, createGroup,
 } from './friendService';
+import { useTheme } from './ThemeContext';
+import { useT, useRTLStyles } from './I18n';
 
-// ── الصفحات الداخلية ──
 const TABS = { CHATS: 'chats', FRIENDS: 'friends', REQUESTS: 'requests' };
 
-export default function FriendsScreen({ user, setScreen }) {
-  const [tab, setTab] = useState(TABS.CHATS);
-  const [conversations, setConversations] = useState([]);
-  const [incomingRequests, setIncomingRequests] = useState([]);
-  const [openConv, setOpenConv] = useState(null); // محادثة مفتوحة
-  const [showCreateGroup, setShowCreateGroup] = useState(false);
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start();
-    if (!user?.uid) return;
-
-    const unsubConv = listenConversations(user.uid, setConversations);
-    const unsubReq = listenIncomingRequests(user.uid, setIncomingRequests);
-    return () => { unsubConv(); unsubReq(); };
-  }, [user?.uid]);
-
-  // ── إذا فُتحت محادثة ──
-  if (openConv) return (
-    <ChatScreen
-      conv={openConv}
-      user={user}
-      onBack={() => setOpenConv(null)}
-      setScreen={setScreen}
-    />
-  );
-
-  if (showCreateGroup) return (
-    <CreateGroupScreen
-      user={user}
-      conversations={conversations.filter(c => c.type === 'dm')}
-      onBack={() => setShowCreateGroup(false)}
-      onCreated={(convId) => { setShowCreateGroup(false); }}
-    />
-  );
-
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-
-      {/* هيدر */}
-      <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-        <TouchableOpacity onPress={() => setScreen('home')} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>👥 الأصدقاء</Text>
-        <TouchableOpacity onPress={() => setShowCreateGroup(true)} style={styles.addGroupBtn}>
-          <Text style={styles.addGroupText}>＋ مجموعة</Text>
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* تابز */}
-      <Animated.View style={[styles.tabs, { opacity: fadeAnim }]}>
-        {[
-          { key: TABS.CHATS, label: '💬 المحادثات' },
-          { key: TABS.FRIENDS, label: '🔍 إضافة' },
-          { key: TABS.REQUESTS, label: `🔔 الطلبات${incomingRequests.length > 0 ? ` (${incomingRequests.length})` : ''}` },
-        ].map(t => (
-          <TouchableOpacity
-            key={t.key}
-            style={[styles.tabBtn, tab === t.key && styles.tabBtnActive]}
-            onPress={() => setTab(t.key)}
-          >
-            <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </Animated.View>
-
-      {/* المحتوى */}
-      <Animated.View style={[{ flex: 1, width: '100%' }, { opacity: fadeAnim }]}>
-        {tab === TABS.CHATS && (
-          <ChatsList
-            conversations={conversations}
-            user={user}
-            onOpen={setOpenConv}
-          />
-        )}
-        {tab === TABS.FRIENDS && (
-          <AddFriendTab user={user} />
-        )}
-        {tab === TABS.REQUESTS && (
-          <RequestsTab
-            requests={incomingRequests}
-            currentUser={user}
-          />
-        )}
-      </Animated.View>
+// ── بطاقة المحادثة ──
+const ConvCard = memo(({ item, onOpen, theme }) => (
+  <TouchableOpacity
+    style={[styles.convCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
+    onPress={() => onOpen(item)}
+    activeOpacity={0.8}
+  >
+    <View style={[styles.convAvatar, { backgroundColor: item.type === 'group' ? theme.purpleSoft : theme.accentSoft }]}>
+      <Text style={styles.convAvatarEmoji}>{item.type === 'group' ? '👥' : '👤'}</Text>
     </View>
-  );
-}
-
-// ══════════════════════════════
-// قائمة المحادثات
-// ══════════════════════════════
-function ChatsList({ conversations, user, onOpen }) {
-  if (conversations.length === 0) return (
-    <View style={styles.emptyWrap}>
-      <Text style={styles.emptyEmoji}>💬</Text>
-      <Text style={styles.emptyText}>لا توجد محادثات بعد</Text>
-      <Text style={styles.emptyHint}>أضف أصدقاء من تبويب "إضافة"</Text>
+    <View style={styles.convInfo}>
+      <Text style={[styles.convName, { color: theme.textPrimary }]}>
+        {item.type === 'group' ? item.name : 'صديق'}
+      </Text>
+      <Text style={[styles.convLastMsg, { color: theme.textMuted }]} numberOfLines={1}>
+        {item.lastMessage || 'ابدأ المحادثة...'}
+      </Text>
     </View>
-  );
+    {item.type === 'group' && (
+      <View style={[styles.groupBadge, { backgroundColor: theme.purpleSoft }]}>
+        <Text style={[styles.groupBadgeText, { color: theme.purple }]}>{item.members?.length} 👤</Text>
+      </View>
+    )}
+  </TouchableOpacity>
+));
 
+const EmptyView = memo(({ emoji, text, hint, theme }) => (
+  <View style={styles.emptyWrap}>
+    <Text style={styles.emptyEmoji}>{emoji}</Text>
+    <Text style={[styles.emptyText, { color: theme?.textSecondary }]}>{text}</Text>
+    {hint ? <Text style={[styles.emptyHint, { color: theme?.textMuted }]}>{hint}</Text> : null}
+  </View>
+));
+
+// ══ قائمة المحادثات ══
+const ChatsList = memo(({ conversations, user, onOpen, theme, t }) => {
+  const keyExtractor = useCallback(i => i.id, []);
+  const renderItem   = useCallback(({ item }) => (
+    <ConvCard item={item} myUid={user?.uid} onOpen={onOpen} theme={theme} />
+  ), [user?.uid, onOpen, theme]);
+
+  if (conversations.length === 0) {
+    return <EmptyView emoji="💬" text="لا توجد محادثات بعد" hint='أضف أصدقاء من تبويب "إضافة"' theme={theme} />;
+  }
   return (
     <FlatList
       data={conversations}
-      keyExtractor={i => i.id}
-      contentContainerStyle={{ padding: 16, gap: 10 }}
-      renderItem={({ item }) => (
-        <TouchableOpacity style={styles.convCard} onPress={() => onOpen(item)} activeOpacity={0.8}>
-          <View style={[styles.convAvatar, { backgroundColor: item.type === 'group' ? '#7c3aed22' : '#f5c51822' }]}>
-            <Text style={styles.convAvatarEmoji}>{item.type === 'group' ? '👥' : '👤'}</Text>
-          </View>
-          <View style={styles.convInfo}>
-            <Text style={styles.convName}>
-              {item.type === 'group' ? item.name : getOtherName(item, user?.uid)}
-            </Text>
-            <Text style={styles.convLastMsg} numberOfLines={1}>
-              {item.lastMessage || 'ابدأ المحادثة...'}
-            </Text>
-          </View>
-          {item.type === 'group' && (
-            <View style={styles.groupBadge}>
-              <Text style={styles.groupBadgeText}>{item.members?.length} 👤</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      )}
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
+      contentContainerStyle={styles.listPad}
+      ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+      showsVerticalScrollIndicator={false}
+      removeClippedSubviews
     />
   );
-}
+});
 
-function getOtherName(conv, myUid) {
-  // الاسم يُجلب من الـ state عند الفتح، هنا نعرض placeholder
-  return 'صديق';
-}
-
-// ══════════════════════════════
-// إضافة صديق
-// ══════════════════════════════
-function AddFriendTab({ user }) {
-  const [query, setQuery] = useState('');
+// ══ إضافة صديق ══
+function AddFriendTab({ user, theme, t, rs }) {
+  const [query,   setQuery]   = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [sentTo, setSentTo] = useState([]);
+  const [sentTo,  setSentTo]  = useState([]);
 
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     if (!query.trim()) return;
     setLoading(true);
     const res = await searchUsers(query.trim(), user?.uid);
     setResults(res);
     setLoading(false);
-  };
+  }, [query, user?.uid]);
 
-  const handleSend = async (toUid) => {
+  const handleSend = useCallback(async (toUid) => {
     const r = await sendFriendRequest(user?.uid, toUid);
     if (!r?.error) setSentTo(prev => [...prev, toUid]);
-  };
+  }, [user?.uid]);
+
+  const keyExtractor = useCallback(i => i.uid, []);
+  const renderItem   = useCallback(({ item }) => (
+    <View style={[styles.userCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+      <View style={[styles.userAvatar, { backgroundColor: theme.accentSoft }]}>
+        <Text style={[styles.userAvatarText, { color: theme.accent }]}>{item.name?.[0] || '؟'}</Text>
+      </View>
+      <View style={styles.userInfo}>
+        <Text style={[styles.userName, { color: theme.textPrimary }]}>{item.name}</Text>
+        <Text style={[styles.userUsername, { color: theme.textMuted }]}>@{item.username}</Text>
+      </View>
+      {sentTo.includes(item.uid) ? (
+        <View style={[styles.sentBadge, { backgroundColor: '#10b98122' }]}>
+          <Text style={[styles.sentText, { color: theme.success }]}>✓ أُرسل</Text>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={[styles.addBtn, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}
+          onPress={() => handleSend(item.uid)}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.addBtnText, { color: theme.accent }]}>＋ إضافة</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  ), [sentTo, handleSend, theme]);
 
   return (
     <View style={{ flex: 1, padding: 16 }}>
-      {/* حقل البحث */}
       <View style={styles.searchRow}>
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { backgroundColor: theme.bgCard, borderColor: theme.border, color: theme.textPrimary }, rs.textInput]}
           placeholder="ابحث بالاسم أو الـ username..."
-          placeholderTextColor="#3a3a60"
+          placeholderTextColor={theme.textMuted}
           value={query}
           onChangeText={setQuery}
           onSubmitEditing={handleSearch}
           returnKeyType="search"
         />
-        <TouchableOpacity style={styles.searchBtn} onPress={handleSearch}>
-          {loading ? <ActivityIndicator color="#06061a" size="small" /> : <Text style={styles.searchBtnText}>🔍</Text>}
+        <TouchableOpacity style={[styles.searchBtn, { backgroundColor: theme.accent }]} onPress={handleSearch} activeOpacity={0.85}>
+          {loading
+            ? <ActivityIndicator color={theme.textOnAccent} size="small" />
+            : <Text style={styles.searchBtnText}>🔍</Text>
+          }
         </TouchableOpacity>
       </View>
-
-      {/* النتائج */}
       {results.length === 0 && !loading && query.length > 0 && (
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyEmoji}>🔍</Text>
-          <Text style={styles.emptyText}>لا نتائج</Text>
-        </View>
+        <EmptyView emoji="🔍" text="لا نتائج" theme={theme} />
       )}
       <FlatList
         data={results}
-        keyExtractor={i => i.uid}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         contentContainerStyle={{ gap: 10, marginTop: 12 }}
-        renderItem={({ item }) => (
-          <View style={styles.userCard}>
-            <View style={styles.userAvatar}>
-              <Text style={styles.userAvatarText}>{item.name?.[0] || '؟'}</Text>
-            </View>
-            <View style={styles.userInfo}>
-              <Text style={styles.userName}>{item.name}</Text>
-              <Text style={styles.userUsername}>@{item.username}</Text>
-            </View>
-            {sentTo.includes(item.uid) ? (
-              <View style={styles.sentBadge}>
-                <Text style={styles.sentText}>✓ أُرسل</Text>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.addBtn} onPress={() => handleSend(item.uid)}>
-                <Text style={styles.addBtnText}>＋ إضافة</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       />
     </View>
   );
 }
 
-// ══════════════════════════════
-// طلبات الصداقة الواردة
-// ══════════════════════════════
-function RequestsTab({ requests, currentUser }) {
+// ══ طلبات الصداقة ══
+function RequestsTab({ requests, currentUser, theme }) {
   const [names, setNames] = useState({});
 
   useEffect(() => {
-    requests.forEach(async (req) => {
-      if (!names[req.from]) {
-        const snap = await getDoc(doc(db, 'users', req.from));
-        if (snap.exists()) setNames(p => ({ ...p, [req.from]: snap.data().name }));
-      }
+    const missing = requests.filter(r => !names[r.from]);
+    if (missing.length === 0) return;
+    missing.forEach(async (req) => {
+      const snap = await getDoc(doc(db, 'users', req.from));
+      if (snap.exists()) setNames(p => ({ ...p, [req.from]: snap.data().name }));
     });
   }, [requests]);
 
-  if (requests.length === 0) return (
-    <View style={styles.emptyWrap}>
-      <Text style={styles.emptyEmoji}>🔔</Text>
-      <Text style={styles.emptyText}>لا توجد طلبات</Text>
+  const handleAccept  = useCallback((id, from) => acceptFriendRequest(id, from, currentUser?.uid), [currentUser?.uid]);
+  const handleDecline = useCallback((id) => declineFriendRequest(id), []);
+  const keyExtractor  = useCallback(i => i.id, []);
+  const renderItem    = useCallback(({ item }) => (
+    <View style={[styles.requestCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+      <View style={[styles.userAvatar, { backgroundColor: theme.accentSoft }]}>
+        <Text style={[styles.userAvatarText, { color: theme.accent }]}>{names[item.from]?.[0] || '؟'}</Text>
+      </View>
+      <Text style={[styles.requestName, { color: theme.textPrimary }]}>{names[item.from] || '...'}</Text>
+      <View style={styles.requestBtns}>
+        <TouchableOpacity style={styles.acceptBtn}  onPress={() => handleAccept(item.id, item.from)} hitSlop={HIT_SLOP}>
+          <Text style={[styles.acceptText, { color: theme.success }]}>✓</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.declineBtn} onPress={() => handleDecline(item.id)} hitSlop={HIT_SLOP}>
+          <Text style={[styles.declineText, { color: theme.error }]}>✕</Text>
+        </TouchableOpacity>
+      </View>
     </View>
-  );
+  ), [names, handleAccept, handleDecline, theme]);
 
+  if (requests.length === 0) return <EmptyView emoji="🔔" text="لا توجد طلبات" theme={theme} />;
   return (
     <FlatList
       data={requests}
-      keyExtractor={i => i.id}
-      contentContainerStyle={{ padding: 16, gap: 10 }}
-      renderItem={({ item }) => (
-        <View style={styles.requestCard}>
-          <View style={styles.userAvatar}>
-            <Text style={styles.userAvatarText}>{names[item.from]?.[0] || '؟'}</Text>
-          </View>
-          <Text style={styles.requestName}>{names[item.from] || '...'}</Text>
-          <View style={styles.requestBtns}>
-            <TouchableOpacity
-              style={styles.acceptBtn}
-              onPress={() => acceptFriendRequest(item.id, item.from, currentUser?.uid)}
-            >
-              <Text style={styles.acceptText}>✓</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.declineBtn}
-              onPress={() => declineFriendRequest(item.id)}
-            >
-              <Text style={styles.declineText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
+      contentContainerStyle={styles.listPad}
+      ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+      showsVerticalScrollIndicator={false}
     />
   );
 }
 
-// ══════════════════════════════
-// شاشة المحادثة
-// ══════════════════════════════
-function ChatScreen({ conv, user, onBack, setScreen }) {
+// ══ شاشة المحادثة ══
+const MsgBubble = memo(({ item, myUid, theme }) => {
+  const isMe = item.uid === myUid;
+  return (
+    <View style={[styles.msgRow, isMe && styles.msgRowMe]}>
+      {!isMe && <Text style={[styles.msgSender, { color: theme.textMuted }]}>{item.name}</Text>}
+      <View style={[
+        styles.msgBubble,
+        isMe
+          ? { backgroundColor: theme.accent, borderBottomRightRadius: 4 }
+          : { backgroundColor: theme.bgCard, borderColor: theme.border, borderWidth: 1, borderBottomLeftRadius: 4 },
+      ]}>
+        <Text style={[styles.msgText, { color: isMe ? theme.textOnAccent : theme.textPrimary }]}>
+          {item.text}
+        </Text>
+      </View>
+    </View>
+  );
+});
+
+function ChatScreen({ conv, user, onBack, setScreen, t, rs }) {
+  const { theme } = useTheme();
   const [messages, setMessages] = useState([]);
-  const [text, setText] = useState('');
+  const [text,     setText]     = useState('');
   const [convName, setConvName] = useState(conv.name || '');
   const flatRef = useRef(null);
 
   useEffect(() => {
-    // جلب اسم المحادثة إذا DM
     if (conv.type === 'dm') {
       const otherUid = conv.members?.find(m => m !== user?.uid);
       if (otherUid) {
@@ -305,71 +239,68 @@ function ChatScreen({ conv, user, onBack, setScreen }) {
     return () => unsub();
   }, [conv.id]);
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     if (!text.trim()) return;
-    const t = text.trim();
+    const msg = text.trim();
     setText('');
-    await sendMessage(conv.id, user?.uid, user?.name || 'لاعب', t);
-  };
+    await sendMessage(conv.id, user?.uid, user?.name || 'لاعب', msg);
+  }, [text, conv.id, user]);
+
+  const goGames      = useCallback(() => setScreen('games'), [setScreen]);
+  const keyExtractor = useCallback(i => i.id, []);
+  const renderItem   = useCallback(({ item }) => (
+    <MsgBubble item={item} myUid={user?.uid} theme={theme} />
+  ), [user?.uid, theme]);
+  const scrollToEnd  = useCallback(() => {
+    flatRef.current?.scrollToEnd({ animated: true });
+  }, []);
 
   return (
     <KeyboardAvoidingView
-      style={styles.chatContainer}
+      style={[styles.chatContainer, { backgroundColor: theme.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
     >
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-
-      {/* هيدر */}
-      <View style={styles.chatHeader}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
+      <View style={[styles.chatHeader, { borderBottomColor: theme.divider }]}>
+        <TouchableOpacity
+          onPress={onBack}
+          style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
+          hitSlop={HIT_SLOP}
+        >
+          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
         </TouchableOpacity>
         <View style={styles.chatHeaderCenter}>
           <Text style={styles.chatHeaderEmoji}>{conv.type === 'group' ? '👥' : '👤'}</Text>
-          <Text style={styles.chatHeaderName} numberOfLines={1}>{convName}</Text>
+          <Text style={[styles.chatHeaderName, { color: theme.accent }]} numberOfLines={1}>{convName}</Text>
         </View>
-        {/* زر إنشاء لعبة */}
         <TouchableOpacity
-          style={styles.startGameBtn}
-          onPress={() => setScreen('games')}
+          style={[styles.startGameBtn, { backgroundColor: theme.purpleSoft, borderColor: theme.purpleBorder }]}
+          onPress={goGames}
+          activeOpacity={0.8}
         >
-          <Text style={styles.startGameText}>🎮 لعبة</Text>
+          <Text style={[styles.startGameText, { color: theme.purple }]}>🎮 لعبة</Text>
         </TouchableOpacity>
       </View>
 
-      {/* الرسائل */}
       <FlatList
         ref={flatRef}
         data={messages}
-        keyExtractor={i => i.id}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         contentContainerStyle={styles.msgList}
-        onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: true })}
-        renderItem={({ item }) => {
-          const isMe = item.uid === user?.uid;
-          return (
-            <View style={[styles.msgRow, isMe && styles.msgRowMe]}>
-              {!isMe && <Text style={styles.msgSender}>{item.name}</Text>}
-              <View style={[styles.msgBubble, isMe ? styles.msgBubbleMe : styles.msgBubbleThem]}>
-                <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{item.text}</Text>
-              </View>
-            </View>
-          );
-        }}
-        ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyEmoji}>👋</Text>
-            <Text style={styles.emptyText}>قل مرحباً!</Text>
-          </View>
-        }
+        onContentSizeChange={scrollToEnd}
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews
+        initialNumToRender={20}
+        ListEmptyComponent={<EmptyView emoji="👋" text="قل مرحباً!" theme={theme} />}
       />
 
-      {/* إدخال الرسالة */}
-      <View style={styles.inputRow}>
+      <View style={[styles.inputRow, { backgroundColor: theme.bg, borderTopColor: theme.divider }]}>
         <TextInput
-          style={styles.msgInput}
+          style={[styles.msgInput, { backgroundColor: theme.bgCard, borderColor: theme.border, color: theme.textPrimary }, rs.textInput]}
           placeholder="اكتب رسالة..."
-          placeholderTextColor="#3a3a60"
+          placeholderTextColor={theme.textMuted}
           value={text}
           onChangeText={setText}
           onSubmitEditing={handleSend}
@@ -377,328 +308,302 @@ function ChatScreen({ conv, user, onBack, setScreen }) {
           multiline
         />
         <TouchableOpacity
-          style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
+          style={[styles.sendBtn, { backgroundColor: theme.accent }, !text.trim() && { backgroundColor: theme.accentBorder }]}
           onPress={handleSend}
           disabled={!text.trim()}
+          activeOpacity={0.85}
         >
-          <Text style={styles.sendBtnText}>↑</Text>
+          <Text style={[styles.sendBtnText, { color: theme.textOnAccent }]}>↑</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-// ══════════════════════════════
-// إنشاء مجموعة
-// ══════════════════════════════
-function CreateGroupScreen({ user, conversations, onBack, onCreated }) {
-  const [groupName, setGroupName] = useState('');
-  const [selected, setSelected] = useState([]);
-  const [loading, setLoading] = useState(false);
+// ══ إنشاء مجموعة ══
+function CreateGroupScreen({ user, conversations, onBack, onCreated, theme, t, rs }) {
+  const [groupName,   setGroupName]   = useState('');
+  const [selected,    setSelected]    = useState([]);
+  const [loading,     setLoading]     = useState(false);
   const [friendNames, setFriendNames] = useState({});
 
-  // جلب أسماء الأصدقاء من المحادثات الفردية
   useEffect(() => {
     conversations.forEach(async (conv) => {
       const otherUid = conv.members?.find(m => m !== user?.uid);
       if (otherUid && !friendNames[otherUid]) {
         const snap = await getDoc(doc(db, 'users', otherUid));
-        if (snap.exists()) {
-          setFriendNames(p => ({ ...p, [otherUid]: snap.data().name }));
-        }
+        if (snap.exists()) setFriendNames(p => ({ ...p, [otherUid]: snap.data().name }));
       }
     });
   }, [conversations]);
 
-  const toggle = (uid) => {
-    setSelected(prev =>
-      prev.includes(uid) ? prev.filter(u => u !== uid) : [...prev, uid]
-    );
-  };
+  const toggle = useCallback((uid) => {
+    setSelected(prev => prev.includes(uid) ? prev.filter(u => u !== uid) : [...prev, uid]);
+  }, []);
 
-  const handleCreate = async () => {
+  const handleCreate = useCallback(async () => {
     if (!groupName.trim() || selected.length === 0) return;
     setLoading(true);
     const id = await createGroup(user?.uid, groupName.trim(), selected);
     setLoading(false);
     onCreated(id);
-  };
+  }, [groupName, selected, user?.uid, onCreated]);
 
-  const friends = conversations
+  const friends      = conversations
     .map(c => ({ uid: c.members?.find(m => m !== user?.uid), convId: c.id }))
     .filter(f => f.uid);
+  const keyExtractor = useCallback(i => i.uid, []);
+  const renderItem   = useCallback(({ item }) => {
+    const isSelected = selected.includes(item.uid);
+    return (
+      <TouchableOpacity
+        style={[
+          styles.friendSelectCard,
+          { backgroundColor: theme.bgCard, borderColor: theme.border },
+          isSelected && { borderColor: theme.accentBorder, backgroundColor: theme.accentSoft },
+        ]}
+        onPress={() => toggle(item.uid)}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.userAvatar, { backgroundColor: theme.accentSoft }]}>
+          <Text style={[styles.userAvatarText, { color: theme.accent }]}>{friendNames[item.uid]?.[0] || '؟'}</Text>
+        </View>
+        <Text style={[styles.userName, { color: isSelected ? theme.accent : theme.textPrimary }]}>
+          {friendNames[item.uid] || '...'}
+        </Text>
+        {isSelected && <Text style={[styles.checkMark, { color: theme.accent }]}>✓</Text>}
+      </TouchableOpacity>
+    );
+  }, [selected, friendNames, toggle, theme]);
+
+  const canCreate = groupName.trim() && selected.length > 0;
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>→</Text>
+        <TouchableOpacity
+          onPress={onBack}
+          style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
+          hitSlop={HIT_SLOP}
+        >
+          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>➕ مجموعة جديدة</Text>
+        <Text style={[styles.headerTitle, { color: theme.accent }]}>➕ مجموعة جديدة</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={{ flex: 1, padding: 16, gap: 16 }}>
-        {/* اسم المجموعة */}
+      <View style={{ paddingHorizontal: 16, gap: 12 }}>
         <TextInput
-          style={styles.groupNameInput}
+          style={[styles.groupNameInput, { backgroundColor: theme.bgCard, borderColor: theme.border, color: theme.textPrimary }, rs.textInput]}
           placeholder="اسم المجموعة..."
-          placeholderTextColor="#3a3a60"
+          placeholderTextColor={theme.textMuted}
           value={groupName}
           onChangeText={setGroupName}
         />
-
-        <Text style={styles.selectLabel}>اختر الأصدقاء:</Text>
-
-        {friends.length === 0 && (
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyEmoji}>👤</Text>
-            <Text style={styles.emptyText}>لا يوجد أصدقاء بعد</Text>
-          </View>
-        )}
-
-        <FlatList
-          data={friends}
-          keyExtractor={i => i.uid}
-          contentContainerStyle={{ gap: 10 }}
-          renderItem={({ item }) => {
-            const isSelected = selected.includes(item.uid);
-            return (
-              <TouchableOpacity
-                style={[styles.friendSelectCard, isSelected && styles.friendSelectCardActive]}
-                onPress={() => toggle(item.uid)}
-              >
-                <View style={styles.userAvatar}>
-                  <Text style={styles.userAvatarText}>{friendNames[item.uid]?.[0] || '؟'}</Text>
-                </View>
-                <Text style={[styles.userName, isSelected && { color: '#f5c518' }]}>
-                  {friendNames[item.uid] || '...'}
-                </Text>
-                {isSelected && <Text style={styles.checkMark}>✓</Text>}
-              </TouchableOpacity>
-            );
-          }}
-        />
+        <Text style={[styles.selectLabel, { color: theme.textSecondary }]}>اختر الأصدقاء:</Text>
+        {friends.length === 0 && <EmptyView emoji="👤" text="لا يوجد أصدقاء بعد" theme={theme} />}
       </View>
 
+      <FlatList
+        data={friends}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        contentContainerStyle={{ padding: 16, gap: 10 }}
+        showsVerticalScrollIndicator={false}
+      />
+
       <TouchableOpacity
-        style={[styles.createBtn, (!groupName.trim() || selected.length === 0) && styles.btnDisabled]}
+        style={[styles.createBtn, { backgroundColor: canCreate ? theme.accent : theme.bgCard }, !canCreate && styles.btnDisabled]}
         onPress={handleCreate}
-        disabled={!groupName.trim() || selected.length === 0 || loading}
+        disabled={!canCreate || loading}
+        activeOpacity={0.85}
       >
         {loading
-          ? <ActivityIndicator color="#06061a" />
-          : <Text style={styles.createBtnText}>إنشاء المجموعة ({selected.length} أصدقاء)</Text>
+          ? <ActivityIndicator color={theme.textOnAccent} size="small" />
+          : <Text style={[styles.createBtnText, { color: canCreate ? theme.textOnAccent : theme.textMuted }]}>
+              إنشاء المجموعة ({selected.length} أصدقاء)
+            </Text>
         }
       </TouchableOpacity>
     </View>
   );
 }
 
-// ══════════════════════════════
-// ستايل
-// ══════════════════════════════
+// ══ الشاشة الرئيسية ══
+// ✅ يقبل initialTab لتحديد التاب الابتدائي من HomeScreen
+export default function FriendsScreen({ user, setScreen, initialTab = TABS.CHATS }) {
+  const { theme } = useTheme();
+  const t  = useT();
+  const rs = useRTLStyles();
+
+  // ✅ التعديل الوحيد: القيمة الابتدائية تأتي من initialTab بدل TABS.CHATS الثابتة
+  const [tab,              setTab]              = useState(initialTab);
+  const [conversations,    setConversations]    = useState([]);
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [openConv,         setOpenConv]         = useState(null);
+  const [showCreateGroup,  setShowCreateGroup]  = useState(false);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start();
+    if (!user?.uid) return;
+    const unsubConv = listenConversations(user.uid, setConversations);
+    const unsubReq  = listenIncomingRequests(user.uid, setIncomingRequests);
+    return () => { unsubConv(); unsubReq(); };
+  }, [user?.uid]);
+
+  const goHome          = useCallback(() => setScreen('home'), [setScreen]);
+  const openGroup       = useCallback(() => setShowCreateGroup(true), []);
+  const closeGroup      = useCallback(() => setShowCreateGroup(false), []);
+  const handleGroupDone = useCallback(() => setShowCreateGroup(false), []);
+  const closeConv       = useCallback(() => setOpenConv(null), []);
+
+  const TABS_LIST = [
+    { key: TABS.CHATS,    label: '💬 المحادثات' },
+    { key: TABS.FRIENDS,  label: '🔍 إضافة' },
+    { key: TABS.REQUESTS, label: `🔔 الطلبات${incomingRequests.length > 0 ? ` (${incomingRequests.length})` : ''}` },
+  ];
+
+  if (openConv) return (
+    <ChatScreen conv={openConv} user={user} onBack={closeConv} setScreen={setScreen} t={t} rs={rs} />
+  );
+
+  if (showCreateGroup) return (
+    <CreateGroupScreen
+      user={user}
+      conversations={conversations.filter(c => c.type === 'dm')}
+      onBack={closeGroup}
+      onCreated={handleGroupDone}
+      theme={theme}
+      t={t}
+      rs={rs}
+    />
+  );
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
+
+      <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
+        <TouchableOpacity
+          onPress={goHome}
+          style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
+          hitSlop={HIT_SLOP}
+        >
+          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.accent }]}>👥 الأصدقاء</Text>
+        <TouchableOpacity
+          onPress={openGroup}
+          style={[styles.addGroupBtn, { backgroundColor: theme.purpleSoft, borderColor: theme.purpleBorder }]}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.addGroupText, { color: theme.purple }]}>＋ مجموعة</Text>
+        </TouchableOpacity>
+      </Animated.View>
+
+      <Animated.View style={[styles.tabs, { opacity: fadeAnim }]}>
+        {TABS_LIST.map(tb => (
+          <TouchableOpacity
+            key={tb.key}
+            style={[
+              styles.tabBtn,
+              { backgroundColor: theme.bgCard, borderColor: theme.border },
+              tab === tb.key && { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder },
+            ]}
+            onPress={() => setTab(tb.key)}
+            activeOpacity={0.8}
+          >
+            <Text style={[
+              styles.tabText,
+              { color: tab === tb.key ? theme.accent : theme.textMuted },
+              tab === tb.key && { fontWeight: '800' },
+            ]}>
+              {tb.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </Animated.View>
+
+      <Animated.View style={[{ flex: 1, width: '100%' }, { opacity: fadeAnim }]}>
+        {tab === TABS.CHATS    && <ChatsList conversations={conversations} user={user} onOpen={setOpenConv} theme={theme} t={t} />}
+        {tab === TABS.FRIENDS  && <AddFriendTab user={user} theme={theme} t={t} rs={rs} />}
+        {tab === TABS.REQUESTS && <RequestsTab requests={incomingRequests} currentUser={user} theme={theme} />}
+      </Animated.View>
+    </View>
+  );
+}
+
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1, backgroundColor: '#06061a',
-    paddingTop: 56,
-  },
-  chatContainer: {
-    flex: 1, backgroundColor: '#06061a',
-    paddingTop: 56,
-  },
-
-  // هيدر
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16, marginBottom: 12,
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: '#0f0f2e', borderWidth: 1,
-    borderColor: '#f5c51830', alignItems: 'center', justifyContent: 'center',
-  },
-  backText: { color: '#f5c518', fontSize: 20, fontWeight: '700' },
-  headerTitle: { color: '#f5c518', fontSize: 18, fontWeight: '900' },
-  addGroupBtn: {
-    backgroundColor: '#7c3aed22', borderWidth: 1,
-    borderColor: '#7c3aed50', paddingHorizontal: 12,
-    paddingVertical: 7, borderRadius: 12,
-  },
-  addGroupText: { color: '#a78bfa', fontSize: 13, fontWeight: '700' },
-
-  // تابز
-  tabs: {
-    flexDirection: 'row', paddingHorizontal: 16,
-    gap: 8, marginBottom: 4,
-  },
-  tabBtn: {
-    flex: 1, paddingVertical: 9, borderRadius: 12,
-    backgroundColor: '#0f0f2e', borderWidth: 1,
-    borderColor: '#ffffff10', alignItems: 'center',
-  },
-  tabBtnActive: { backgroundColor: '#f5c51815', borderColor: '#f5c51840' },
-  tabText: { color: '#3a3a60', fontSize: 12, fontWeight: '600' },
-  tabTextActive: { color: '#f5c518', fontSize: 12, fontWeight: '800' },
-
-  // المحادثات
-  convCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#0f0f2e', borderRadius: 16,
-    borderWidth: 1, borderColor: '#ffffff10', padding: 14, gap: 12,
-  },
-  convAvatar: {
-    width: 48, height: 48, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  convAvatarEmoji: { fontSize: 22 },
-  convInfo: { flex: 1 },
-  convName: { color: '#e0e0ff', fontSize: 15, fontWeight: '700' },
-  convLastMsg: { color: '#3a3a60', fontSize: 12, marginTop: 3 },
-  groupBadge: {
-    backgroundColor: '#7c3aed22', paddingHorizontal: 8,
-    paddingVertical: 4, borderRadius: 8,
-  },
-  groupBadgeText: { color: '#a78bfa', fontSize: 11 },
-
-  // إضافة صديق
-  searchRow: { flexDirection: 'row', gap: 10 },
-  searchInput: {
-    flex: 1, backgroundColor: '#0f0f2e',
-    borderRadius: 14, borderWidth: 1,
-    borderColor: '#ffffff15', color: '#e0e0ff',
-    paddingHorizontal: 16, paddingVertical: 12,
-    fontSize: 14, textAlign: 'right',
-  },
-  searchBtn: {
-    backgroundColor: '#f5c518', width: 48,
-    borderRadius: 14, alignItems: 'center', justifyContent: 'center',
-  },
-  searchBtnText: { fontSize: 18 },
-  userCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#0f0f2e', borderRadius: 14,
-    borderWidth: 1, borderColor: '#ffffff10',
-    padding: 12, gap: 12,
-  },
-  userAvatar: {
-    width: 44, height: 44, borderRadius: 12,
-    backgroundColor: '#f5c51822', alignItems: 'center', justifyContent: 'center',
-  },
-  userAvatarText: { color: '#f5c518', fontSize: 18, fontWeight: '700' },
-  userInfo: { flex: 1 },
-  userName: { color: '#e0e0ff', fontSize: 14, fontWeight: '700' },
-  userUsername: { color: '#3a3a60', fontSize: 12, marginTop: 2 },
-  addBtn: {
-    backgroundColor: '#f5c51822', borderWidth: 1,
-    borderColor: '#f5c51850', paddingHorizontal: 12,
-    paddingVertical: 7, borderRadius: 10,
-  },
-  addBtnText: { color: '#f5c518', fontSize: 13, fontWeight: '700' },
-  sentBadge: {
-    backgroundColor: '#10b98122', paddingHorizontal: 12,
-    paddingVertical: 7, borderRadius: 10,
-  },
-  sentText: { color: '#34d399', fontSize: 13, fontWeight: '700' },
-
-  // الطلبات
-  requestCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#0f0f2e', borderRadius: 14,
-    borderWidth: 1, borderColor: '#ffffff10',
-    padding: 12, gap: 12,
-  },
-  requestName: { color: '#e0e0ff', fontSize: 14, fontWeight: '700', flex: 1 },
-  requestBtns: { flexDirection: 'row', gap: 8 },
-  acceptBtn: {
-    width: 38, height: 38, borderRadius: 10,
-    backgroundColor: '#10b98122', borderWidth: 1,
-    borderColor: '#10b98150', alignItems: 'center', justifyContent: 'center',
-  },
-  acceptText: { color: '#34d399', fontSize: 18, fontWeight: '700' },
-  declineBtn: {
-    width: 38, height: 38, borderRadius: 10,
-    backgroundColor: '#ef444422', borderWidth: 1,
-    borderColor: '#ef444450', alignItems: 'center', justifyContent: 'center',
-  },
-  declineText: { color: '#f87171', fontSize: 18, fontWeight: '700' },
-
-  // المحادثة
-  chatHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16, marginBottom: 8,
-  },
-  chatHeaderCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 8 },
-  chatHeaderEmoji: { fontSize: 20 },
-  chatHeaderName: { color: '#f5c518', fontSize: 16, fontWeight: '800', flex: 1 },
-  startGameBtn: {
-    backgroundColor: '#7c3aed22', borderWidth: 1,
-    borderColor: '#7c3aed50', paddingHorizontal: 12,
-    paddingVertical: 7, borderRadius: 12,
-  },
-  startGameText: { color: '#a78bfa', fontSize: 13, fontWeight: '700' },
-  msgList: { padding: 16, gap: 8, flexGrow: 1 },
-  msgRow: { alignItems: 'flex-start' },
-  msgRowMe: { alignItems: 'flex-end' },
-  msgSender: { color: '#3a3a60', fontSize: 11, marginBottom: 3, marginRight: 8 },
-  msgBubble: {
-    maxWidth: '78%', borderRadius: 16,
-    paddingHorizontal: 14, paddingVertical: 10,
-  },
-  msgBubbleThem: { backgroundColor: '#0f0f2e', borderWidth: 1, borderColor: '#ffffff10', borderBottomLeftRadius: 4 },
-  msgBubbleMe: { backgroundColor: '#f5c518', borderBottomRightRadius: 4 },
-  msgText: { color: '#e0e0ff', fontSize: 15, lineHeight: 22 },
-  msgTextMe: { color: '#06061a', fontWeight: '600' },
-  inputRow: {
-    flexDirection: 'row', padding: 12,
-    paddingBottom: 20, gap: 10,
-    borderTopWidth: 1, borderTopColor: '#ffffff08',
-    backgroundColor: '#06061a',
-  },
-  msgInput: {
-    flex: 1, backgroundColor: '#0f0f2e',
-    borderRadius: 16, borderWidth: 1,
-    borderColor: '#ffffff15', color: '#e0e0ff',
-    paddingHorizontal: 16, paddingVertical: 10,
-    fontSize: 15, textAlign: 'right', maxHeight: 100,
-  },
-  sendBtn: {
-    width: 46, height: 46, borderRadius: 14,
-    backgroundColor: '#f5c518', alignItems: 'center', justifyContent: 'center',
-  },
-  sendBtnDisabled: { backgroundColor: '#f5c51840' },
-  sendBtnText: { color: '#06061a', fontSize: 22, fontWeight: '900' },
-
-  // إنشاء مجموعة
-  groupNameInput: {
-    backgroundColor: '#0f0f2e', borderRadius: 14,
-    borderWidth: 1, borderColor: '#ffffff15',
-    color: '#e0e0ff', paddingHorizontal: 16,
-    paddingVertical: 14, fontSize: 15, textAlign: 'right',
-  },
-  selectLabel: { color: '#5a5a80', fontSize: 14, fontWeight: '600' },
-  friendSelectCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#0f0f2e', borderRadius: 14,
-    borderWidth: 1, borderColor: '#ffffff10',
-    padding: 12, gap: 12,
-  },
-  friendSelectCardActive: { borderColor: '#f5c51840', backgroundColor: '#f5c51808' },
-  checkMark: { color: '#f5c518', fontSize: 18, fontWeight: '700' },
-  createBtn: {
-    backgroundColor: '#f5c518', margin: 16,
-    borderRadius: 16, paddingVertical: 16,
-    alignItems: 'center',
-  },
-  createBtnText: { color: '#06061a', fontSize: 16, fontWeight: '800' },
-  btnDisabled: { opacity: 0.4 },
-
-  // فارغ
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 60 },
-  emptyEmoji: { fontSize: 40 },
-  emptyText: { color: '#3a3a60', fontSize: 16, fontWeight: '600' },
-  emptyHint: { color: '#2a2a50', fontSize: 13 },
+  container:         { flex: 1, paddingTop: 56 },
+  chatContainer:     { flex: 1, paddingTop: 56 },
+  header:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 12 },
+  backBtn:           { width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  backText:          { fontSize: 20, fontWeight: '700' },
+  headerTitle:       { fontSize: 18, fontWeight: '900' },
+  addGroupBtn:       { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 12 },
+  addGroupText:      { fontSize: 13, fontWeight: '700' },
+  tabs:              { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 4 },
+  tabBtn:            { flex: 1, paddingVertical: 9, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
+  tabText:           { fontSize: 12, fontWeight: '600' },
+  listPad:           { padding: 16 },
+  convCard:          { flexDirection: 'row', alignItems: 'center', borderRadius: 16, borderWidth: 1, padding: 14, gap: 12 },
+  convAvatar:        { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  convAvatarEmoji:   { fontSize: 22 },
+  convInfo:          { flex: 1 },
+  convName:          { fontSize: 15, fontWeight: '700' },
+  convLastMsg:       { fontSize: 12, marginTop: 3 },
+  groupBadge:        { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  groupBadgeText:    { fontSize: 11 },
+  searchRow:         { flexDirection: 'row', gap: 10 },
+  searchInput:       { flex: 1, borderRadius: 14, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14 },
+  searchBtn:         { width: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  searchBtnText:     { fontSize: 18 },
+  userCard:          { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, padding: 12, gap: 12 },
+  userAvatar:        { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  userAvatarText:    { fontSize: 18, fontWeight: '700' },
+  userInfo:          { flex: 1 },
+  userName:          { fontSize: 14, fontWeight: '700' },
+  userUsername:      { fontSize: 12, marginTop: 2 },
+  addBtn:            { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10 },
+  addBtnText:        { fontSize: 13, fontWeight: '700' },
+  sentBadge:         { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10 },
+  sentText:          { fontSize: 13, fontWeight: '700' },
+  requestCard:       { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, padding: 12, gap: 12 },
+  requestName:       { fontSize: 14, fontWeight: '700', flex: 1 },
+  requestBtns:       { flexDirection: 'row', gap: 8 },
+  acceptBtn:         { width: 38, height: 38, borderRadius: 10, backgroundColor: '#10b98122', borderWidth: 1, borderColor: '#10b98150', alignItems: 'center', justifyContent: 'center' },
+  acceptText:        { fontSize: 18, fontWeight: '700' },
+  declineBtn:        { width: 38, height: 38, borderRadius: 10, backgroundColor: '#ef444422', borderWidth: 1, borderColor: '#ef444450', alignItems: 'center', justifyContent: 'center' },
+  declineText:       { fontSize: 18, fontWeight: '700' },
+  chatHeader:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 8, paddingBottom: 12, borderBottomWidth: 1 },
+  chatHeaderCenter:  { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 8 },
+  chatHeaderEmoji:   { fontSize: 20 },
+  chatHeaderName:    { fontSize: 16, fontWeight: '800', flex: 1 },
+  startGameBtn:      { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 12 },
+  startGameText:     { fontSize: 13, fontWeight: '700' },
+  msgList:           { padding: 16, gap: 8, flexGrow: 1 },
+  msgRow:            { alignItems: 'flex-start' },
+  msgRowMe:          { alignItems: 'flex-end' },
+  msgSender:         { fontSize: 11, marginBottom: 3, marginRight: 8 },
+  msgBubble:         { maxWidth: '78%', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 },
+  msgText:           { fontSize: 15, lineHeight: 22 },
+  inputRow:          { flexDirection: 'row', padding: 12, paddingBottom: 20, gap: 10, borderTopWidth: 1 },
+  msgInput:          { flex: 1, borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 100 },
+  sendBtn:           { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  sendBtnText:       { fontSize: 22, fontWeight: '900' },
+  groupNameInput:    { borderRadius: 14, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15 },
+  selectLabel:       { fontSize: 14, fontWeight: '600' },
+  friendSelectCard:  { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, padding: 12, gap: 12 },
+  checkMark:         { fontSize: 18, fontWeight: '700' },
+  createBtn:         { margin: 16, borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
+  createBtnText:     { fontSize: 16, fontWeight: '800' },
+  btnDisabled:       { opacity: 0.4 },
+  emptyWrap:         { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 60 },
+  emptyEmoji:        { fontSize: 40 },
+  emptyText:         { fontSize: 16, fontWeight: '600' },
+  emptyHint:         { fontSize: 13 },
 });

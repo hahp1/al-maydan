@@ -1,8 +1,19 @@
+/**
+ * AdminScreen.js — لوحة الإدارة
+ * ══════════════════════════════════════════════
+ * التغييرات:
+ *  ✅ زران للاستيراد: 📥 رفع عربي (lang:'ar') و 📥 رفع عالمي (lang:'en')
+ *  ✅ عرض lang بجانب كل فئة في القائمة
+ *  ✅ عرض إحصائيات منفصلة: فئات عربية / عالمية
+ *  ✅ باقي الكود كما هو
+ */
+
 import { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, TextInput,
-  StatusBar, ScrollView, Alert, Image,
+  StatusBar, ScrollView, Alert,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { db, storage } from './firebaseConfig';
 import {
@@ -12,141 +23,157 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import AddQuestionScreen from './AddQuestionScreen';
 import ImportScreen from './ImportScreen';
+import { useTheme } from './ThemeContext';
+import { useT, useRTLStyles } from './I18n';
+import {
+  grantPro, revokePro, getAllProUsers, findUserByEmailOrUsername,
+} from './ProService';
 
 const ADMIN_PASSWORD = 'AlMaydan@2026!';
 
 export default function AdminScreen({ onBack }) {
-  const [authenticated, setAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [showImport, setShowImport] = useState(false);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatEmoji, setNewCatEmoji] = useState('');
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const { theme } = useTheme();
+  const t  = useT();
+  const rs = useRTLStyles();
 
-  // ── تحميل الفئات من Firestore realtime ──
+  const [authenticated,   setAuthenticated]   = useState(false);
+  const [password,        setPassword]        = useState('');
+  const [error,           setError]           = useState('');
+  const [selectedCategory,setSelectedCategory]= useState(null);
+  const [showImport,      setShowImport]      = useState(false);
+  const [importLang,      setImportLang]      = useState('ar');
+  const [categories,      setCategories]      = useState([]);
+
+  // ── Pro Management ──
+  const [proSearch,    setProSearch]    = useState('');
+  const [proSearching, setProSearching] = useState(false);
+  const [proFound,     setProFound]     = useState(null);   // المستخدم المُعثور عليه
+  const [proNote,      setProNote]      = useState('');
+  const [proList,      setProList]      = useState([]);
+  const [proLoading,   setProLoading]   = useState(false);
+
+  const loadProList = async () => {
+    setProLoading(true);
+    const list = await getAllProUsers();
+    setProList(list);
+    setProLoading(false);
+  };
+
+  const handleProSearch = async () => {
+    if (!proSearch.trim()) return;
+    setProSearching(true);
+    setProFound(null);
+    const user = await findUserByEmailOrUsername(proSearch.trim());
+    setProFound(user || false);
+    setProSearching(false);
+  };
+
+  const handleGrantPro = async () => {
+    if (!proFound?.uid) return;
+    // ADMIN_UIDS[0] كـ adminUid — مؤقتاً
+    const result = await grantPro(proFound.uid, 'admin', proNote || 'تفعيل يدوي');
+    if (result.success) {
+      Alert.alert('✅', `تم تفعيل Pro لـ ${proFound.name || proFound.username}`);
+      setProFound(null); setProSearch(''); setProNote('');
+      loadProList();
+    } else {
+      Alert.alert('❌', result.error || 'حدث خطأ');
+    }
+  };
+
+  const handleRevokePro = (uid, name) => {
+    Alert.alert('إلغاء Pro', `إلغاء Pro من ${name}؟`, [
+      { text: 'إلغاء', style: 'cancel' },
+      { text: 'نعم، إلغاء', style: 'destructive', onPress: async () => {
+        await revokePro(uid);
+        loadProList();
+      }},
+    ]);
+  };
+  const [loading,         setLoading]         = useState(false);
+  const [newCatName,      setNewCatName]      = useState('');
+  const [newCatEmoji,     setNewCatEmoji]     = useState('');
+  const [uploadingImage,  setUploadingImage]  = useState(false);
+  const [filterLang,      setFilterLang]      = useState('all'); // 'all' | 'ar' | 'en'
+
   useEffect(() => {
     if (!authenticated) return;
     setLoading(true);
-
     const unsub = onSnapshot(collection(db, 'categories'), async (snapshot) => {
       const cats = [];
       for (const d of snapshot.docs) {
-        const data = d.data();
-        // تحميل عدد الأسئلة
+        const data  = d.data();
         const qSnap = await getDocs(collection(db, 'categories', d.id, 'questions'));
         cats.push({ id: d.id, ...data, questionsCount: qSnap.size });
       }
       setCategories(cats);
       setLoading(false);
     });
-
+    loadProList(); // تحميل قائمة Pro
     return () => unsub();
   }, [authenticated]);
 
   const handleLogin = () => {
-    if (password === ADMIN_PASSWORD) {
-      setAuthenticated(true);
-      setError('');
-    } else {
-      setError('كلمة المرور خاطئة!');
-    }
+    if (password === ADMIN_PASSWORD) { setAuthenticated(true); setError(''); }
+    else setError('كلمة المرور خاطئة!');
   };
 
-  // ── إضافة فئة جديدة ──
   const handleAddCategory = async () => {
     if (!newCatName.trim()) return;
     const catId = newCatName.trim().replace(/\s+/g, '_').toLowerCase() + '_' + Date.now();
     await setDoc(doc(db, 'categories', catId), {
-      name: newCatName.trim(),
-      emoji: newCatEmoji.trim() || '📁',
-      isSpecial: false,
-      imageUrl: null,
-      categoryId: catId,
+      name: newCatName.trim(), emoji: newCatEmoji.trim() || '📁',
+      isSpecial: false, imageUrl: null, categoryId: catId,
       createdAt: Date.now(),
+      lang: filterLang === 'en' ? 'en' : 'ar', // lang حسب الفلتر الحالي
     });
-    setNewCatName('');
-    setNewCatEmoji('');
+    setNewCatName(''); setNewCatEmoji('');
   };
 
-  // ── حذف فئة ──
   const handleDeleteCategory = (id, name) => {
-    Alert.alert(
-      '⚠️ تأكيد الحذف',
-      `هل أنت متأكد من حذف فئة "${name}" وجميع أسئلتها؟`,
-      [
-        { text: 'إلغاء', style: 'cancel' },
-        {
-          text: 'حذف', style: 'destructive',
-          onPress: async () => {
-            // احذف الأسئلة أولاً
-            const qSnap = await getDocs(collection(db, 'categories', id, 'questions'));
-            const batch = writeBatch(db);
-            qSnap.forEach(d => batch.delete(d.ref));
-            await batch.commit();
-            // احذف الفئة
-            await deleteDoc(doc(db, 'categories', id));
-          }
-        }
-      ]
-    );
+    Alert.alert('⚠️ تأكيد الحذف', `هل أنت متأكد من حذف فئة "${name}" وجميع أسئلتها؟`, [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: 'حذف', style: 'destructive', onPress: async () => {
+        const qSnap = await getDocs(collection(db, 'categories', id, 'questions'));
+        const batch = writeBatch(db);
+        qSnap.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        await deleteDoc(doc(db, 'categories', id));
+      }},
+    ]);
   };
 
-  // ── رفع صورة الفئة ──
   const handleUploadImage = async (catId) => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('تنبيه', 'نحتاج إذن الوصول للصور');
-      return;
-    }
-
+    if (!perm.granted) { Alert.alert('', 'نحتاج إذن الوصول للصور'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
+      allowsEditing: true, aspect: [1, 1], quality: 0.7,
     });
-
     if (result.canceled) return;
-
     try {
       setUploadingImage(true);
       const uri = result.assets[0].uri;
       const response = await fetch(uri);
       const blob = await response.blob();
-
       const storageRef = ref(storage, `categories/${catId}/cover.jpg`);
       await uploadBytes(storageRef, blob);
       const url = await getDownloadURL(storageRef);
-
       await updateDoc(doc(db, 'categories', catId), { imageUrl: url });
-      Alert.alert('✅ تم', 'تم رفع الصورة بنجاح!');
-    } catch (e) {
-      Alert.alert('خطأ', e.message);
-    } finally {
-      setUploadingImage(false);
-    }
+      Alert.alert('✅', 'تم رفع الصورة بنجاح!');
+    } catch (e) { Alert.alert('', e.message); }
+    finally { setUploadingImage(false); }
   };
 
-  // ── حفظ الأسئلة من AddQuestionScreen ──
   const handleSaveQuestions = async (newQuestions, newName, newEmoji) => {
     const catId = selectedCategory.id;
-
-    // حدّث بيانات الفئة
     await updateDoc(doc(db, 'categories', catId), {
-      name: newName || selectedCategory.name,
-      emoji: newEmoji || selectedCategory.emoji,
+      name: newName || selectedCategory.name, emoji: newEmoji || selectedCategory.emoji,
     });
-
-    // احذف الأسئلة القديمة وارفع الجديدة
     const qSnap = await getDocs(collection(db, 'categories', catId, 'questions'));
     const deleteBatch = writeBatch(db);
     qSnap.forEach(d => deleteBatch.delete(d.ref));
     await deleteBatch.commit();
-
     const addBatch = writeBatch(db);
     for (const q of newQuestions) {
       const qRef = doc(db, 'categories', catId, 'questions', String(q.id));
@@ -154,148 +181,194 @@ export default function AdminScreen({ onBack }) {
         level: q.level || q.difficulty || 1,
         question: q.text || q.question || '',
         correct: q.answer || q.correct || '',
-        wrong: q.wrong || [],
-        imageUrl: q.imageUrl || null,
+        wrong: q.wrong || [], imageUrl: q.imageUrl || null,
       });
     }
     await addBatch.commit();
     setSelectedCategory(null);
   };
 
+  const openImport = (lang) => {
+    setImportLang(lang);
+    setShowImport(true);
+  };
+
+  // ── إحصائيات ──
+  const arCats = categories.filter(c => !c.lang || c.lang === 'ar');
+  const enCats = categories.filter(c => c.lang === 'en');
+  const displayedCats = filterLang === 'all' ? categories
+    : filterLang === 'ar' ? arCats : enCats;
+
   // ── شاشة تسجيل الدخول ──
   if (!authenticated) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
+      <View style={[styles.fullScreen, { backgroundColor: theme.bg }]}>
+        <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <View style={styles.loginBox}>
           <Text style={styles.lockIcon}>🔐</Text>
-          <Text style={styles.loginTitle}>لوحة الإدارة</Text>
-          <Text style={styles.loginSubtitle}>أدخل كلمة المرور للدخول</Text>
+          <Text style={[styles.loginTitle, { color: theme.accent }]}>لوحة الإدارة</Text>
+          <Text style={[styles.loginSubtitle, { color: theme.textSecondary }]}>أدخل كلمة المرور للدخول</Text>
           <TextInput
-            style={styles.input}
-            placeholder="كلمة المرور"
-            placeholderTextColor="#555577"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            textAlign="right"
+            style={[styles.input, { backgroundColor: theme.bgCard, borderColor: theme.borderCard, color: theme.textPrimary }, rs.textInput]}
+            placeholder="كلمة المرور" placeholderTextColor={theme.textMuted}
+            value={password} onChangeText={setPassword} secureTextEntry
           />
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <TouchableOpacity style={styles.loginBtn} onPress={handleLogin}>
-            <Text style={styles.loginBtnText}>دخول</Text>
+          {error ? <Text style={[styles.error, { color: theme.error }]}>{error}</Text> : null}
+          <TouchableOpacity style={[styles.loginBtn, { backgroundColor: theme.accent }]} onPress={handleLogin}>
+            <Text style={[styles.loginBtnText, { color: theme.textOnAccent }]}>{t('common.start')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.backBtn} onPress={onBack}>
-            <Text style={styles.backText}>→ رجوع</Text>
+            <Text style={[styles.backText, { color: theme.accent }]}>{t('common.back')}</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
 
-  if (showImport) return <ImportScreen onBack={() => setShowImport(false)} />;
+  if (showImport) return (
+    <ImportScreen
+      onBack={() => setShowImport(false)}
+      defaultLang={importLang}
+    />
+  );
 
-  if (selectedCategory) {
-    // تحميل الأسئلة للفئة المختارة
-    return (
-      <AddQuestionScreenWrapper
-        category={selectedCategory}
-        onBack={() => setSelectedCategory(null)}
-        onSave={handleSaveQuestions}
-      />
-    );
-  }
+  if (selectedCategory) return (
+    <AddQuestionScreenWrapper
+      category={selectedCategory}
+      onBack={() => setSelectedCategory(null)}
+      onSave={handleSaveQuestions}
+    />
+  );
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>→ رجوع</Text>
+          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>لوحة الإدارة</Text>
+        <Text style={[styles.title, { color: theme.accent }]}>لوحة الإدارة</Text>
         <TouchableOpacity onPress={() => setAuthenticated(false)} style={styles.logoutBtn}>
-          <Text style={styles.logoutText}>خروج 🔒</Text>
+          <Text style={[styles.logoutText, { color: theme.error }]}>{t('common.exit')} 🔒</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Stats */}
+      {/* إحصائيات */}
       <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNum}>{categories.length}</Text>
-          <Text style={styles.statLabel}>فئة</Text>
+        <View style={[styles.statCard, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+          <Text style={[styles.statNum, { color: theme.accent }]}>{arCats.length}</Text>
+          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>فئة 🇸🇦</Text>
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNum}>{categories.reduce((a, c) => a + (c.questionsCount || 0), 0)}</Text>
-          <Text style={styles.statLabel}>سؤال</Text>
+        <View style={[styles.statCard, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+          <Text style={[styles.statNum, { color: theme.accent }]}>{enCats.length}</Text>
+          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>فئة 🌍</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+          <Text style={[styles.statNum, { color: theme.accent }]}>{categories.reduce((a, c) => a + (c.questionsCount || 0), 0)}</Text>
+          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>سؤال</Text>
         </View>
       </View>
 
-      {/* Import Button */}
-      <TouchableOpacity style={styles.importBtn} onPress={() => setShowImport(true)}>
-        <Text style={styles.importBtnText}>📥 استيراد أسئلة (JSON / Excel)</Text>
-      </TouchableOpacity>
+      {/* زران الاستيراد */}
+      <View style={styles.importRow}>
+        <TouchableOpacity
+          style={[styles.importBtn, { backgroundColor: theme.purple + '22', borderColor: theme.purple + '55' }]}
+          onPress={() => openImport('ar')}
+        >
+          <Text style={[styles.importBtnText, { color: theme.textOnAccent }]}>🇸🇦 رفع عربي</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.importBtn, { backgroundColor: theme.success + '22', borderColor: theme.success + '55' }]}
+          onPress={() => openImport('en')}
+        >
+          <Text style={[styles.importBtnText, { color: theme.textOnAccent }]}>🌍 رفع عالمي</Text>
+        </TouchableOpacity>
+      </View>
 
-      {/* Add Category */}
+      {/* إضافة فئة جديدة */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>➕ إضافة فئة جديدة</Text>
+        <Text style={[styles.sectionTitle, { color: theme.accent }]}>➕ إضافة فئة جديدة</Text>
+        {/* فلتر اللغة للفئة الجديدة */}
+        <View style={styles.langToggle}>
+          <TouchableOpacity
+            style={[styles.langBtn, filterLang !== 'en' && { backgroundColor: theme.accent }]}
+            onPress={() => setFilterLang('ar')}
+          >
+            <Text style={[styles.langBtnText, { color: filterLang !== 'en' ? theme.textOnAccent : theme.textMuted }]}>🇸🇦 عربي</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.langBtn, filterLang === 'en' && { backgroundColor: theme.success }]}
+            onPress={() => setFilterLang('en')}
+          >
+            <Text style={[styles.langBtnText, { color: filterLang === 'en' ? '#fff' : theme.textMuted }]}>🌍 عالمي</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.addRow}>
           <TextInput
-            style={[styles.input, { flex: 1 }]}
-            placeholder="اسم الفئة"
-            placeholderTextColor="#555577"
-            value={newCatName}
-            onChangeText={setNewCatName}
-            textAlign="right"
+            style={[styles.input, { flex: 1, backgroundColor: theme.bgCard, borderColor: theme.borderCard, color: theme.textPrimary }, rs.textInput]}
+            placeholder="اسم الفئة" placeholderTextColor={theme.textMuted}
+            value={newCatName} onChangeText={setNewCatName}
           />
           <TextInput
-            style={[styles.input, { width: 60 }]}
-            placeholder="🎯"
-            placeholderTextColor="#555577"
-            value={newCatEmoji}
-            onChangeText={setNewCatEmoji}
-            textAlign="center"
+            style={[styles.input, { width: 60, backgroundColor: theme.bgCard, borderColor: theme.borderCard, color: theme.textPrimary }]}
+            placeholder="🎯" placeholderTextColor={theme.textMuted}
+            value={newCatEmoji} onChangeText={setNewCatEmoji} textAlign="center"
           />
-          <TouchableOpacity style={styles.addBtn} onPress={handleAddCategory}>
-            <Text style={styles.addBtnText}>إضافة</Text>
+          <TouchableOpacity style={[styles.addBtn, { backgroundColor: theme.accent }]} onPress={handleAddCategory}>
+            <Text style={[styles.addBtnText, { color: theme.textOnAccent }]}>إضافة</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Categories List */}
+      {/* قائمة الفئات مع فلتر */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📚 الفئات الحالية</Text>
-        {loading ? (
-          <Text style={styles.loadingText}>جاري التحميل من Firestore...</Text>
-        ) : categories.length === 0 ? (
-          <Text style={styles.loadingText}>لا توجد فئات — أضف أو استورد</Text>
-        ) : (
-          categories.map((cat) => (
-            <View key={cat.id} style={styles.catRow}>
-              {/* صورة الفئة */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.accent }]}>📚 الفئات الحالية</Text>
+          <View style={styles.filterRow}>
+            {['all', 'ar', 'en'].map(l => (
               <TouchableOpacity
-                style={styles.catImageBox}
+                key={l}
+                style={[styles.filterBtn, filterLang === l && { backgroundColor: theme.accent }]}
+                onPress={() => setFilterLang(l)}
+              >
+                <Text style={[styles.filterBtnText, { color: filterLang === l ? theme.textOnAccent : theme.textMuted }]}>
+                  {l === 'all' ? 'الكل' : l === 'ar' ? '🇸🇦' : '🌍'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {loading ? (
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>{t('common.loading')}</Text>
+        ) : displayedCats.length === 0 ? (
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>{t('setup.noCats')}</Text>
+        ) : (
+          displayedCats.map((cat) => (
+            <View key={cat.id} style={[styles.catRow, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+              <TouchableOpacity
+                style={[styles.catImageBox, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
                 onPress={() => handleUploadImage(cat.id)}
               >
-                {cat.imageUrl ? (
-                  <Image source={{ uri: cat.imageUrl }} style={styles.catImage} />
-                ) : (
-                  <Text style={styles.catEmoji}>{cat.emoji}</Text>
-                )}
+                {cat.imageUrl
+                  ? <ExpoImage source={{ uri: cat.imageUrl }} style={styles.catImage} cachePolicy="disk" contentFit="cover" />
+                  : <Text style={styles.catEmoji}>{cat.emoji}</Text>}
                 <Text style={styles.uploadHint}>📷</Text>
               </TouchableOpacity>
-
               <View style={styles.catInfo}>
-                <Text style={styles.catName}>{cat.name}</Text>
-                <Text style={styles.catQuestions}>{cat.questionsCount || 0} سؤال</Text>
-                {cat.isSpecial && <Text style={styles.specialTag}>⭐ خاصة</Text>}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[styles.catName, { color: theme.textPrimary }]}>{cat.name}</Text>
+                  <Text style={styles.catLang}>{cat.lang === 'en' ? '🌍' : '🇸🇦'}</Text>
+                </View>
+                <Text style={[styles.catQuestions, { color: theme.textSecondary }]}>{cat.questionsCount || 0} سؤال</Text>
+                {cat.isSpecial && <Text style={[styles.specialTag, { color: theme.accent }]}>{t('solo.special')}</Text>}
               </View>
-
               <View style={styles.catActions}>
-                <TouchableOpacity style={styles.editBtn} onPress={() => setSelectedCategory(cat)}>
-                  <Text style={styles.editBtnText}>✏️ أسئلة</Text>
+                <TouchableOpacity style={[styles.editBtn, { backgroundColor: theme.purple + '33' }]} onPress={() => setSelectedCategory(cat)}>
+                  <Text style={[styles.editBtnText, { color: theme.textOnAccent }]}>✏️ أسئلة</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteCategory(cat.id, cat.name)}>
+                <TouchableOpacity style={[styles.deleteBtn, { backgroundColor: theme.error + '22' }]} onPress={() => handleDeleteCategory(cat.id, cat.name)}>
                   <Text style={styles.deleteBtnText}>🗑️</Text>
                 </TouchableOpacity>
               </View>
@@ -303,23 +376,108 @@ export default function AdminScreen({ onBack }) {
           ))
         )}
       </View>
+      {/* ══════════════════ قسم Pro ══════════════════ */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: theme.accent }]}>⭐ إدارة Pro</Text>
+
+        {/* بحث عن مستخدم */}
+        <View style={[styles.proSearchRow]}>
+          <TextInput
+            style={[styles.input, { flex: 1, color: theme.textPrimary, borderColor: theme.borderCard, backgroundColor: theme.bgCard }]}
+            placeholder="بريد إلكتروني أو username"
+            placeholderTextColor={theme.textMuted}
+            value={proSearch}
+            onChangeText={setProSearch}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          <TouchableOpacity
+            style={[styles.proSearchBtn, { backgroundColor: theme.accent }]}
+            onPress={handleProSearch}
+            disabled={proSearching}
+          >
+            <Text style={{ color: theme.bg, fontWeight: '800', fontSize: 14 }}>
+              {proSearching ? '...' : '🔍'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* نتيجة البحث */}
+        {proFound === false && (
+          <Text style={[styles.proNotFound, { color: theme.error || '#ef4444' }]}>
+            لا يوجد مستخدم بهذا البريد أو الـ username
+          </Text>
+        )}
+        {proFound && proFound.uid && (
+          <View style={[styles.proFoundCard, { backgroundColor: theme.bgCard, borderColor: theme.accent + '40' }]}>
+            <Text style={[styles.proFoundName, { color: theme.textPrimary }]}>
+              👤 {proFound.name} ({proFound.username})
+            </Text>
+            <Text style={[styles.proFoundEmail, { color: theme.textMuted }]}>{proFound.email}</Text>
+            <TextInput
+              style={[styles.input, { color: theme.textPrimary, borderColor: theme.borderCard, backgroundColor: theme.bg, marginTop: 8 }]}
+              placeholder="ملاحظة (اختياري)"
+              placeholderTextColor={theme.textMuted}
+              value={proNote}
+              onChangeText={setProNote}
+            />
+            <TouchableOpacity
+              style={[styles.proGrantBtn, { backgroundColor: '#16a34a' }]}
+              onPress={handleGrantPro}
+            >
+              <Text style={styles.proGrantText}>⭐ تفعيل Pro</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* قائمة المستخدمين Pro الحاليين */}
+        <Text style={[styles.proListTitle, { color: theme.textMuted }]}>
+          المستخدمون Pro الحاليون ({proList.length})
+        </Text>
+        {proLoading
+          ? <Text style={{ color: theme.textMuted, textAlign: 'center' }}>جاري التحميل...</Text>
+          : proList.length === 0
+            ? <Text style={{ color: theme.textMuted, textAlign: 'center' }}>لا يوجد مستخدمون Pro</Text>
+            : proList.map(p => (
+                <View key={p.id} style={[styles.proUserRow, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.proUserName, { color: theme.textPrimary }]}>
+                      ⭐ {p.name} — @{p.username}
+                    </Text>
+                    <Text style={[styles.proUserEmail, { color: theme.textMuted }]}>{p.email}</Text>
+                    {p.note ? <Text style={[styles.proUserNote, { color: theme.textMuted }]}>📝 {p.note}</Text> : null}
+                    {p.expiresAt && (
+                      <Text style={[styles.proUserNote, { color: '#f59e0b' }]}>
+                        ⏰ ينتهي: {new Date(p.expiresAt.toMillis?.() ?? p.expiresAt).toLocaleDateString('ar')}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.deleteBtn, { backgroundColor: '#ef444422' }]}
+                    onPress={() => handleRevokePro(p.id, p.name)}
+                  >
+                    <Text style={{ color: '#ef4444', fontWeight: '800' }}>إلغاء</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+        }
+      </View>
+
     </ScrollView>
   );
 }
 
-// ── Wrapper لتحميل أسئلة الفئة من Firestore ──
 function AddQuestionScreenWrapper({ category, onBack, onSave }) {
+  const { theme } = useTheme();
+  const t = useT();
   const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading,   setLoading]   = useState(true);
 
   useEffect(() => {
     getDocs(collection(db, 'categories', category.id, 'questions')).then(snap => {
       const qs = snap.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-        text: d.data().question,
-        answer: d.data().correct,
-        difficulty: d.data().level,
+        id: d.id, ...d.data(),
+        text: d.data().question, answer: d.data().correct, difficulty: d.data().level,
       }));
       setQuestions(qs);
       setLoading(false);
@@ -327,60 +485,87 @@ function AddQuestionScreenWrapper({ category, onBack, onSave }) {
   }, []);
 
   if (loading) return (
-    <View style={{ flex: 1, backgroundColor: '#0d0d2b', alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color: '#f5c518', fontSize: 18 }}>جاري التحميل...</Text>
+    <View style={[styles.fullScreen, { backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+      <Text style={[styles.loadingText, { color: theme.accent, fontSize: 18 }]}>{t('common.loading')}</Text>
     </View>
   );
 
-  return (
-    <AddQuestionScreen
-      category={{ ...category, questions }}
-      onBack={onBack}
-      onSave={onSave}
-    />
-  );
+  return <AddQuestionScreen category={{ ...category, questions }} onBack={onBack} onSave={onSave} />;
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, backgroundColor: '#0d0d2b', paddingHorizontal: 24, paddingVertical: 50, gap: 24 },
-  loginBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 24 },
-  lockIcon: { fontSize: 60 },
-  loginTitle: { fontSize: 28, fontWeight: '900', color: '#f5c518' },
-  loginSubtitle: { color: '#a09060', fontSize: 14 },
-  input: { backgroundColor: '#1a1a3e', borderWidth: 1.5, borderColor: '#2a2a55', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, color: '#ffffff', fontSize: 16, width: '100%' },
-  error: { color: '#ff6666', fontSize: 14, fontWeight: '700' },
-  loginBtn: { backgroundColor: '#f5c518', paddingVertical: 16, borderRadius: 16, alignItems: 'center', width: '100%', elevation: 8 },
-  loginBtnText: { color: '#0d0d2b', fontSize: 18, fontWeight: '800' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backBtn: { padding: 8 },
-  backText: { color: '#f5c518', fontSize: 16, fontWeight: '700' },
-  title: { fontSize: 20, fontWeight: '900', color: '#f5c518' },
-  logoutBtn: { padding: 8 },
-  logoutText: { color: '#ff6666', fontSize: 14, fontWeight: '700' },
-  statsRow: { flexDirection: 'row', gap: 12 },
-  statCard: { flex: 1, backgroundColor: '#1a1a3e', borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#f5c51833', gap: 4 },
-  statNum: { color: '#f5c518', fontSize: 32, fontWeight: '900' },
-  statLabel: { color: '#a09060', fontSize: 14, fontWeight: '600' },
-  importBtn: { backgroundColor: '#1a3a6e', paddingVertical: 14, borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: '#4a6aae' },
-  importBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
-  section: { gap: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#f5c518' },
-  addRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  addBtn: { backgroundColor: '#f5c518', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14 },
-  addBtnText: { color: '#0d0d2b', fontSize: 15, fontWeight: '800' },
-  loadingText: { color: '#a09060', textAlign: 'center', fontSize: 15 },
-  catRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a3e', borderRadius: 14, padding: 14, gap: 12, borderWidth: 1, borderColor: '#2a2a55' },
-  catImageBox: { width: 56, height: 56, borderRadius: 12, backgroundColor: '#0d0d2b', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2a2a55', position: 'relative' },
-  catImage: { width: 56, height: 56, borderRadius: 12 },
-  catEmoji: { fontSize: 26 },
-  uploadHint: { position: 'absolute', bottom: -2, right: -2, fontSize: 14 },
-  catInfo: { flex: 1, gap: 4 },
-  catName: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
-  catQuestions: { color: '#a09060', fontSize: 12 },
-  specialTag: { color: '#f5c518', fontSize: 11, fontWeight: '700' },
-  catActions: { flexDirection: 'row', gap: 8 },
-  editBtn: { backgroundColor: '#1a3a6e', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
-  editBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
-  deleteBtn: { backgroundColor: '#3a1a1a', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
+  fullScreen:    { flex: 1 },
+  container:     { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 50, gap: 24 },
+  loginBox:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 24 },
+  lockIcon:      { fontSize: 60 },
+  loginTitle:    { fontSize: 28, fontWeight: '900' },
+  loginSubtitle: { fontSize: 14 },
+  input:         { borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, width: '100%' },
+  error:         { fontSize: 14, fontWeight: '700' },
+  loginBtn:      { paddingVertical: 16, borderRadius: 16, alignItems: 'center', width: '100%', elevation: 8 },
+  loginBtnText:  { fontSize: 18, fontWeight: '800' },
+  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  backBtn:       { padding: 8 },
+  backText:      { fontSize: 16, fontWeight: '700' },
+  title:         { fontSize: 20, fontWeight: '900' },
+  logoutBtn:     { padding: 8 },
+  logoutText:    { fontSize: 14, fontWeight: '700' },
+  statsRow:      { flexDirection: 'row', gap: 10 },
+  statCard:      { flex: 1, borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, gap: 4 },
+  statNum:       { fontSize: 28, fontWeight: '900' },
+  statLabel:     { fontSize: 12, fontWeight: '600' },
+
+  // زران الاستيراد
+  importRow:     { flexDirection: 'row', gap: 12 },
+  importBtn:     { flex: 1, paddingVertical: 16, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
+  importBtnText: { fontSize: 15, fontWeight: '800' },
+
+  // إضافة فئة
+  section:       { gap: 12 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionTitle:  { fontSize: 18, fontWeight: '800' },
+  langToggle:    { flexDirection: 'row', gap: 8 },
+  langBtn:       { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: '#ffffff11' },
+  langBtnText:   { fontSize: 13, fontWeight: '700' },
+  addRow:        { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  addBtn:        { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14 },
+  addBtnText:    { fontSize: 15, fontWeight: '800' },
+  loadingText:   { textAlign: 'center', fontSize: 15 },
+
+  // فلتر
+  filterRow:     { flexDirection: 'row', gap: 6 },
+  filterBtn:     { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: '#ffffff11' },
+  filterBtnText: { fontSize: 13, fontWeight: '700' },
+
+  // قائمة الفئات
+  catRow:        { flexDirection: 'row', alignItems: 'center', borderRadius: 14, padding: 14, gap: 12, borderWidth: 1 },
+  catImageBox:   { width: 56, height: 56, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, position: 'relative' },
+  catImage:      { width: 56, height: 56, borderRadius: 12 },
+  catEmoji:      { fontSize: 26 },
+  uploadHint:    { position: 'absolute', bottom: -2, right: -2, fontSize: 14 },
+  catInfo:       { flex: 1, gap: 4 },
+  catName:       { fontSize: 16, fontWeight: '700' },
+  catLang:       { fontSize: 14 },
+  catQuestions:  { fontSize: 12 },
+  specialTag:    { fontSize: 11, fontWeight: '700' },
+  catActions:    { flexDirection: 'row', gap: 8 },
+  editBtn:       { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
+  editBtnText:   { fontSize: 13, fontWeight: '700' },
+  deleteBtn:     { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
   deleteBtnText: { fontSize: 16 },
+
+  // Pro Management
+  proSearchRow:  { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  proSearchBtn:  { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  proNotFound:   { fontSize: 13, textAlign: 'center', fontWeight: '700' },
+  proFoundCard:  { borderRadius: 16, borderWidth: 1, padding: 14, gap: 4 },
+  proFoundName:  { fontSize: 15, fontWeight: '800' },
+  proFoundEmail: { fontSize: 12 },
+  proGrantBtn:   { paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginTop: 8 },
+  proGrantText:  { color: '#fff', fontWeight: '900', fontSize: 15 },
+  proListTitle:  { fontSize: 13, fontWeight: '700', marginTop: 4 },
+  proUserRow:    { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, padding: 12, gap: 8 },
+  proUserName:   { fontSize: 14, fontWeight: '800' },
+  proUserEmail:  { fontSize: 12 },
+  proUserNote:   { fontSize: 11, marginTop: 2 },
 });

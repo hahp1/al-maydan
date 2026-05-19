@@ -525,14 +525,13 @@ function MainApp() {
           <GameScreenWrapper theme={theme}>
             <GameSetupScreen
               onStart={({ team1, team2, categories: catCount, selected }) => {
-                const costs = { 4: 20, 5: 25, 6: 30 };
-                setTokens(t => t - costs[catCount]);
                 const selectedCats = categories.filter(c => selected.includes(c.id));
                 setGameData({ team1, team2, categories: catCount, selectedCategories: selectedCats });
                 setScreen('board');
               }}
               onBack={() => setScreen('knowledge')}
-              tokens={tokens} categories={categories}
+              tokens={tokens}
+              categories={categories}
               onOpenTokenModal={() => setShowTokenModal(true)}
             />
           </GameScreenWrapper>

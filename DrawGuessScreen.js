@@ -1,1042 +1,1237 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+/**
+ * DrawGuessGameScreen.js — رسم وتخمين 🎨
+ * ══════════════════════════════════════════════════════════════
+ *  وضعيات اللعب:
+ *  ─────────────
+ *  1. محلي         — لاعبان على نفس الجهاز
+ *  2. أونلاين عشوائي — يبحث عن لاعب تلقائياً (بوت بعد 60ث)
+ *  3. مع صديق       — إنشاء غرفة بكود 6 أحرف أو انضمام بالكود
+ *
+ *  Firebase structure (rooms/{roomId}):
+ *  ─────────────────────────────────────
+ *  {
+ *    id, gameType: 'drawguess', mode: 'random'|'friend',
+ *    friendCode, lang, status: 'waiting'|'wordchoice'|'drawing'|'result'|'finished',
+ *    round, totalRounds: 6,
+ *    drawerUid, word, wordChoices[],
+ *    strokes: [{color,size,points:[{x,y}]}],
+ *    scores: { [uid]: number },
+ *    roundResult: 'correct'|'timeout'|null,
+ *    roundWinnerUid, timerStart,
+ *    player1: { uid, name }, player2: { uid, name },
+ *    createdAt, lastUpdate,
+ *  }
+ *
+ *  الرسم أونلاين: strokes تُرسل كل 150ms (throttled) لتقليل Firestore writes.
+ */
+
+import React, {
+  useState, useEffect, useRef, useCallback, useMemo,
+} from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  Animated, StatusBar, ScrollView, TextInput,
-  Alert, KeyboardAvoidingView, Platform, PanResponder,
-  Dimensions,
+  View, Text, TouchableOpacity, StyleSheet, StatusBar,
+  PanResponder, Alert, Animated, TextInput, ScrollView,
+  Platform, Dimensions, Modal, ActivityIndicator,
+  Clipboard,
 } from 'react-native';
 import { db } from './firebaseConfig';
-import LeaveModal from './LeaveModal';
 import {
-  collection, doc, setDoc, onSnapshot,
-  updateDoc, serverTimestamp, getDoc, deleteDoc,
+  doc, setDoc, updateDoc, onSnapshot,
+  collection, query, where, getDocs, getDoc,
 } from 'firebase/firestore';
+import { useTheme } from './ThemeContext';
+import { useLanguage } from './I18n';
+import { WebScreenButton, GameInfoButton } from './WebRoomService';
 
-const { width: SCREEN_W } = Dimensions.get('window');
-const CANVAS_SIZE = Math.min(SCREEN_W - 40, 360);
-const ROUND_DURATION = 80; // ثانية
-const POINTS_FAST = 100;
-const POINTS_SLOW = 50;
+// ══════════════════════════════════════════════════════════
+//  Constants
+// ══════════════════════════════════════════════════════════
+const { width: SW } = Dimensions.get('window');
+const CANVAS_W      = SW - 32;
+const CANVAS_H      = 260;
+const ROUND_TIME    = 60;
+const TOTAL_ROUNDS  = 6;
+const BOT_WAIT_MS   = 60000;
+const STROKE_MS     = 150;
 
-// ── كلمات الرسم ──────────────────────────────────────────────
-const WORDS = {
-  حيوانات: ['قطة', 'كلب', 'فيل', 'زرافة', 'أسد', 'قرد', 'أرنب', 'بطة', 'سمكة', 'فراشة', 'نمر', 'حصان', 'دجاجة', 'بقرة', 'خروف'],
-  طعام: ['بيتزا', 'برغر', 'تفاحة', 'موز', 'كيكة', 'قهوة', 'شاي', 'بيضة', 'خبز', 'شوكولاتة', 'آيسكريم', 'رز', 'شاورما', 'سمكة', 'عنب'],
-  مكان: ['بيت', 'مدرسة', 'مستشفى', 'مطار', 'شارع', 'حديقة', 'بحر', 'جبل', 'صحراء', 'مطعم', 'مسجد', 'دكان', 'سوق', 'ملعب', 'قلعة'],
-  أشياء: ['كرسي', 'طاولة', 'تلفاز', 'هاتف', 'سيارة', 'طائرة', 'مفتاح', 'قلم', 'كتاب', 'ساعة', 'نظارة', 'حقيبة', 'مصباح', 'مروحة', 'ثلاجة'],
-  أفعال: ['يركض', 'يطير', 'يسبح', 'يرسم', 'ينام', 'يأكل', 'يضحك', 'يبكي', 'يقفز', 'يرقص'],
-};
+const PALETTE = [
+  '#000000','#ffffff','#ef4444','#f97316',
+  '#eab308','#22c55e','#3b82f6','#a855f7',
+  '#ec4899','#06b6d4','#f59e0b','#84cc16',
+];
+const BRUSH_SIZES = [4, 8, 14, 22];
 
-const ALL_WORDS = Object.values(WORDS).flat();
+// ══════════════════════════════════════════════════════════
+//  Word Banks
+// ══════════════════════════════════════════════════════════
+const WORDS_AR = [
+  'قطة','كلب','أسد','فيل','طائر','سمكة','حصان','ثعلب','دب','قرد',
+  'تفاحة','موزة','بيتزا','برجر','كعكة','آيس كريم','عصير','شاي','قهوة','شوكولاتة',
+  'كرة قدم','سباحة','تنس','دراجة','جري','ملاكمة','تزلج','رمي','كرة السلة','غوص',
+  'كرسي','طاولة','باب','نافذة','مفتاح','مرآة','سجادة','ثلاجة','تلفاز','سرير',
+  'شجرة','جبل','بحر','نهر','شمس','قمر','نجمة','سحاب','صحراء','زهرة',
+  'طبيب','معلم','طيار','طباخ','رسام','موسيقى','ممثل','نجار','بناء','شرطي',
+  'سيارة','قطار','طائرة','سفينة','دراجة','حافلة','مروحية','غواصة','صاروخ','قارب',
+  'قلب','يد','عين','انف','اذن','قدم','شعر','فم','راس','ذراع',
+];
+const WORDS_EN = [
+  'cat','dog','lion','elephant','bird','fish','horse','fox','bear','monkey',
+  'apple','banana','pizza','burger','cake','icecream','juice','tea','coffee','chocolate',
+  'football','basketball','swimming','tennis','cycling','running','boxing','skiing','archery','diving',
+  'chair','table','door','window','key','mirror','carpet','fridge','television','bed',
+  'tree','mountain','sea','river','sun','moon','star','cloud','desert','flower',
+  'doctor','teacher','pilot','chef','painter','musician','actor','carpenter','builder','police',
+  'car','train','airplane','ship','bicycle','bus','helicopter','submarine','rocket','boat',
+  'heart','hand','eye','nose','ear','foot','hair','mouth','head','arm',
+];
 
-const COLORS = ['#fff', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#a855f7', '#ec4899', '#000'];
-const SIZES = [3, 6, 10, 16];
+const getNewWords = (lang, n = 3) =>
+  [...(lang === 'ar' ? WORDS_AR : WORDS_EN)].sort(() => Math.random() - 0.5).slice(0, n);
 
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+const genCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
 
-function generateRoomCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-// ── لوحة الرسم ───────────────────────────────────────────────
-function DrawingCanvas({ paths, onNewPath, onNewPoint, isDrawer, currentColor, brushSize }) {
-  const canvasRef = useRef(null);
-  const currentPath = useRef(null);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => isDrawer,
-      onMoveShouldSetPanResponder: () => isDrawer,
-      onPanResponderGrant: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        const pathId = Date.now().toString();
-        currentPath.current = { id: pathId, color: currentColor, size: brushSize, points: [{ x: locationX, y: locationY }] };
-        onNewPath && onNewPath(currentPath.current);
-      },
-      onPanResponderMove: (evt) => {
-        if (!currentPath.current) return;
-        const { locationX, locationY } = evt.nativeEvent;
-        const point = { x: locationX, y: locationY };
-        currentPath.current.points.push(point);
-        onNewPoint && onNewPoint(currentPath.current.id, point);
-      },
-      onPanResponderRelease: () => {
-        currentPath.current = null;
-      },
-    })
-  ).current;
-
+// ══════════════════════════════════════════════════════════
+//  DrawingCanvas (pure RN, no SVG)
+// ══════════════════════════════════════════════════════════
+function DrawingCanvas({ strokes, currentStroke }) {
+  const allStrokes = currentStroke ? [...strokes, currentStroke] : strokes;
   return (
-    <View
-      style={[cv.canvas, { width: CANVAS_SIZE, height: CANVAS_SIZE }]}
-      {...panResponder.panHandlers}
-    >
-      {paths.map((path) => (
-        <PathLine key={path.id} path={path} />
-      ))}
+    <View style={{ width: CANVAS_W, height: CANVAS_H, backgroundColor: '#ffffff', overflow: 'hidden', position: 'relative' }}>
+      {allStrokes.map((stroke, si) =>
+        stroke.points.map((pt, pi) => {
+          if (pi === 0) return null;
+          const prev = stroke.points[pi - 1];
+          const dx = pt.x - prev.x; const dy = pt.y - prev.y;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len < 0.5) return null;
+          const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          return (
+            <View key={`${si}-${pi}`} style={{
+              position: 'absolute',
+              left: prev.x, top: prev.y - stroke.size / 2,
+              width: len + stroke.size, height: stroke.size,
+              backgroundColor: stroke.color,
+              borderRadius: stroke.size / 2,
+              transform: [{ rotate: `${angle}deg` }],
+            }} />
+          );
+        })
+      )}
+      {allStrokes.length === 0 && (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 40, opacity: 0.15 }}>✏️</Text>
+        </View>
+      )}
     </View>
   );
 }
 
-function PathLine({ path }) {
-  if (!path.points || path.points.length < 2) return null;
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {path.points.slice(1).map((pt, i) => {
-        const prev = path.points[i];
-        const dx = pt.x - prev.x;
-        const dy = pt.y - prev.y;
-        const length = Math.sqrt(dx * dx + dy * dy);
-        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-        return (
-          <View key={i} style={{
-            position: 'absolute',
-            left: prev.x,
-            top: prev.y - path.size / 2,
-            width: length,
-            height: path.size,
-            backgroundColor: path.color,
-            borderRadius: path.size / 2,
-            transform: [{ rotate: `${angle}deg` }, { translateX: 0 }],
-            transformOrigin: '0 50%',
-          }} />
-        );
-      })}
-    </View>
-  );
-}
-
-const cv = StyleSheet.create({
-  canvas: {
-    backgroundColor: '#1a1a3e',
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#ffffff20',
-    overflow: 'hidden',
-    alignSelf: 'center',
-  },
-});
-
-// ═══════════════════════════════════════════════════════════════
-// ── وضع الجلسة (LOCAL) ─────────────────────────────────────────
-// ═══════════════════════════════════════════════════════════════
-function LocalMode({ onBack }) {
-  const [phase, setPhase] = useState('setup');
-  const [playerName, setPlayerName] = useState('');
-  const [players, setPlayers] = useState([]);
-  const [currentDrawerIdx, setCurrentDrawerIdx] = useState(0);
-  const [currentWord, setCurrentWord] = useState('');
-  const [wordOptions, setWordOptions] = useState([]);
-  const [paths, setPaths] = useState([]);
-  const [guess, setGuess] = useState('');
-  const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
-  const [scores, setScores] = useState({});
-  const [roundNum, setRoundNum] = useState(1);
-  const [totalRounds, setTotalRounds] = useState(3);
-  const [guessedPlayers, setGuessedPlayers] = useState([]);
-  const [roundOrder, setRoundOrder] = useState([]);
-  const [roundIdx, setRoundIdx] = useState(0);
-  const [color, setColor] = useState('#fff');
-  const [brushSize, setBrushSize] = useState(6);
-  const [showLeave, setShowLeave] = useState(false);
-
-  const timerRef = useRef(null);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
+// ══════════════════════════════════════════════════════════
+//  TimerBar
+// ══════════════════════════════════════════════════════════
+function TimerBar({ timeLeft, total }) {
+  const pct   = timeLeft / total;
+  const color = pct > 0.5 ? '#22c55e' : pct > 0.25 ? '#f59e0b' : '#ef4444';
+  const anim  = useRef(new Animated.Value(pct)).current;
   useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, [phase]);
-
-  function addPlayer() {
-    const name = playerName.trim();
-    if (!name) return;
-    if (players.length >= 8) return Alert.alert('', 'الحد الأقصى 8 لاعبين');
-    if (players.find(p => p.name === name)) return Alert.alert('', 'الاسم موجود');
-    setPlayers(prev => [...prev, { id: Date.now().toString(), name }]);
-    setPlayerName('');
-  }
-
-  function startGame() {
-    if (players.length < 2) return Alert.alert('', 'أضف لاعبين على الأقل');
-    const order = [];
-    for (let r = 0; r < totalRounds; r++) {
-      shuffle(players).forEach(p => order.push(p.id));
-    }
-    setRoundOrder(order);
-    setRoundIdx(0);
-    const initScores = {};
-    players.forEach(p => { initScores[p.id] = 0; });
-    setScores(initScores);
-    showWordChoice(order[0]);
-  }
-
-  function showWordChoice(drawerId) {
-    const opts = shuffle(ALL_WORDS).slice(0, 3);
-    setWordOptions(opts);
-    setCurrentDrawerIdx(players.findIndex(p => p.id === drawerId));
-    fadeAnim.setValue(0);
-    setPhase('wordChoice');
-  }
-
-  function chooseWord(word) {
-    setCurrentWord(word);
-    setPaths([]);
-    setGuessedPlayers([]);
-    setTimeLeft(ROUND_DURATION);
-    fadeAnim.setValue(0);
-    setPhase('draw');
-    startTimer();
-  }
-
-  function startTimer() {
-    clearInterval(timerRef.current);
-    let t = ROUND_DURATION;
-    timerRef.current = setInterval(() => {
-      t -= 1;
-      setTimeLeft(t);
-      if (t <= 0) {
-        clearInterval(timerRef.current);
-        endRound();
-      }
-    }, 1000);
-  }
-
-  function endRound() {
-    clearInterval(timerRef.current);
-    fadeAnim.setValue(0);
-    setPhase('roundEnd');
-  }
-
-  function handleGuess(guesser) {
-    const g = guess.trim();
-    if (!g) return;
-    if (g === currentWord) {
-      const elapsed = ROUND_DURATION - timeLeft;
-      const pts = elapsed < 30 ? POINTS_FAST : POINTS_SLOW;
-      setScores(prev => ({ ...prev, [guesser.id]: (prev[guesser.id] || 0) + pts }));
-      // الرسّام يأخذ نقاط أيضاً
-      const drawer = players[currentDrawerIdx];
-      setScores(prev => ({ ...prev, [drawer.id]: (prev[drawer.id] || 0) + 30 }));
-      setGuessedPlayers(prev => [...prev, guesser.id]);
-      setGuess('');
-      Alert.alert('🎉 صح!', `+${pts} نقطة`);
-
-      // إذا خمّن الجميع
-      if (guessedPlayers.length + 1 >= players.length - 1) {
-        clearInterval(timerRef.current);
-        setTimeout(endRound, 800);
-      }
-    } else {
-      Alert.alert('❌ خطأ', 'حاول مرة ثانية');
-    }
-  }
-
-  function nextRound() {
-    const nextIdx = roundIdx + 1;
-    if (nextIdx >= roundOrder.length) {
-      setPhase('end');
-      return;
-    }
-    setRoundIdx(nextIdx);
-    showWordChoice(roundOrder[nextIdx]);
-  }
-
-  function handleNewPath(path) {
-    setPaths(prev => [...prev, path]);
-  }
-
-  function handleNewPoint(pathId, point) {
-    setPaths(prev => prev.map(p =>
-      p.id === pathId ? { ...p, points: [...p.points, point] } : p
-    ));
-  }
-
-  function clearCanvas() { setPaths([]); }
-
-  const drawer = players[currentDrawerIdx];
-  const nonDrawers = players.filter(p => p.id !== drawer?.id);
-
-  // ── إعداد ──
-  if (phase === 'setup') return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={()=>setShowLeave(true)} style={[styles.backBtn, { borderColor: '#3b82f630' }]}>
-            <Text style={[styles.backText, { color: '#3b82f6' }]}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerEmoji}>🎨</Text>
-            <Text style={[styles.headerTitle, { color: '#3b82f6' }]}>رسم وتخمين — جلسة</Text>
-          </View>
-          <View style={{ width: 40 }} />
-        </View>
-        <ScrollView contentContainerStyle={styles.setupContent} keyboardShouldPersistTaps="handled">
-          <View style={[styles.rulesCard, { borderColor: '#3b82f630' }]}>
-            <Text style={[styles.rulesTitle, { color: '#3b82f6' }]}>🖌️ كيف تلعب؟</Text>
-            <Text style={styles.rulesText}>
-              شخص يرسم كلمة والباقين يخمنون!{'\n'}
-              الأسرع في التخمين ← أكثر نقاط.{'\n'}
-              كل شخص يرسم دوره بالتناوب.
-            </Text>
-          </View>
-
-          <View style={styles.inputRow}>
-            <TouchableOpacity style={[styles.addBtn, { backgroundColor: '#3b82f6' }]} onPress={addPlayer}>
-              <Text style={styles.addBtnText}>+ إضافة</Text>
-            </TouchableOpacity>
-            <TextInput
-              style={[styles.input, { borderColor: '#3b82f630' }]}
-              placeholder="اسم اللاعب..." placeholderTextColor="#3a3a60"
-              value={playerName} onChangeText={setPlayerName}
-              onSubmitEditing={addPlayer} textAlign="right"
-            />
-          </View>
-
-          {players.map((p, i) => (
-            <View key={p.id} style={[styles.playerChip, { borderColor: '#3b82f630' }]}>
-              <TouchableOpacity onPress={() => setPlayers(prev => prev.filter(x => x.id !== p.id))} style={styles.chipRemove}>
-                <Text style={styles.chipRemoveText}>✕</Text>
-              </TouchableOpacity>
-              <Text style={styles.chipName}>{p.name}</Text>
-              <Text style={[styles.chipNum, { backgroundColor: '#3b82f6' }]}>{i + 1}</Text>
-            </View>
-          ))}
-
-          <View style={styles.roundsRow}>
-            <Text style={styles.roundsLabel}>عدد الجولات:</Text>
-            {[2, 3, 5].map(n => (
-              <TouchableOpacity key={n}
-                style={[styles.roundBtn, totalRounds === n && styles.roundBtnActive]}
-                onPress={() => setTotalRounds(n)}>
-                <Text style={[styles.roundBtnText, totalRounds === n && styles.roundBtnTextActive]}>{n}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {players.length >= 2 && (
-            <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#3b82f6' }]} onPress={startGame}>
-              <Text style={styles.startBtnText}>🎨 ابدأ اللعبة</Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
-      </View>
-    </KeyboardAvoidingView>
-  );
-
-  // ── اختيار الكلمة ──
-  if (phase === 'wordChoice') return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <View style={styles.centerContent}>
-        <Text style={styles.wordChoiceTitle}>🖌️ دور {drawer?.name}</Text>
-        <Text style={styles.wordChoiceSub}>اختر كلمة للرسم (الآخرون لا ينظرون!)</Text>
-        {wordOptions.map(w => (
-          <TouchableOpacity key={w} style={styles.wordOptionBtn} onPress={() => chooseWord(w)}>
-            <Text style={styles.wordOptionText}>{w}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+    Animated.timing(anim, { toValue: pct, duration: 500, useNativeDriver: false }).start();
+  }, [pct]);
+  const w = anim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+  return (
+    <View style={s.timerTrack}>
+      <Animated.View style={[s.timerFill, { width: w, backgroundColor: color }]} />
+      <Text style={[s.timerNum, { color }]}>{timeLeft}s</Text>
     </View>
   );
+}
 
-  // ── الرسم ──
-  if (phase === 'draw') return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <View style={styles.drawHeader}>
-        <View style={styles.timerBadge}>
-          <Text style={[styles.timerText, timeLeft <= 15 && styles.timerRed]}>{timeLeft}s</Text>
+// ══════════════════════════════════════════════════════════
+//  WordChoiceModal
+// ══════════════════════════════════════════════════════════
+function WordChoiceModal({ visible, words, onPick, theme, isRTL }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={s.modalBg}>
+        <View style={[s.wcCard, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+          <Text style={[s.wcTitle, { color: theme.textPrimary }]}>
+            {isRTL ? '🎨 اختر كلمة لترسمها' : '🎨 Choose a word to draw'}
+          </Text>
+          {words.map(w => (
+            <TouchableOpacity key={w}
+              style={[s.wcBtn, { backgroundColor: theme.bgElevated, borderColor: theme.border }]}
+              onPress={() => onPick(w)} activeOpacity={0.75}>
+              <Text style={[s.wcBtnText, { color: theme.textPrimary }]}>{w}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
-        <View style={styles.wordBadge}>
-          <Text style={styles.wordBadgeText}>{currentWord}</Text>
+      </View>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+//  RoundResult
+// ══════════════════════════════════════════════════════════
+function RoundResult({ result, word, winnerName, isRTL, theme, onNext, nextLabel }) {
+  const won = result === 'correct';
+  const sc  = useRef(new Animated.Value(0.6)).current;
+  useEffect(() => { Animated.spring(sc, { toValue: 1, useNativeDriver: true, tension: 80 }).start(); }, []);
+  return (
+    <View style={[s.resultOverlay, { backgroundColor: theme.bgOverlay }]}>
+      <Animated.View style={[s.resultCard,
+        { backgroundColor: theme.bgCard, borderColor: won ? '#22c55e' : '#ef4444', transform: [{ scale: sc }] }]}>
+        <Text style={s.resultEmoji}>{won ? '🎉' : '⏰'}</Text>
+        <Text style={[s.resultTitle, { color: won ? '#22c55e' : '#ef4444' }]}>
+          {won
+            ? (winnerName ? (isRTL ? `${winnerName} خمّنها!` : `${winnerName} got it!`) : (isRTL ? 'صحيح!' : 'Correct!'))
+            : (isRTL ? 'انتهى الوقت!' : "Time's up!")}
+        </Text>
+        <View style={[s.resultWordBox, { backgroundColor: theme.bgElevated }]}>
+          <Text style={[s.resultWordLabel, { color: theme.textSecondary }]}>{isRTL ? 'الكلمة كانت' : 'The word was'}</Text>
+          <Text style={[s.resultWordValue, { color: theme.accent }]}>{word}</Text>
         </View>
-        <TouchableOpacity style={styles.clearBtn} onPress={clearCanvas}>
-          <Text style={styles.clearBtnText}>🗑️</Text>
+        <TouchableOpacity style={[s.nextBtn, { backgroundColor: theme.accent }]} onPress={onNext} activeOpacity={0.8}>
+          <Text style={[s.nextBtnText, { color: theme.textOnAccent }]}>
+            {nextLabel || (isRTL ? 'التالي ←' : 'Next →')}
+          </Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
+    </View>
+  );
+}
 
-      <Text style={styles.drawerLabel}>🖌️ {drawer?.name} يرسم</Text>
-
-      <DrawingCanvas
-        paths={paths}
-        onNewPath={handleNewPath}
-        onNewPoint={handleNewPoint}
-        isDrawer={true}
-        currentColor={color}
-        brushSize={brushSize}
-      />
-
-      {/* أدوات */}
-      <View style={styles.toolsRow}>
-        {COLORS.map(c => (
-          <TouchableOpacity key={c} style={[styles.colorBtn, { backgroundColor: c }, color === c && styles.colorBtnActive]}
-            onPress={() => setColor(c)} />
-        ))}
-      </View>
-      <View style={styles.toolsRow}>
-        {SIZES.map(s => (
-          <TouchableOpacity key={s} style={[styles.sizeBtn, brushSize === s && styles.sizeBtnActive]}
-            onPress={() => setBrushSize(s)}>
-            <View style={{ width: s * 2, height: s * 2, borderRadius: s, backgroundColor: color }} />
+// ══════════════════════════════════════════════════════════
+//  WaitingLobby
+// ══════════════════════════════════════════════════════════
+function WaitingLobby({ theme, isRTL, friendCode, isFriend, onCancel }) {
+  const da = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(Animated.sequence([
+      Animated.timing(da, { toValue: 1, duration: 700, useNativeDriver: true }),
+      Animated.timing(da, { toValue: 0.3, duration: 700, useNativeDriver: true }),
+    ])).start();
+  }, []);
+  return (
+    <View style={[s.lobbyWrap, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} />
+      <TouchableOpacity style={s.exitBtnAbs} onPress={onCancel}>
+        <Text style={[s.exitIcon, { color: theme.error }]}>✕</Text>
+      </TouchableOpacity>
+      <Text style={s.lobbyBigEmoji}>🎨</Text>
+      <Text style={[s.lobbyTitle, { color: theme.textPrimary }]}>
+        {isRTL ? 'بانتظار لاعب...' : 'Waiting for player...'}
+      </Text>
+      {isFriend && friendCode ? (
+        <>
+          <Text style={[s.lobbySub, { color: theme.textSecondary }]}>
+            {isRTL ? 'شارك الكود مع صديقك' : 'Share this code with your friend'}
+          </Text>
+          <TouchableOpacity
+            style={[s.codeBox, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
+            onPress={() => { Clipboard.setString(friendCode); Alert.alert(isRTL ? 'تم النسخ ✓' : 'Copied ✓', friendCode); }}
+            activeOpacity={0.8}>
+            <Text style={[s.codeText, { color: theme.accent }]}>{friendCode}</Text>
+            <Text style={[s.codeCopy, { color: theme.textSecondary }]}>{isRTL ? '📋 اضغط للنسخ' : '📋 Tap to copy'}</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* المخمّنون */}
-      <ScrollView horizontal style={styles.guessersRow} contentContainerStyle={{ gap: 10, paddingHorizontal: 20 }}>
-        {nonDrawers.map(p => (
-          <View key={p.id} style={[styles.guesserChip, guessedPlayers.includes(p.id) && styles.guesserChipDone]}>
-            <Text style={styles.guesserName}>{p.name}</Text>
-            {guessedPlayers.includes(p.id) && <Text style={styles.guesserCheck}>✓</Text>}
-          </View>
-        ))}
-      </ScrollView>
-
-      <TouchableOpacity style={styles.endRoundBtn} onPress={endRound}>
-        <Text style={styles.endRoundBtnText}>إنهاء الدور ←</Text>
+        </>
+      ) : (
+        <Text style={[s.lobbySub, { color: theme.textSecondary }]}>
+          {isRTL ? 'يبحث عن منافس... (بوت بعد 60 ثانية)' : 'Finding opponent... (bot after 60s)'}
+        </Text>
+      )}
+      <Animated.View style={[s.dotsRow, { opacity: da }]}>
+        {[0, 1, 2].map(i => <View key={i} style={[s.dot, { backgroundColor: theme.accent }]} />)}
+      </Animated.View>
+      <TouchableOpacity style={[s.cancelBtn, { borderColor: theme.border }]} onPress={onCancel}>
+        <Text style={[s.cancelBtnText, { color: theme.textSecondary }]}>{isRTL ? 'إلغاء' : 'Cancel'}</Text>
       </TouchableOpacity>
     </View>
   );
+}
 
-  // ── نهاية الجولة / تخمين ──
-  if (phase === 'roundEnd') return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <View style={styles.centerContent}>
-        <Text style={styles.revealWordTitle}>الكلمة كانت:</Text>
-        <Text style={styles.revealWord}>{currentWord}</Text>
-        <View style={styles.miniScores}>
-          {[...players].sort((a, b) => (scores[b.id] || 0) - (scores[a.id] || 0)).map(p => (
-            <View key={p.id} style={styles.miniScoreRow}>
-              <Text style={styles.miniScoreName}>{p.name}</Text>
-              <Text style={styles.miniScorePts}>{scores[p.id] || 0} نقطة</Text>
+// ══════════════════════════════════════════════════════════
+//  GameOver
+// ══════════════════════════════════════════════════════════
+function GameOver({ players, scores, myUid, isRTL, theme, onBack }) {
+  const s1 = scores[players[0]?.uid] || 0;
+  const s2 = scores[players[1]?.uid] || 0;
+  const winnerUid = s1 > s2 ? players[0]?.uid : s2 > s1 ? players[1]?.uid : null;
+  const winnerName = players.find(p => p.uid === winnerUid)?.name;
+  const iWon = winnerUid === myUid;
+  const sc = useRef(new Animated.Value(0.8)).current;
+  useEffect(() => { Animated.spring(sc, { toValue: 1, useNativeDriver: true }).start(); }, []);
+  return (
+    <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+      <StatusBar barStyle={theme.statusBar} />
+      <Animated.View style={[s.goCard, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder, transform: [{ scale: sc }] }]}>
+        <Text style={s.goEmoji}>{!winnerUid ? '🤝' : iWon ? '🏆' : '😔'}</Text>
+        <Text style={[s.goTitle, { color: theme.textPrimary }]}>{isRTL ? 'انتهت اللعبة!' : 'Game Over!'}</Text>
+        {winnerName
+          ? <Text style={[s.goWinner, { color: theme.accent }]}>{isRTL ? `🎉 الفائز: ${winnerName}` : `🎉 Winner: ${winnerName}`}</Text>
+          : <Text style={[s.goWinner, { color: theme.accent }]}>{isRTL ? '🤝 تعادل!' : '🤝 Draw!'}</Text>}
+        <View style={[s.goScoreRow, { borderColor: theme.border }]}>
+          {players.map((p, i) => (
+            <View key={p.uid} style={s.goScoreCol}>
+              <Text style={[s.goScoreName, { color: theme.textSecondary }]}>{p.name}</Text>
+              <Text style={[s.goScoreVal, { color: theme.textPrimary }]}>{scores[p.uid] || 0}</Text>
             </View>
           ))}
         </View>
-        <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#3b82f6', marginTop: 16 }]} onPress={nextRound}>
-          <Text style={styles.startBtnText}>الجولة التالية ←</Text>
+        <TouchableOpacity style={[s.goBtn, { backgroundColor: theme.accent }]} onPress={onBack} activeOpacity={0.8}>
+          <Text style={[s.goBtnText, { color: theme.textOnAccent }]}>{isRTL ? '← خروج' : 'Exit →'}</Text>
         </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+//  MAIN
+// ══════════════════════════════════════════════════════════
+export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd }) {
+  const { theme, themeId } = useTheme();
+  const { lang }  = useLanguage();
+  const isRTL     = lang === 'ar';
+
+  const myUid  = currentUser?.uid  || `guest_${Math.random().toString(36).slice(2, 8)}`;
+  const myName = currentUser?.name || (isRTL ? 'لاعب' : 'Player');
+
+  // ── Screens ──
+  const [screen, setScreen]       = useState('modeSelect');
+  // modeSelect | setup | joining | lobby | game | gameover
+
+  // ── Mode ──
+  const [gameMode, setGameMode]   = useState(null);
+  // 'local' | 'random' | 'friend_create' | 'friend_join'
+
+  // ── Join input ──
+  const [joinCode, setJoinCode]   = useState('');
+  const [joinErr,  setJoinErr]    = useState('');
+
+  // ── Local setup ──
+  const [lp1, setLp1] = useState('');
+  const [lp2, setLp2] = useState('');
+
+  // ── Local state ──
+  const [localPlayers, setLocalPlayers] = useState(['', '']);
+  const [localRound,   setLocalRound]   = useState(0);
+  const [localScores,  setLocalScores]  = useState([0, 0]);
+  const [localPhase,   setLocalPhase]   = useState('wordchoice');
+  const [localWord,    setLocalWord]    = useState('');
+  const [localWords,   setLocalWords]   = useState([]);
+  const [localResult,  setLocalResult]  = useState(null);
+  const [localTime,    setLocalTime]    = useState(ROUND_TIME);
+  const [guessText,    setGuessText]    = useState('');
+  const localTimerRef = useRef(null);
+
+  // ── Online Firebase ──
+  const [roomId,   setRoomId]   = useState(null);
+  const [roomData, setRoomData] = useState(null);
+  const unsubRef  = useRef(null);
+  const botRef    = useRef(null);
+
+  // ── Drawing ──
+  const [strokes,       setStrokes]       = useState([]);
+  const [currentStroke, setCurrentStroke] = useState(null);
+  const [penColor,      setPenColor]      = useState('#000000');
+  const [brushSize,     setBrushSize]     = useState(8);
+  const [isEraser,      setIsEraser]      = useState(false);
+  const lastSendRef = useRef(0);
+
+  // ── Shake ──
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const doShake = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 8,  duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -8, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 5,  duration: 45, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0,  duration: 35, useNativeDriver: true }),
+    ]).start();
+  }, [shakeAnim]);
+
+  // ── Online timer ──
+  const [onlineTime, setOnlineTime] = useState(ROUND_TIME);
+  const onlineTimerRef = useRef(null);
+
+  // cleanup
+  useEffect(() => () => {
+    unsubRef.current?.();
+    clearTimeout(botRef.current);
+    clearInterval(localTimerRef.current);
+    clearInterval(onlineTimerRef.current);
+  }, []);
+
+  // ──────────────────────────────────────────────────────
+  //  Firebase helpers
+  // ──────────────────────────────────────────────────────
+  const listenRoom = useCallback((rid) => {
+    unsubRef.current?.();
+    unsubRef.current = onSnapshot(doc(db, 'rooms', rid), snap => {
+      if (snap.exists()) setRoomData(snap.data());
+    });
+  }, []);
+
+  const roomUpdate = useCallback(async (updates) => {
+    if (!roomId) return;
+    try { await updateDoc(doc(db, 'rooms', roomId), { ...updates, lastUpdate: Date.now() }); }
+    catch (e) { console.warn(e); }
+  }, [roomId]);
+
+  // ──────────────────────────────────────────────────────
+  //  Online: random
+  // ──────────────────────────────────────────────────────
+  const startRandom = useCallback(async () => {
+    setGameMode('random');
+    setScreen('lobby');
+    try {
+      const q = query(collection(db, 'rooms'),
+        where('gameType', '==', 'drawguess'),
+        where('status',   '==', 'waiting'),
+        where('lang',     '==', lang));
+      const snap = await getDocs(q);
+      const avail = snap.docs.find(d => {
+        const r = d.data();
+        return r.player1?.uid !== myUid && !r.player2?.uid;
+      });
+      if (avail) {
+        const rid = avail.id;
+        const rd  = avail.data();
+        const botUid2 = rd.player1.uid;
+        await updateDoc(doc(db, 'rooms', rid), {
+          'player2.uid': myUid, 'player2.name': myName,
+          status: 'wordchoice', wordChoices: getNewWords(lang, 3),
+          drawerUid: rd.player1.uid,
+          scores: { [rd.player1.uid]: 0, [myUid]: 0 },
+          strokes: [], timerStart: Date.now(), lastUpdate: Date.now(),
+        });
+        setRoomId(rid); listenRoom(rid); setScreen('game');
+        return;
+      }
+      const rid = `dg_rnd_${Date.now()}_${myUid.slice(0,6)}`;
+      await setDoc(doc(db, 'rooms', rid), {
+        id: rid, gameType: 'drawguess', mode: 'random',
+        lang, status: 'waiting',
+        player1: { uid: myUid, name: myName },
+        player2: { uid: null, name: null },
+        round: 0, totalRounds: TOTAL_ROUNDS,
+        scores: { [myUid]: 0 }, drawerUid: myUid,
+        wordChoices: [], word: '', strokes: [],
+        roundResult: null, roundWinnerUid: null,
+        createdAt: Date.now(), lastUpdate: Date.now(),
+      });
+      setRoomId(rid); listenRoom(rid);
+      botRef.current = setTimeout(async () => {
+        try {
+          const s2 = await getDoc(doc(db, 'rooms', rid));
+          if (s2.exists() && s2.data().status === 'waiting') {
+            const botUid = `bot_${rid}`;
+            await updateDoc(doc(db, 'rooms', rid), {
+              'player2.uid': botUid, 'player2.name': '🤖 Bot',
+              status: 'wordchoice', wordChoices: getNewWords(lang, 3),
+              scores: { [myUid]: 0, [botUid]: 0 },
+              strokes: [], timerStart: Date.now(), lastUpdate: Date.now(),
+            });
+          }
+        } catch (e) {}
+      }, BOT_WAIT_MS);
+    } catch (e) {
+      console.error(e);
+      setScreen('modeSelect');
+      Alert.alert(isRTL ? 'خطأ' : 'Error', String(e.message));
+    }
+  }, [lang, myUid, myName, isRTL, listenRoom]);
+
+  // ──────────────────────────────────────────────────────
+  //  Online: create friend room
+  // ──────────────────────────────────────────────────────
+  const createFriend = useCallback(async () => {
+    setGameMode('friend_create');
+    setScreen('lobby');
+    try {
+      const friendCode = genCode();
+      const rid = `dg_fr_${friendCode}_${Date.now()}`;
+      await setDoc(doc(db, 'rooms', rid), {
+        id: rid, gameType: 'drawguess', mode: 'friend',
+        friendCode, lang, status: 'waiting',
+        player1: { uid: myUid, name: myName },
+        player2: { uid: null, name: null },
+        round: 0, totalRounds: TOTAL_ROUNDS,
+        scores: { [myUid]: 0 }, drawerUid: myUid,
+        wordChoices: [], word: '', strokes: [],
+        roundResult: null, roundWinnerUid: null,
+        createdAt: Date.now(), lastUpdate: Date.now(),
+      });
+      setRoomId(rid); listenRoom(rid);
+    } catch (e) {
+      console.error(e); setScreen('modeSelect');
+    }
+  }, [lang, myUid, myName, listenRoom]);
+
+  // ──────────────────────────────────────────────────────
+  //  Online: join by code
+  // ──────────────────────────────────────────────────────
+  const joinByCode = useCallback(async () => {
+    const code = joinCode.trim().toUpperCase();
+    if (code.length < 4) { setJoinErr(isRTL ? 'الكود قصير' : 'Code too short'); return; }
+    setJoinErr(''); setGameMode('friend_join'); setScreen('joining');
+    try {
+      const q = query(collection(db, 'rooms'),
+        where('gameType',   '==', 'drawguess'),
+        where('friendCode', '==', code),
+        where('status',     '==', 'waiting'));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        setScreen('modeSelect');
+        setJoinErr(isRTL ? 'كود غير صحيح أو انتهت الغرفة' : 'Code not found or room expired');
+        return;
+      }
+      const rd  = snap.docs[0].data();
+      const rid = snap.docs[0].id;
+      await updateDoc(doc(db, 'rooms', rid), {
+        'player2.uid': myUid, 'player2.name': myName,
+        status: 'wordchoice', wordChoices: getNewWords(lang, 3),
+        drawerUid: rd.player1.uid,
+        scores: { [rd.player1.uid]: 0, [myUid]: 0 },
+        strokes: [], timerStart: Date.now(), lastUpdate: Date.now(),
+      });
+      setRoomId(rid); listenRoom(rid); setScreen('game');
+    } catch (e) {
+      console.error(e); setScreen('modeSelect');
+      Alert.alert(isRTL ? 'خطأ' : 'Error', String(e.message));
+    }
+  }, [joinCode, lang, myUid, myName, isRTL, listenRoom]);
+
+  // ──────────────────────────────────────────────────────
+  //  Online watchers
+  // ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!roomData) return;
+    if (screen === 'lobby' && roomData.status !== 'waiting') {
+      clearTimeout(botRef.current);
+      setScreen('game');
+    }
+    if (roomData.status === 'finished') setScreen('gameover');
+  }, [roomData, screen]);
+
+  // online timer
+  const amIDrawer = roomData?.drawerUid === myUid;
+  useEffect(() => {
+    if (roomData?.status !== 'drawing' || !roomData?.timerStart) return;
+    clearInterval(onlineTimerRef.current);
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - roomData.timerStart) / 1000);
+      const left = Math.max(0, ROUND_TIME - elapsed);
+      setOnlineTime(left);
+      if (left === 0) {
+        clearInterval(onlineTimerRef.current);
+        if (amIDrawer) roomUpdate({ status: 'result', roundResult: 'timeout', roundWinnerUid: null });
+      }
+    };
+    tick();
+    onlineTimerRef.current = setInterval(tick, 500);
+    return () => clearInterval(onlineTimerRef.current);
+  }, [roomData?.status, roomData?.timerStart]);
+
+  // sync remote strokes for guesser
+  useEffect(() => {
+    if (roomData?.status === 'drawing' && !amIDrawer) {
+      setStrokes(roomData.strokes || []);
+    }
+    if (roomData?.status === 'wordchoice') {
+      setStrokes([]); setCurrentStroke(null);
+    }
+  }, [roomData?.strokes, roomData?.status, amIDrawer]);
+
+  // ──────────────────────────────────────────────────────
+  //  Online: actions
+  // ──────────────────────────────────────────────────────
+  const handleOnlineWordPick = useCallback(async (word) => {
+    await roomUpdate({
+      word, status: 'drawing',
+      strokes: [], roundResult: null, roundWinnerUid: null,
+      timerStart: Date.now(),
+    });
+  }, [roomUpdate]);
+
+  const [onlineGuess, setOnlineGuess] = useState('');
+  const handleOnlineGuess = useCallback(async () => {
+    if (!onlineGuess.trim() || !roomData?.word) return;
+    const norm = t => t.trim().toLowerCase().replace(/\s+/g, '');
+    if (norm(onlineGuess) === norm(roomData.word)) {
+      clearInterval(onlineTimerRef.current);
+      const newScores = { ...(roomData.scores || {}), [myUid]: ((roomData.scores || {})[myUid] || 0) + 1 };
+      await roomUpdate({ status: 'result', roundResult: 'correct', roundWinnerUid: myUid, scores: newScores });
+      setOnlineGuess('');
+    } else {
+      doShake(); setOnlineGuess('');
+    }
+  }, [onlineGuess, roomData, myUid, roomUpdate, doShake]);
+
+  const handleOnlineNext = useCallback(async () => {
+    const nextRound = (roomData?.round || 0) + 1;
+    if (nextRound >= TOTAL_ROUNDS) {
+      await roomUpdate({ status: 'finished' });
+      return;
+    }
+    const nextDrawer = roomData?.drawerUid === roomData?.player1?.uid
+      ? roomData?.player2?.uid : roomData?.player1?.uid;
+    await roomUpdate({
+      round: nextRound, status: 'wordchoice',
+      wordChoices: getNewWords(lang, 3),
+      drawerUid: nextDrawer,
+      word: '', strokes: [],
+      roundResult: null, roundWinnerUid: null, timerStart: null,
+    });
+  }, [roomData, lang, roomUpdate]);
+
+  // flush strokes to firebase (throttled)
+  const flushStrokes = useCallback(async (s) => {
+    const now = Date.now();
+    if (now - lastSendRef.current < STROKE_MS) return;
+    lastSendRef.current = now;
+    try { await updateDoc(doc(db, 'rooms', roomId), { strokes: s, lastUpdate: now }); }
+    catch (e) {}
+  }, [roomId]);
+
+  // ──────────────────────────────────────────────────────
+  //  PanResponder
+  // ──────────────────────────────────────────────────────
+  const isOnline  = ['random','friend_create','friend_join'].includes(gameMode);
+  const canDraw   = isOnline ? (amIDrawer && roomData?.status === 'drawing') : (localPhase === 'drawing');
+  const activeCol = isEraser ? '#ffffff' : penColor;
+  const activeSz  = isEraser ? brushSize * 2.5 : brushSize;
+
+  const pan = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => canDraw,
+    onMoveShouldSetPanResponder:  () => canDraw,
+    onPanResponderGrant: evt => {
+      const { locationX: x, locationY: y } = evt.nativeEvent;
+      setCurrentStroke({ points: [{ x, y }], color: activeCol, size: activeSz });
+    },
+    onPanResponderMove: evt => {
+      const { locationX: x, locationY: y } = evt.nativeEvent;
+      setCurrentStroke(prev => prev ? { ...prev, points: [...prev.points, { x, y }] } : null);
+    },
+    onPanResponderRelease: () => {
+      setCurrentStroke(prev => {
+        if (!prev) return null;
+        const next = [...strokes, prev];
+        setStrokes(next);
+        if (isOnline) flushStrokes(next);
+        return null;
+      });
+    },
+    onPanResponderTerminate: () => setCurrentStroke(null),
+  }), [canDraw, activeCol, activeSz, strokes, isOnline, flushStrokes]);
+
+  // ──────────────────────────────────────────────────────
+  //  Local timer
+  // ──────────────────────────────────────────────────────
+  const startLocalTimer = useCallback(() => {
+    clearInterval(localTimerRef.current);
+    setLocalTime(ROUND_TIME);
+    localTimerRef.current = setInterval(() => {
+      setLocalTime(prev => {
+        if (prev <= 1) {
+          clearInterval(localTimerRef.current);
+          setLocalResult('timeout'); setLocalPhase('result');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  const handleLocalWordPick = useCallback((word) => {
+    setLocalWord(word); setStrokes([]); setCurrentStroke(null); setGuessText('');
+    setLocalPhase('drawing'); startLocalTimer();
+  }, [startLocalTimer]);
+
+  const handleLocalGuess = useCallback(() => {
+    if (!guessText.trim()) return;
+    const norm = t => t.trim().toLowerCase().replace(/\s+/g, '');
+    if (norm(guessText) === norm(localWord)) {
+      clearInterval(localTimerRef.current);
+      const gi = 1 - (localRound % 2);
+      setLocalScores(prev => { const n = [...prev]; n[gi]++; return n; });
+      setLocalResult('correct'); setLocalPhase('result');
+    } else { doShake(); setGuessText(''); }
+  }, [guessText, localWord, localRound, doShake]);
+
+  const handleLocalNext = useCallback(() => {
+    const next = localRound + 1;
+    if (next >= TOTAL_ROUNDS) { setScreen('gameover'); return; }
+    setLocalRound(next);
+    setStrokes([]); setCurrentStroke(null); setLocalResult(null);
+    setLocalWords(getNewWords(lang, 3));
+    setLocalPhase('wordchoice');
+  }, [localRound, lang]);
+
+  // ──────────────────────────────────────────────────────
+  //  Exit
+  // ──────────────────────────────────────────────────────
+  const handleExit = useCallback(() => {
+    Alert.alert(
+      isRTL ? 'خروج' : 'Exit',
+      isRTL ? 'هل تريد الخروج من اللعبة؟' : 'Exit game?',
+      [
+        { text: isRTL ? 'إلغاء' : 'Cancel', style: 'cancel' },
+        {
+          text: isRTL ? 'خروج' : 'Exit', style: 'destructive',
+          onPress: async () => {
+            clearInterval(localTimerRef.current); clearInterval(onlineTimerRef.current);
+            clearTimeout(botRef.current); unsubRef.current?.();
+            if (roomId) {
+              try { await updateDoc(doc(db, 'rooms', roomId), { status: 'abandoned', lastUpdate: Date.now() }); }
+              catch (e) {}
+            }
+            onBack();
+          },
+        },
+      ]
+    );
+  }, [isRTL, roomId, onBack]);
+
+  // ──────────────────────────────────────────────────────
+  //  Shared renders
+  // ──────────────────────────────────────────────────────
+  const renderHeader = (roundLabel, roleText, p1, s1, p2, s2) => (
+    <View style={[s.header, { borderBottomColor: theme.border }]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <TouchableOpacity style={s.exitBtn} onPress={handleExit} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Text style={[s.exitIcon, { color: theme.error }]}>✕</Text>
+        </TouchableOpacity>
+        <GameInfoButton gameType="draw_guess" lang={lang} />
+        <WebScreenButton
+          playerUid={myUid}
+          playerName={myName}
+          gameType="draw_guess"
+          gameRoomId={roomId || ''}
+          getPublicData={() => ({ round: roomData?.round || 0, status: roomData?.status })}
+          themeName={themeId || 'dark'}
+        />
+      </View>
+      <View style={s.hCenter}>
+        <Text style={[s.hRound, { color: theme.textSecondary }]}>{roundLabel}</Text>
+        {!!roleText && <Text style={[s.hRole, { color: theme.textPrimary }]}>{roleText}</Text>}
+      </View>
+      <View style={s.hScores}>
+        {[[p1, s1],[p2, s2]].map(([name, sc2], i) => (
+          <View key={i} style={[s.sPill, { backgroundColor: theme.bgElevated }]}>
+            <Text style={[s.sPillVal, { color: theme.accent }]}>{sc2}</Text>
+            <Text style={[s.sPillName, { color: theme.textSecondary }]}>{name?.split(' ')[0]}</Text>
+          </View>
+        ))}
       </View>
     </View>
   );
 
-  // ── النهاية ──
-  if (phase === 'end') {
-    const sorted = [...players].sort((a, b) => (scores[b.id] || 0) - (scores[a.id] || 0));
-    return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" />
-        <ScrollView contentContainerStyle={styles.endContent}>
-          <Text style={styles.endTitle}>🏆 النتائج النهائية</Text>
-          {sorted.map((p, i) => (
-            <View key={p.id} style={styles.endRow}>
-              <Text style={styles.endPos}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</Text>
-              <Text style={styles.endName}>{p.name}</Text>
-              <Text style={styles.endPts}>{scores[p.id] || 0} نقطة</Text>
-            </View>
+  const renderToolbar = () => (
+    <>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 6 }}>
+        {PALETTE.map(c => (
+          <TouchableOpacity key={c}
+            style={[s.colorDot, { backgroundColor: c, borderColor: penColor === c && !isEraser ? theme.accent : 'transparent' }]}
+            onPress={() => { setPenColor(c); setIsEraser(false); }} />
+        ))}
+      </ScrollView>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          {BRUSH_SIZES.map(sz => (
+            <TouchableOpacity key={sz}
+              style={[s.brushBtn, { borderColor: brushSize === sz && !isEraser ? theme.accent : theme.border }]}
+              onPress={() => { setBrushSize(sz); setIsEraser(false); }}>
+              <View style={{ width: sz, height: sz, borderRadius: sz, backgroundColor: theme.textPrimary }} />
+            </TouchableOpacity>
           ))}
-          <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#3b82f6' }]} onPress={startGame}>
-            <Text style={styles.startBtnText}>🔄 جولة جديدة</Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <TouchableOpacity style={[s.toolBtn, { backgroundColor: isEraser ? theme.accentSoft : theme.bgElevated, borderColor: isEraser ? theme.accent : theme.border }]}
+            onPress={() => setIsEraser(e => !e)}>
+            <Text style={s.toolBtnTxt}>⬜</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.startBtn, styles.outlineBtn, { borderColor: '#3b82f650' }]} onPress={onBack}>
-            <Text style={[styles.outlineBtnText, { color: '#3b82f6' }]}>🏠 الرئيسية</Text>
+          <TouchableOpacity style={[s.toolBtn, { backgroundColor: theme.bgElevated, borderColor: theme.border }]}
+            onPress={() => setStrokes(prev => prev.slice(0, -1))}>
+            <Text style={s.toolBtnTxt}>↩</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.toolBtn, { backgroundColor: '#ef444415', borderColor: '#ef444440' }]}
+            onPress={() => Alert.alert(isRTL ? 'مسح؟' : 'Clear?', '', [
+              { text: isRTL ? 'إلغاء' : 'Cancel', style: 'cancel' },
+              { text: isRTL ? 'مسح' : 'Clear', style: 'destructive', onPress: () => setStrokes([]) },
+            ])}>
+            <Text style={s.toolBtnTxt}>🗑</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
+
+  // ──────────────────────────────────────────────────────
+  //  SCREENS
+  // ──────────────────────────────────────────────────────
+
+  /* ── Mode Select ── */
+  if (screen === 'modeSelect') {
+    return (
+      <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <StatusBar barStyle={theme.statusBar} />
+        <TouchableOpacity style={s.exitBtnAbs} onPress={onBack}>
+          <Text style={[s.exitIcon, { color: theme.error }]}>✕</Text>
+        </TouchableOpacity>
+        <ScrollView contentContainerStyle={s.modeContent} keyboardShouldPersistTaps="handled">
+          <Text style={s.bigEmoji}>🎨</Text>
+          <Text style={[s.bigTitle, { color: theme.textPrimary }]}>{isRTL ? 'رسم وتخمين' : 'Draw & Guess'}</Text>
+
+          {/* Local */}
+          <TouchableOpacity style={[s.modeCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
+            onPress={() => { setGameMode('local'); setScreen('setup'); }} activeOpacity={0.8}>
+            <Text style={s.modeEmoji}>📱</Text>
+            <View style={s.modeTxt}>
+              <Text style={[s.modeCardTitle, { color: theme.textPrimary }]}>{isRTL ? 'محلي' : 'Local'}</Text>
+              <Text style={[s.modeCardSub, { color: theme.textSecondary }]}>{isRTL ? 'لاعبان على نفس الجهاز' : 'Two players, one device'}</Text>
+            </View>
+            <Text style={[s.modeArr, { color: theme.accent }]}>›</Text>
+          </TouchableOpacity>
+
+          {/* Random */}
+          <TouchableOpacity style={[s.modeCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
+            onPress={startRandom} activeOpacity={0.8}>
+            <Text style={s.modeEmoji}>🌐</Text>
+            <View style={s.modeTxt}>
+              <Text style={[s.modeCardTitle, { color: theme.textPrimary }]}>{isRTL ? 'عشوائي أونلاين' : 'Random Online'}</Text>
+              <Text style={[s.modeCardSub, { color: theme.textSecondary }]}>{isRTL ? 'العب مع لاعب عشوائي' : 'Play with a random player'}</Text>
+            </View>
+            <Text style={[s.modeArr, { color: theme.accent }]}>›</Text>
+          </TouchableOpacity>
+
+          {/* Friend create */}
+          <TouchableOpacity style={[s.modeCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
+            onPress={createFriend} activeOpacity={0.8}>
+            <Text style={s.modeEmoji}>🔗</Text>
+            <View style={s.modeTxt}>
+              <Text style={[s.modeCardTitle, { color: theme.textPrimary }]}>{isRTL ? 'مع صديق — أنشئ غرفة' : 'With Friend — Create'}</Text>
+              <Text style={[s.modeCardSub, { color: theme.textSecondary }]}>{isRTL ? 'أنشئ غرفة وشارك الكود' : 'Create a room & share the code'}</Text>
+            </View>
+            <Text style={[s.modeArr, { color: theme.accent }]}>›</Text>
+          </TouchableOpacity>
+
+          {/* Friend join */}
+          <View style={[s.joinCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+            <Text style={s.modeEmoji}>🔑</Text>
+            <View style={s.modeTxt}>
+              <Text style={[s.modeCardTitle, { color: theme.textPrimary }]}>{isRTL ? 'انضم بكود' : 'Join by Code'}</Text>
+              <TextInput
+                style={[s.joinInput, {
+                  backgroundColor: theme.bgInput,
+                  borderColor: joinErr ? theme.error : theme.border,
+                  color: theme.textPrimary,
+                }]}
+                placeholder={isRTL ? 'أدخل الكود' : 'Enter code'}
+                placeholderTextColor={theme.textMuted}
+                value={joinCode}
+                onChangeText={t => { setJoinCode(t.toUpperCase()); setJoinErr(''); }}
+                maxLength={8} autoCapitalize="characters" autoCorrect={false}
+              />
+              {!!joinErr && <Text style={[s.joinErr, { color: theme.error }]}>{joinErr}</Text>}
+            </View>
+            <TouchableOpacity style={[s.joinBtn, { backgroundColor: theme.accent }]} onPress={joinByCode} activeOpacity={0.8}>
+              <Text style={[s.joinBtnTxt, { color: theme.textOnAccent }]}>{isRTL ? 'انضم' : 'Join'}</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  /* ── Setup (local) ── */
+  if (screen === 'setup') {
+    const canStart = lp1.trim() && lp2.trim();
+    return (
+      <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <StatusBar barStyle={theme.statusBar} />
+        <TouchableOpacity style={s.exitBtnAbs} onPress={() => setScreen('modeSelect')}>
+          <Text style={[s.exitIcon, { color: theme.error }]}>✕</Text>
+        </TouchableOpacity>
+        <ScrollView contentContainerStyle={s.modeContent} keyboardShouldPersistTaps="handled">
+          <Text style={s.bigEmoji}>🎨</Text>
+          <Text style={[s.bigTitle, { color: theme.textPrimary }]}>{isRTL ? 'محلي' : 'Local Game'}</Text>
+          <View style={[s.setupCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+            <Text style={[s.setupLbl, { color: theme.textSecondary }]}>{isRTL ? 'اللاعب الأول' : 'Player 1'}</Text>
+            <TextInput style={[s.setupInput, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary, textAlign: isRTL ? 'right' : 'left' }]}
+              placeholder={isRTL ? 'الاسم 🎨' : 'Name 🎨'}
+              placeholderTextColor={theme.textMuted} value={lp1} onChangeText={setLp1} maxLength={15} />
+            <View style={[s.divider, { backgroundColor: theme.divider }]} />
+            <Text style={[s.setupLbl, { color: theme.textSecondary }]}>{isRTL ? 'اللاعب الثاني' : 'Player 2'}</Text>
+            <TextInput style={[s.setupInput, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary, textAlign: isRTL ? 'right' : 'left' }]}
+              placeholder={isRTL ? 'الاسم 🤔' : 'Name 🤔'}
+              placeholderTextColor={theme.textMuted} value={lp2} onChangeText={setLp2} maxLength={15} />
+          </View>
+          <TouchableOpacity
+            style={[s.startBtn, { backgroundColor: canStart ? theme.accent : theme.bgElevated, opacity: canStart ? 1 : 0.5 }]}
+            disabled={!canStart}
+            onPress={() => {
+              setLocalPlayers([lp1.trim(), lp2.trim()]);
+              setLocalRound(0); setLocalScores([0, 0]);
+              setLocalWords(getNewWords(lang, 3)); setLocalPhase('wordchoice');
+              setScreen('game');
+            }}>
+            <Text style={[s.startBtnTxt, { color: canStart ? theme.textOnAccent : theme.textMuted }]}>
+              {isRTL ? '🎮 ابدأ' : '🎮 Start'}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
     );
   }
 
-  return (
-    <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={onBack} />
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════
-// ── وضع الأونلاين ───────────────────────────────────────────────
-// ═══════════════════════════════════════════════════════════════
-function OnlineMode({ onBack, currentUser }) {
-  const [phase, setPhase] = useState('lobby');
-  const [roomCode, setRoomCode] = useState('');
-  const [inputCode, setInputCode] = useState('');
-  const [roomData, setRoomData] = useState(null);
-  const [paths, setPaths] = useState([]);
-  const [guess, setGuess] = useState('');
-  const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
-  const [myId] = useState(currentUser?.uid || `guest_${Date.now()}`);
-  const [myName] = useState(currentUser?.name || currentUser?.displayName || 'لاعب');
-  const [color, setColor] = useState('#fff');
-  const [brushSize, setBrushSize] = useState(6);
-  const [wordOptions, setWordOptions] = useState([]);
-  const [showLeave, setShowLeave] = useState(false);
-
-  const timerRef = useRef(null);
-  const roomRef = useRef(null);
-  const unsub = useRef(null);
-
-  useEffect(() => () => {
-    clearInterval(timerRef.current);
-    if (unsub.current) unsub.current();
-  }, []);
-
-  async function createRoom() {
-    const code = generateRoomCode();
-    setRoomCode(code);
-    const ref = doc(db, 'drawguess_rooms', code);
-    roomRef.current = ref;
-    const roomObj = {
-      code,
-      hostId: myId,
-      players: [{ id: myId, name: myName, score: 0 }],
-      phase: 'waiting',
-      currentDrawerId: myId,
-      currentWord: '',
-      wordOptions: shuffle(ALL_WORDS).slice(0, 3),
-      round: 1,
-      maxRounds: 3,
-      paths: [],
-      guessedIds: [],
-      createdAt: serverTimestamp(),
-    };
-    await setDoc(ref, roomObj);
-    subscribeRoom(code);
-    setPhase('waiting');
-  }
-
-  async function joinRoom() {
-    const code = inputCode.trim();
-    if (code.length !== 6) return Alert.alert('', 'أدخل كود صحيح من 6 أرقام');
-    const ref = doc(db, 'drawguess_rooms', code);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return Alert.alert('', 'الغرفة غير موجودة');
-    const data = snap.data();
-    if (data.phase !== 'waiting') return Alert.alert('', 'اللعبة بدأت مسبقاً');
-    if (data.players.length >= 8) return Alert.alert('', 'الغرفة ممتلئة');
-    setRoomCode(code);
-    roomRef.current = ref;
-    const newPlayers = [...data.players, { id: myId, name: myName, score: 0 }];
-    await updateDoc(ref, { players: newPlayers });
-    subscribeRoom(code);
-    setPhase('waiting');
-  }
-
-  function subscribeRoom(code) {
-    if (unsub.current) unsub.current();
-    const ref = doc(db, 'drawguess_rooms', code);
-    unsub.current = onSnapshot(ref, (snap) => {
-      if (!snap.exists()) return;
-      const data = snap.data();
-      setRoomData(data);
-      if (data.phase === 'game') {
-        setPaths(data.paths || []);
-        setPhase('game');
-      }
-      if (data.phase === 'end') setPhase('end');
-    });
-  }
-
-  async function startOnlineGame() {
-    if (!roomRef.current) return;
-    await updateDoc(roomRef.current, { phase: 'game' });
-  }
-
-  async function handleOnlinePath(path) {
-    if (!roomRef.current) return;
-    const newPaths = [...(roomData?.paths || []), path];
-    await updateDoc(roomRef.current, { paths: newPaths });
-  }
-
-  async function handleOnlinePoint(pathId, point) {
-    if (!roomRef.current || !roomData) return;
-    const updatedPaths = (roomData.paths || []).map(p =>
-      p.id === pathId ? { ...p, points: [...p.points, point] } : p
-    );
-    await updateDoc(roomRef.current, { paths: updatedPaths });
-  }
-
-  async function clearOnlineCanvas() {
-    if (!roomRef.current) return;
-    await updateDoc(roomRef.current, { paths: [] });
-  }
-
-  async function chooseOnlineWord(word) {
-    if (!roomRef.current) return;
-    await updateDoc(roomRef.current, { currentWord: word, guessedIds: [], paths: [] });
-  }
-
-  async function submitOnlineGuess() {
-    if (!roomData || !guess.trim()) return;
-    const g = guess.trim();
-    setGuess('');
-    if (g === roomData.currentWord) {
-      const elapsed = ROUND_DURATION - timeLeft;
-      const pts = elapsed < 30 ? POINTS_FAST : POINTS_SLOW;
-      const updatedPlayers = roomData.players.map(p =>
-        p.id === myId ? { ...p, score: (p.score || 0) + pts } : p
-      );
-      const guessedIds = [...(roomData.guessedIds || []), myId];
-      await updateDoc(roomRef.current, { players: updatedPlayers, guessedIds });
-      Alert.alert('🎉 صح!', `+${pts} نقطة`);
-    } else {
-      Alert.alert('❌ خطأ', 'حاول مرة ثانية');
-    }
-  }
-
-  const isHost = roomData?.hostId === myId;
-  const isDrawer = roomData?.currentDrawerId === myId;
-  const drawer = roomData?.players?.find(p => p.id === roomData?.currentDrawerId);
-
-  // ── اللوبي ──
-  if (phase === 'lobby') return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={[styles.backBtn, { borderColor: '#a855f730' }]}>
-          <Text style={[styles.backText, { color: '#a855f7' }]}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerEmoji}>🌐</Text>
-          <Text style={[styles.headerTitle, { color: '#a855f7' }]}>رسم وتخمين — أونلاين</Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </View>
-      <View style={styles.lobbyContent}>
-        <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#a855f7' }]} onPress={createRoom}>
-          <Text style={styles.startBtnText}>🏠 أنشئ غرفة جديدة</Text>
-        </TouchableOpacity>
-        <Text style={styles.orText}>أو</Text>
-        <TextInput
-          style={[styles.input, { borderColor: '#a855f730', textAlign: 'center', fontSize: 22, letterSpacing: 6 }]}
-          placeholder="أدخل كود الغرفة"
-          placeholderTextColor="#3a3a60"
-          value={inputCode}
-          onChangeText={setInputCode}
-          keyboardType="number-pad"
-          maxLength={6}
-        />
-        <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#6d28d9' }]} onPress={joinRoom}>
-          <Text style={styles.startBtnText}>🚪 انضم للغرفة</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  // ── انتظار ──
-  if (phase === 'waiting') return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <View style={styles.centerContent}>
-        <Text style={styles.roomCodeLabel}>كود الغرفة:</Text>
-        <Text style={styles.roomCodeText}>{roomCode}</Text>
-        <Text style={styles.shareHint}>شارك الكود مع أصدقائك</Text>
-        <View style={styles.waitingPlayers}>
-          {(roomData?.players || []).map(p => (
-            <View key={p.id} style={styles.waitingChip}>
-              <Text style={styles.waitingName}>{p.name}</Text>
-              {p.id === roomData?.hostId && <Text style={styles.hostBadge}>مضيف</Text>}
-            </View>
-          ))}
-        </View>
-        {isHost && (roomData?.players?.length || 0) >= 2 && (
-          <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#a855f7', marginTop: 20 }]} onPress={startOnlineGame}>
-            <Text style={styles.startBtnText}>🎨 ابدأ اللعبة</Text>
-          </TouchableOpacity>
-        )}
-        {!isHost && <Text style={styles.waitingMsg}>في انتظار المضيف ليبدأ اللعبة...</Text>}
-        <TouchableOpacity style={[styles.startBtn, styles.outlineBtn, { borderColor: '#a855f750', marginTop: 12 }]} onPress={() => {
-          if (unsub.current) unsub.current();
-          setPhase('lobby');
-        }}>
-          <Text style={[styles.outlineBtnText, { color: '#a855f7' }]}>مغادرة الغرفة</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  // ── لعبة أونلاين ──
-  if (phase === 'game' && roomData) {
-    const word = roomData.currentWord;
-    const showWordChoice = isDrawer && !word;
-
+  /* ── Joining spinner ── */
+  if (screen === 'joining') {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" />
-        <View style={styles.drawHeader}>
-          <Text style={[styles.timerText, { color: '#a855f7' }]}>جولة {roomData.round}/{roomData.maxRounds}</Text>
-          <View style={styles.wordBadge}>
-            <Text style={styles.wordBadgeText}>
-              {isDrawer ? word || '...' : word ? '_'.repeat(word.length) : '...'}
+      <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+        <StatusBar barStyle={theme.statusBar} />
+        <ActivityIndicator size="large" color={theme.accent} />
+        <Text style={[{ color: theme.textSecondary, marginTop: 16, fontSize: 14 }]}>
+          {isRTL ? 'جارٍ الانضمام...' : 'Joining...'}
+        </Text>
+      </View>
+    );
+  }
+
+  /* ── Lobby ── */
+  if (screen === 'lobby') {
+    return (
+      <WaitingLobby
+        theme={theme} isRTL={isRTL}
+        friendCode={roomData?.friendCode || ''}
+        isFriend={gameMode === 'friend_create'}
+        onCancel={async () => {
+          clearTimeout(botRef.current); unsubRef.current?.();
+          if (roomId) {
+            try { await updateDoc(doc(db, 'rooms', roomId), { status: 'abandoned' }); } catch (e) {}
+          }
+          setRoomId(null); setRoomData(null); setScreen('modeSelect');
+        }}
+      />
+    );
+  }
+
+  /* ── Game Over ── */
+  if (screen === 'gameover') {
+    if (isOnline && roomData) {
+      const ops    = [roomData.player1, roomData.player2].filter(Boolean);
+      const sc     = roomData.scores || {};
+      const s1     = sc[ops[0]?.uid] || 0;
+      const s2     = sc[ops[1]?.uid] || 0;
+      const winUid = s1 > s2 ? ops[0]?.uid : s2 > s1 ? ops[1]?.uid : null;
+      if (onGameEnd) onGameEnd(winUid === myUid);
+      return <GameOver players={ops} scores={sc} myUid={myUid} isRTL={isRTL} theme={theme} onBack={onBack} />;
+    }
+    // local — اللاعب 0 هو الإنسان
+    const localWon = (localScores[0] || 0) >= (localScores[1] || 0);
+    if (onGameEnd) onGameEnd(localWon);
+    return (
+      <GameOver
+        players={[{ uid: '0', name: localPlayers[0] }, { uid: '1', name: localPlayers[1] }]}
+        scores={{ '0': localScores[0], '1': localScores[1] }}
+        myUid="0" isRTL={isRTL} theme={theme} onBack={onBack}
+      />
+    );
+  }
+
+  /* ── GAME ── */
+
+  // ── ONLINE game ──
+  if (isOnline && roomData) {
+    const ops2      = [roomData.player1, roomData.player2].filter(Boolean);
+    const other     = ops2.find(p => p.uid !== myUid);
+    const round     = roomData.round || 0;
+    const status    = roomData.status;
+    const rl        = isRTL ? `جولة ${round + 1} / ${TOTAL_ROUNDS}` : `Round ${round + 1} / ${TOTAL_ROUNDS}`;
+    const drawerName= ops2.find(p => p.uid === roomData.drawerUid)?.name || '';
+
+    // wordchoice
+    if (status === 'wordchoice') {
+      if (amIDrawer) {
+        return (
+          <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+            {renderHeader(rl, '', ops2[0]?.name, roomData.scores?.[ops2[0]?.uid] || 0, ops2[1]?.name, roomData.scores?.[ops2[1]?.uid] || 0)}
+            <WordChoiceModal visible={true} words={roomData.wordChoices || []} onPick={handleOnlineWordPick} theme={theme} isRTL={isRTL} />
+          </View>
+        );
+      }
+      return (
+        <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+          <StatusBar barStyle={theme.statusBar} />
+          {renderHeader(rl, '', ops2[0]?.name, roomData.scores?.[ops2[0]?.uid] || 0, ops2[1]?.name, roomData.scores?.[ops2[1]?.uid] || 0)}
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+            <ActivityIndicator size="large" color={theme.accent} />
+            <Text style={[{ color: theme.textSecondary, fontSize: 15 }]}>
+              {isRTL ? `${drawerName} يختار الكلمة...` : `${drawerName} is choosing...`}
             </Text>
           </View>
-          <Text style={[styles.drawerLabel, { fontSize: 12 }]}>🖌️ {drawer?.name}</Text>
         </View>
+      );
+    }
 
-        {showWordChoice && (
-          <View style={styles.wordChoiceOverlay}>
-            <Text style={styles.wordChoiceTitle}>اختر كلمة للرسم:</Text>
-            {(roomData.wordOptions || []).map(w => (
-              <TouchableOpacity key={w} style={styles.wordOptionBtn} onPress={() => chooseOnlineWord(w)}>
-                <Text style={styles.wordOptionText}>{w}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        <DrawingCanvas
-          paths={paths}
-          onNewPath={isDrawer ? handleOnlinePath : undefined}
-          onNewPoint={isDrawer ? handleOnlinePoint : undefined}
-          isDrawer={isDrawer}
-          currentColor={color}
-          brushSize={brushSize}
-        />
-
-        {isDrawer && (
-          <>
-            <View style={styles.toolsRow}>
-              {COLORS.map(c => (
-                <TouchableOpacity key={c} style={[styles.colorBtn, { backgroundColor: c }, color === c && styles.colorBtnActive]}
-                  onPress={() => setColor(c)} />
-              ))}
+    // drawing
+    if (status === 'drawing') {
+      const roleText = amIDrawer
+        ? (isRTL ? '✏️ أنت ترسم' : '✏️ You draw')
+        : (isRTL ? '🤔 أنت تخمّن' : '🤔 You guess');
+      return (
+        <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+          <StatusBar barStyle={theme.statusBar} />
+          {renderHeader(rl, roleText, ops2[0]?.name, roomData.scores?.[ops2[0]?.uid] || 0, ops2[1]?.name, roomData.scores?.[ops2[1]?.uid] || 0)}
+          <TimerBar timeLeft={onlineTime} total={ROUND_TIME} />
+          <ScrollView style={s.flex1} contentContainerStyle={s.gameContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <View style={[s.section, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+              {amIDrawer ? (
+                <>
+                  <View style={[s.wordBadge, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
+                    <Text style={[s.wordBadgeTxt, { color: theme.accent }]}>{roomData.word}</Text>
+                  </View>
+                  <View style={[s.canvasCont, { borderColor: theme.border }]} {...pan.panHandlers}>
+                    <DrawingCanvas strokes={strokes} currentStroke={currentStroke} />
+                  </View>
+                  {renderToolbar()}
+                </>
+              ) : (
+                <>
+                  <Text style={[s.sectionTitle, { color: theme.textPrimary }]}>
+                    {isRTL ? `${drawerName} يرسم...` : `${drawerName} is drawing...`}
+                  </Text>
+                  <View style={[s.canvasCont, { borderColor: theme.border }]}>
+                    <DrawingCanvas strokes={roomData.strokes || []} currentStroke={null} />
+                  </View>
+                  <Animated.View style={[s.guessRow, { transform: [{ translateX: shakeAnim }] }]}>
+                    <TextInput
+                      style={[s.guessInput, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary, textAlign: isRTL ? 'right' : 'left', flex: 1 }]}
+                      placeholder={isRTL ? 'اكتب تخمينك...' : 'Type your guess...'}
+                      placeholderTextColor={theme.textMuted}
+                      value={onlineGuess} onChangeText={setOnlineGuess}
+                      onSubmitEditing={handleOnlineGuess} returnKeyType="send"
+                      autoCorrect={false} autoCapitalize="none"
+                    />
+                    <TouchableOpacity style={[s.guessBtn, { backgroundColor: theme.accent }]} onPress={handleOnlineGuess}>
+                      <Text style={[s.guessBtnTxt, { color: theme.textOnAccent }]}>{isRTL ? 'تخمين' : 'Guess'}</Text>
+                    </TouchableOpacity>
+                  </Animated.View>
+                </>
+              )}
             </View>
-            <TouchableOpacity style={styles.clearBtn} onPress={clearOnlineCanvas}>
-              <Text style={styles.clearBtnText}>🗑️ مسح</Text>
-            </TouchableOpacity>
-          </>
-        )}
+          </ScrollView>
+        </View>
+      );
+    }
 
-        {!isDrawer && !roomData.guessedIds?.includes(myId) && (
-          <View style={styles.guessInputRow}>
-            <TouchableOpacity style={[styles.addBtn, { backgroundColor: '#a855f7' }]} onPress={submitOnlineGuess}>
-              <Text style={styles.addBtnText}>تخمين</Text>
-            </TouchableOpacity>
-            <TextInput
-              style={[styles.input, { flex: 1, borderColor: '#a855f730' }]}
-              placeholder="اكتب تخمينك..."
-              placeholderTextColor="#3a3a60"
-              value={guess}
-              onChangeText={setGuess}
-              onSubmitEditing={submitOnlineGuess}
-              textAlign="right"
-            />
-          </View>
-        )}
+    // result
+    if (status === 'result') {
+      const wn = ops2.find(p => p.uid === roomData.roundWinnerUid)?.name;
+      const isLast = (round + 1) >= TOTAL_ROUNDS;
+      return (
+        <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+          {renderHeader(rl, '', ops2[0]?.name, roomData.scores?.[ops2[0]?.uid] || 0, ops2[1]?.name, roomData.scores?.[ops2[1]?.uid] || 0)}
+          <RoundResult
+            result={roomData.roundResult} word={roomData.word}
+            winnerName={wn} isRTL={isRTL} theme={theme}
+            onNext={handleOnlineNext}
+            nextLabel={isLast ? (isRTL ? '🏆 النتيجة النهائية' : '🏆 Final Results') : undefined}
+          />
+        </View>
+      );
+    }
 
-        {roomData.guessedIds?.includes(myId) && (
-          <View style={styles.guessedBanner}>
-            <Text style={styles.guessedText}>✓ خمّنت الكلمة! انتظر الآخرين</Text>
-          </View>
-        )}
-
-        <ScrollView horizontal style={styles.onlineScores} contentContainerStyle={{ gap: 10, paddingHorizontal: 20 }}>
-          {(roomData.players || []).sort((a, b) => b.score - a.score).map(p => (
-            <View key={p.id} style={[styles.onlineScoreChip, p.id === myId && styles.myScoreChip]}>
-              <Text style={styles.onlineScoreName}>{p.name}</Text>
-              <Text style={styles.onlineScorePts}>{p.score || 0}</Text>
-            </View>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // ── نهاية أونلاين ──
-  if (phase === 'end' && roomData) {
-    const sorted = [...(roomData.players || [])].sort((a, b) => b.score - a.score);
+    // fallback
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" />
-        <ScrollView contentContainerStyle={styles.endContent}>
-          <Text style={styles.endTitle}>🏆 النتائج</Text>
-          {sorted.map((p, i) => (
-            <View key={p.id} style={[styles.endRow, p.id === myId && { borderColor: '#a855f750' }]}>
-              <Text style={styles.endPos}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</Text>
-              <Text style={styles.endName}>{p.name}</Text>
-              <Text style={styles.endPts}>{p.score || 0} نقطة</Text>
-            </View>
-          ))}
-          <TouchableOpacity style={[styles.startBtn, styles.outlineBtn, { borderColor: '#a855f750', marginTop: 16 }]} onPress={() => {
-            if (unsub.current) unsub.current();
-            onBack();
-          }}>
-            <Text style={[styles.outlineBtnText, { color: '#a855f7' }]}>🏠 الرئيسية</Text>
-          </TouchableOpacity>
-        </ScrollView>
+      <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+        <StatusBar barStyle={theme.statusBar} />
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
 
-  return (
-    <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={()=>{if(unsub.current)unsub.current();onBack();}} />
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════
-// ── الشاشة الرئيسية: اختيار النمط ──────────────────────────────
-// ═══════════════════════════════════════════════════════════════
-export default function DrawGuessScreen({ onBack, currentUser, mode }) {
-  const [selectedMode, setSelectedMode] = useState(mode || null);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, []);
-
-  if (selectedMode === 'local') return <LocalMode onBack={() => setSelectedMode(null)} />;
-  if (selectedMode === 'online') return <OnlineMode onBack={() => setSelectedMode(null)} currentUser={currentUser} />;
+  // ── LOCAL game ──
+  const di = localRound % 2;
+  const gi = 1 - di;
+  const dn = localPlayers[di];
+  const gn = localPlayers[gi];
+  const rl2 = isRTL ? `جولة ${localRound + 1} / ${TOTAL_ROUNDS}` : `Round ${localRound + 1} / ${TOTAL_ROUNDS}`;
+  const roleLocal = localPhase === 'drawing'
+    ? (isRTL ? `✏️ ${dn} يرسم` : `✏️ ${dn} draws`) : '';
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerEmoji}>🎨</Text>
-          <Text style={styles.headerTitle}>رسم وتخمين</Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </Animated.View>
+    <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} />
+      {renderHeader(rl2, roleLocal, localPlayers[0], localScores[0], localPlayers[1], localScores[1])}
 
-      <Animated.View style={[styles.modeContent, { opacity: fadeAnim }]}>
-        <Text style={styles.modeTitle}>اختر طريقة اللعب</Text>
+      {localPhase === 'drawing' && <TimerBar timeLeft={localTime} total={ROUND_TIME} />}
 
-        <TouchableOpacity style={styles.modeCard} onPress={() => setSelectedMode('local')}>
-          <Text style={styles.modeEmoji}>🏠</Text>
-          <View style={styles.modeInfo}>
-            <Text style={styles.modeName}>جلسة</Text>
-            <Text style={styles.modeDesc}>العب مع من حولك بجهاز واحد</Text>
+      <WordChoiceModal
+        visible={localPhase === 'wordchoice'}
+        words={localWords} onPick={handleLocalWordPick}
+        theme={theme} isRTL={isRTL}
+      />
+
+      {localPhase === 'drawing' && (
+        <ScrollView style={s.flex1} contentContainerStyle={s.gameContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {/* Drawer */}
+          <View style={[s.section, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+            <Text style={[s.sectionTitle, { color: theme.textPrimary }]}>
+              {isRTL ? `🎨 ${dn} — ارسم:` : `🎨 ${dn} — Draw:`}
+            </Text>
+            <View style={[s.wordBadge, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
+              <Text style={[s.wordBadgeTxt, { color: theme.accent }]}>{localWord}</Text>
+            </View>
+            <View style={[s.canvasCont, { borderColor: theme.border }]} {...pan.panHandlers}>
+              <DrawingCanvas strokes={strokes} currentStroke={currentStroke} />
+            </View>
+            {renderToolbar()}
           </View>
-          <Text style={styles.modeArrow}>←</Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.modeCard, styles.modeCardOnline]} onPress={() => setSelectedMode('online')}>
-          <Text style={styles.modeEmoji}>🌐</Text>
-          <View style={styles.modeInfo}>
-            <Text style={[styles.modeName, { color: '#a855f7' }]}>أونلاين</Text>
-            <Text style={styles.modeDesc}>أنشئ غرفة أو انضم بكود</Text>
+          {/* Guesser */}
+          <View style={[s.section, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+            <Text style={[s.sectionTitle, { color: theme.textPrimary }]}>
+              {isRTL ? `🤔 ${gn} — تخمين:` : `🤔 ${gn} — Guess:`}
+            </Text>
+            <Animated.View style={[s.guessRow, { transform: [{ translateX: shakeAnim }] }]}>
+              <TextInput
+                style={[s.guessInput, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary, textAlign: isRTL ? 'right' : 'left', flex: 1 }]}
+                placeholder={isRTL ? 'اكتب تخمينك...' : 'Type your guess...'}
+                placeholderTextColor={theme.textMuted}
+                value={guessText} onChangeText={setGuessText}
+                onSubmitEditing={handleLocalGuess} returnKeyType="send"
+                autoCorrect={false} autoCapitalize="none"
+              />
+              <TouchableOpacity style={[s.guessBtn, { backgroundColor: theme.accent }]} onPress={handleLocalGuess}>
+                <Text style={[s.guessBtnTxt, { color: theme.textOnAccent }]}>{isRTL ? 'تخمين' : 'Guess'}</Text>
+              </TouchableOpacity>
+            </Animated.View>
           </View>
-          <Text style={[styles.modeArrow, { color: '#a855f7' }]}>←</Text>
-        </TouchableOpacity>
-      </Animated.View>
+        </ScrollView>
+      )}
+
+      {localPhase === 'result' && (
+        <RoundResult
+          result={localResult} word={localWord}
+          winnerName={localResult === 'correct' ? gn : null}
+          isRTL={isRTL} theme={theme} onNext={handleLocalNext}
+          nextLabel={(localRound + 1 >= TOTAL_ROUNDS)
+            ? (isRTL ? '🏆 النتيجة النهائية' : '🏆 Final Results') : undefined}
+        />
+      )}
     </View>
   );
 }
 
-// ── الستايلات ────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#06061a', paddingTop: 56 },
+// ══════════════════════════════════════════════════════════
+//  Styles
+// ══════════════════════════════════════════════════════════
+const s = StyleSheet.create({
+  flex1: { flex: 1 },
+
+  exitBtnAbs: {
+    position: 'absolute', top: Platform.OS === 'ios' ? 52 : 16, left: 16,
+    width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18, zIndex: 10,
+  },
+  exitBtn:  { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18 },
+  exitIcon: { fontSize: 18, fontWeight: '700' },
+
   header: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20, marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingTop: Platform.OS === 'ios' ? 52 : 16,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 12, backgroundColor: '#0f0f2e',
-    borderWidth: 1, borderColor: '#ffffff20',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  backText: { color: '#a78bfa', fontSize: 20, fontWeight: '700' },
-  headerCenter: { alignItems: 'center', gap: 2 },
-  headerEmoji: { fontSize: 24 },
-  headerTitle: { color: '#a78bfa', fontSize: 16, fontWeight: '900' },
+  hCenter:  { flex: 1, alignItems: 'center' },
+  hRound:   { fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
+  hRole:    { fontSize: 13, fontWeight: '700', marginTop: 1 },
+  hScores:  { flexDirection: 'row', gap: 6 },
+  sPill:    { alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  sPillVal: { fontSize: 16, fontWeight: '800' },
+  sPillName:{ fontSize: 9, fontWeight: '600' },
 
-  setupContent: { paddingHorizontal: 20, paddingBottom: 60, gap: 12 },
-  rulesCard: {
-    backgroundColor: '#0f0f2e', borderRadius: 16, borderWidth: 1.5,
-    padding: 16, gap: 8,
+  timerTrack: {
+    height: 6, backgroundColor: 'rgba(128,128,128,0.15)',
+    marginHorizontal: 16, marginTop: 4, borderRadius: 3, overflow: 'hidden',
   },
-  rulesTitle: { fontWeight: '800', fontSize: 15, textAlign: 'center' },
-  rulesText: { color: '#8080aa', fontSize: 13, lineHeight: 22, textAlign: 'center' },
+  timerFill: { height: '100%', borderRadius: 3, position: 'absolute', left: 0, top: 0 },
+  timerNum:  { position: 'absolute', right: 4, fontSize: 10, fontWeight: '700', lineHeight: 16 },
 
-  inputRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  input: {
-    flex: 1, backgroundColor: '#0f0f2e', borderWidth: 1.5,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    color: '#fff', fontSize: 15,
-  },
-  addBtn: { borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
-  addBtnText: { color: '#000', fontWeight: '900', fontSize: 14 },
-  playerChip: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f0f2e',
-    borderRadius: 12, borderWidth: 1, padding: 12, gap: 10,
-  },
-  chipNum: {
-    width: 26, height: 26, borderRadius: 8, textAlign: 'center',
-    lineHeight: 26, color: '#000', fontWeight: '900', fontSize: 13,
-  },
-  chipName: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '600' },
-  chipRemove: {
-    width: 26, height: 26, borderRadius: 8, backgroundColor: '#ef444420',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  chipRemoveText: { color: '#ef4444', fontWeight: '700', fontSize: 12 },
+  gameContent: { padding: 12, paddingBottom: 32, gap: 12 },
+  section:     { borderRadius: 16, padding: 14, borderWidth: 1, gap: 10 },
+  sectionTitle:{ fontSize: 13, fontWeight: '700' },
+  wordBadge:   { alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  wordBadgeTxt:{ fontSize: 20, fontWeight: '800' },
+  canvasCont:  { borderRadius: 12, borderWidth: 1, overflow: 'hidden', backgroundColor: '#ffffff' },
+  colorDot:    { width: 28, height: 28, borderRadius: 14, marginRight: 6, borderWidth: 2.5 },
+  brushBtn:    { width: 34, height: 34, borderRadius: 8, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  toolBtn:     { width: 34, height: 34, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  toolBtnTxt:  { fontSize: 15 },
 
-  roundsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, justifyContent: 'center' },
-  roundsLabel: { color: '#8080aa', fontSize: 14 },
-  roundBtn: {
-    width: 40, height: 40, borderRadius: 10, backgroundColor: '#0f0f2e',
-    borderWidth: 1, borderColor: '#ffffff20', alignItems: 'center', justifyContent: 'center',
-  },
-  roundBtnActive: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  roundBtnText: { color: '#5a5a80', fontWeight: '700' },
-  roundBtnTextActive: { color: '#fff' },
+  guessRow:    { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  guessInput:  { height: 46, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, fontSize: 15, fontWeight: '600' },
+  guessBtn:    { height: 46, paddingHorizontal: 18, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  guessBtnTxt: { fontSize: 14, fontWeight: '700' },
 
-  startBtn: { borderRadius: 16, padding: 16, alignItems: 'center', marginTop: 8 },
-  startBtnText: { color: '#000', fontWeight: '900', fontSize: 16 },
-  outlineBtn: { backgroundColor: 'transparent', borderWidth: 1.5 },
-  outlineBtnText: { fontWeight: '900', fontSize: 16 },
+  modalBg:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center' },
+  wcCard:    { width: SW - 60, borderRadius: 20, padding: 24, borderWidth: 1.5, gap: 12, alignItems: 'stretch' },
+  wcTitle:   { fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 4 },
+  wcBtn:     { paddingVertical: 14, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
+  wcBtnText: { fontSize: 20, fontWeight: '700' },
 
-  // اختيار كلمة
-  centerContent: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center', gap: 16 },
-  wordChoiceTitle: { color: '#fff', fontSize: 20, fontWeight: '900', textAlign: 'center' },
-  wordChoiceSub: { color: '#5a5a80', fontSize: 13, textAlign: 'center' },
-  wordOptionBtn: {
-    backgroundColor: '#0f0f2e', borderRadius: 16, borderWidth: 1.5,
-    borderColor: '#3b82f650', padding: 18, width: '100%', alignItems: 'center',
-  },
-  wordOptionText: { color: '#3b82f6', fontSize: 20, fontWeight: '800' },
+  resultOverlay:  { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 100 },
+  resultCard:     { width: SW - 60, borderRadius: 24, padding: 28, alignItems: 'center', borderWidth: 2, gap: 12 },
+  resultEmoji:    { fontSize: 56 },
+  resultTitle:    { fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  resultWordBox:  { width: '100%', borderRadius: 14, padding: 14, alignItems: 'center', gap: 4 },
+  resultWordLabel:{ fontSize: 12, fontWeight: '600' },
+  resultWordValue:{ fontSize: 26, fontWeight: '800' },
+  nextBtn:        { marginTop: 6, paddingHorizontal: 40, paddingVertical: 13, borderRadius: 14 },
+  nextBtnText:    { fontSize: 16, fontWeight: '700' },
 
-  // رسم
-  drawHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, marginBottom: 8,
-  },
-  timerBadge: {
-    backgroundColor: '#0f0f2e', borderRadius: 10, padding: 8,
-    borderWidth: 1, borderColor: '#ffffff20',
-  },
-  timerText: { color: '#fff', fontWeight: '900', fontSize: 16 },
-  timerRed: { color: '#ef4444' },
-  wordBadge: {
-    backgroundColor: '#0f0f2e', borderRadius: 10, padding: 8,
-    borderWidth: 1, borderColor: '#ffffff20',
-  },
-  wordBadgeText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 2 },
-  clearBtn: {
-    backgroundColor: '#0f0f2e', borderRadius: 10, padding: 8,
-    borderWidth: 1, borderColor: '#ef444430',
-  },
-  clearBtnText: { color: '#ef4444', fontSize: 14 },
-  drawerLabel: { color: '#8080aa', fontSize: 13, textAlign: 'center', marginBottom: 4 },
+  goCard:      { width: SW - 48, borderRadius: 24, padding: 28, alignItems: 'center', borderWidth: 1.5, gap: 10 },
+  goEmoji:     { fontSize: 64 },
+  goTitle:     { fontSize: 24, fontWeight: '800' },
+  goWinner:    { fontSize: 18, fontWeight: '700' },
+  goScoreRow:  { flexDirection: 'row', gap: 32, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 16, marginTop: 4, width: '100%', justifyContent: 'center' },
+  goScoreCol:  { alignItems: 'center', gap: 4 },
+  goScoreName: { fontSize: 13, fontWeight: '600' },
+  goScoreVal:  { fontSize: 36, fontWeight: '900' },
+  goBtn:       { marginTop: 8, paddingHorizontal: 40, paddingVertical: 13, borderRadius: 14 },
+  goBtnText:   { fontSize: 16, fontWeight: '700' },
 
-  toolsRow: {
-    flexDirection: 'row', justifyContent: 'center', gap: 8,
-    paddingHorizontal: 20, marginTop: 8,
-  },
-  colorBtn: {
-    width: 28, height: 28, borderRadius: 14,
-    borderWidth: 1, borderColor: '#ffffff30',
-  },
-  colorBtnActive: { borderWidth: 3, borderColor: '#fff', transform: [{ scale: 1.2 }] },
-  sizeBtn: {
-    width: 40, height: 40, borderRadius: 10, backgroundColor: '#0f0f2e',
-    borderWidth: 1, borderColor: '#ffffff20',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  sizeBtnActive: { borderColor: '#fff', borderWidth: 2 },
+  modeContent:    { flexGrow: 1, alignItems: 'center', padding: 24, paddingTop: 70, paddingBottom: 40, gap: 14 },
+  bigEmoji:       { fontSize: 64 },
+  bigTitle:       { fontSize: 26, fontWeight: '900', letterSpacing: 0.5 },
+  modeCard:       { width: '100%', flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 16, borderWidth: 1, gap: 12 },
+  modeEmoji:      { fontSize: 28, width: 40, textAlign: 'center' },
+  modeTxt:        { flex: 1 },
+  modeCardTitle:  { fontSize: 16, fontWeight: '700' },
+  modeCardSub:    { fontSize: 12, marginTop: 2 },
+  modeArr:        { fontSize: 24, fontWeight: '300' },
+  joinCard:       { width: '100%', flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 16, borderWidth: 1, gap: 12 },
+  joinInput:      { height: 40, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, fontSize: 18, fontWeight: '700', letterSpacing: 2, marginTop: 6, textAlign: 'center' },
+  joinErr:        { fontSize: 11, marginTop: 3 },
+  joinBtn:        { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
+  joinBtnTxt:     { fontSize: 14, fontWeight: '700' },
 
-  guessersRow: { marginTop: 8, maxHeight: 50 },
-  guesserChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#0f0f2e', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
-    borderWidth: 1, borderColor: '#ffffff15',
-  },
-  guesserChipDone: { borderColor: '#10b98150', backgroundColor: '#10b98110' },
-  guesserName: { color: '#8080aa', fontSize: 13 },
-  guesserCheck: { color: '#10b981', fontWeight: '700' },
+  setupCard:  { width: '100%', borderRadius: 18, padding: 18, borderWidth: 1, gap: 8 },
+  setupLbl:   { fontSize: 12, fontWeight: '600', letterSpacing: 0.4 },
+  setupInput: { height: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, fontSize: 16, fontWeight: '600' },
+  divider:    { height: StyleSheet.hairlineWidth, marginVertical: 4 },
+  startBtn:   { width: '100%', paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
+  startBtnTxt:{ fontSize: 17, fontWeight: '800' },
 
-  endRoundBtn: {
-    margin: 16, backgroundColor: '#3b82f6', borderRadius: 14,
-    padding: 14, alignItems: 'center',
-  },
-  endRoundBtnText: { color: '#fff', fontWeight: '900', fontSize: 15 },
-
-  // نهاية جولة
-  revealWordTitle: { color: '#8080aa', fontSize: 16 },
-  revealWord: { color: '#fff', fontSize: 32, fontWeight: '900' },
-  miniScores: { width: '100%', gap: 8 },
-  miniScoreRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    backgroundColor: '#0f0f2e', borderRadius: 12, padding: 12,
-    borderWidth: 1, borderColor: '#ffffff15',
-  },
-  miniScoreName: { color: '#fff', fontWeight: '600' },
-  miniScorePts: { color: '#3b82f6', fontWeight: '700' },
-
-  // نهاية
-  endContent: { paddingHorizontal: 20, paddingBottom: 60, gap: 12, paddingTop: 20 },
-  endTitle: { color: '#fff', fontSize: 22, fontWeight: '900', textAlign: 'center' },
-  endRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#0f0f2e', borderRadius: 14, padding: 14,
-    borderWidth: 1, borderColor: '#ffffff15',
-  },
-  endPos: { fontSize: 22, width: 34 },
-  endName: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '700' },
-  endPts: { color: '#3b82f6', fontSize: 15, fontWeight: '700' },
-
-  // مختار النمط
-  modeContent: { flex: 1, paddingHorizontal: 20, gap: 16, justifyContent: 'center' },
-  modeTitle: { color: '#8080aa', fontSize: 16, textAlign: 'center', marginBottom: 8 },
-  modeCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: '#0f0f2e', borderRadius: 20,
-    borderWidth: 1.5, borderColor: '#3b82f640', padding: 20,
-  },
-  modeCardOnline: { borderColor: '#a855f740' },
-  modeEmoji: { fontSize: 36 },
-  modeInfo: { flex: 1, gap: 4 },
-  modeName: { color: '#3b82f6', fontSize: 18, fontWeight: '900' },
-  modeDesc: { color: '#5a5a80', fontSize: 13 },
-  modeArrow: { color: '#3b82f6', fontSize: 22, fontWeight: '700' },
-
-  // أونلاين
-  lobbyContent: { flex: 1, padding: 20, gap: 14, justifyContent: 'center' },
-  orText: { color: '#3a3a60', textAlign: 'center', fontSize: 16 },
-  roomCodeLabel: { color: '#8080aa', fontSize: 16 },
-  roomCodeText: { color: '#a855f7', fontSize: 48, fontWeight: '900', letterSpacing: 8 },
-  shareHint: { color: '#3a3a60', fontSize: 13 },
-  waitingPlayers: { gap: 10, width: '100%' },
-  waitingChip: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#0f0f2e', borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: '#a855f730',
-  },
-  waitingName: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  hostBadge: {
-    color: '#a855f7', fontSize: 11, fontWeight: '700',
-    backgroundColor: '#a855f720', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
-  },
-  waitingMsg: { color: '#3a3a60', fontSize: 14, textAlign: 'center' },
-  wordChoiceOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: '#06061aee', zIndex: 10,
-    justifyContent: 'center', alignItems: 'center', gap: 14, padding: 30,
-  },
-  guessInputRow: {
-    flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginTop: 8,
-  },
-  guessedBanner: {
-    backgroundColor: '#10b98120', margin: 16, borderRadius: 12, padding: 12,
-    borderWidth: 1, borderColor: '#10b98140',
-  },
-  guessedText: { color: '#10b981', textAlign: 'center', fontWeight: '700' },
-  onlineScores: { maxHeight: 55, marginTop: 6 },
-  onlineScoreChip: {
-    backgroundColor: '#0f0f2e', borderRadius: 10, padding: 10,
-    alignItems: 'center', gap: 4, minWidth: 70,
-    borderWidth: 1, borderColor: '#ffffff15',
-  },
-  myScoreChip: { borderColor: '#a855f750', backgroundColor: '#a855f710' },
-  onlineScoreName: { color: '#8080aa', fontSize: 11 },
-  onlineScorePts: { color: '#fff', fontWeight: '900', fontSize: 14 },
+  lobbyWrap:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  lobbyBigEmoji:{ fontSize: 72, marginBottom: 16 },
+  lobbyTitle:   { fontSize: 22, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
+  lobbySub:     { fontSize: 14, textAlign: 'center', marginBottom: 20 },
+  codeBox:      { paddingHorizontal: 32, paddingVertical: 16, borderRadius: 18, borderWidth: 2, alignItems: 'center', marginBottom: 24, gap: 4 },
+  codeText:     { fontSize: 36, fontWeight: '900', letterSpacing: 6 },
+  codeCopy:     { fontSize: 13 },
+  dotsRow:      { flexDirection: 'row', gap: 8, marginBottom: 32 },
+  dot:          { width: 10, height: 10, borderRadius: 5 },
+  cancelBtn:    { paddingHorizontal: 28, paddingVertical: 11, borderRadius: 12, borderWidth: 1 },
+  cancelBtnText:{ fontSize: 14, fontWeight: '600' },
 });

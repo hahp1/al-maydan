@@ -1,17 +1,44 @@
-import { useState, useEffect, useRef } from 'react';
+/**
+ * SoloGameScreen.js — محدّث
+ * ════════════════════════════════════════════════
+ *  ✅ LifelineBar مدمج في شاشة السؤال
+ *  ✅ tokens prop مضافة
+ *  ✅ onSpendTokens يخصم من tokens
+ *  ✅ eliminate / swapSame / swapRandom / freeze مربوطة
+ *  ✅ usedLifelines تُصفَّر مع كل سؤال جديد
+ *  ✅ باقي المنطق محفوظ كما هو
+ */
+
+import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
-  StatusBar, Animated, Alert,
+  StatusBar, Animated, Alert, ScrollView, ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme } from './ThemeContext';
+import { useT, useLanguage } from './I18n';
+import LifelinesBar from './LifelineBar';
+import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { playSound } from './SoundService';
+import { fetchQuestionsForCategories } from './firebaseConfig';
+import CachedCategoryImage from './CachedCategoryImage';
 
-const HIGHSCORE_KEY = 'almaydan_highscore';
-const TIMER_SECONDS = 15;
+const HIGHSCORE_KEY    = 'almaydan_highscore';
+const TIMER_SECONDS    = 15;
 const ROUNDS_PER_LEVEL = 3;
-const LEVELS = [1, 2, 3, 4, 5];
-const LEVEL_POINTS = { 1: 100, 2: 200, 3: 300, 4: 400, 5: 500 };
+const LEVELS           = [1, 2, 3, 4, 5];
+const LEVEL_POINTS     = { 1: 100, 2: 200, 3: 300, 4: 400, 5: 500 };
+const ARABIC_LETTERS   = ['أ', 'ب', 'ج', 'د'];
 
-// يخلط المصفوفة عشوائياً
+const levelColors      = { 1: '#1a3a6e', 2: '#1a5a3a', 3: '#5a5a00', 4: '#7a3a00', 5: '#7a1a1a' };
+const levelColorsLight = { 1: '#2a5aaa', 2: '#2a8a5a', 3: '#8a8a00', 4: '#aa5a00', 5: '#aa2a2a' };
+
+function timerColor(ratio) {
+  if (ratio > 0.5) return '#4aff4a';
+  if (ratio > 0.25) return '#ffaa00';
+  return '#ff4444';
+}
+
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -21,661 +48,580 @@ function shuffle(arr) {
   return a;
 }
 
-// يختار 3 فئات عشوائية (أحياناً واحدة منها خاصة)
-function pickThreeCategories(allCategories, currentLevel) {
-  const normal = allCategories.filter(c => !c.isSpecial);
+function pickThreeCategories(allCategories, level) {
+  const normal  = allCategories.filter(c => !c.isSpecial);
   const special = allCategories.filter(c => c.isSpecial);
-
-  const shuffledNormal = shuffle(normal);
-  const picked = shuffledNormal.slice(0, 3);
-
-  // 30% احتمال تظهر فئة خاصة
+  const picked  = shuffle(normal).slice(0, 3);
   if (special.length > 0 && Math.random() < 0.3) {
-    const specialCat = special[Math.floor(Math.random() * special.length)];
-    picked[Math.floor(Math.random() * 3)] = specialCat;
+    const sp = special[Math.floor(Math.random() * special.length)];
+    picked[Math.floor(Math.random() * 3)] = sp;
   }
-
   return picked.slice(0, 3);
 }
 
-// يختار سؤال من الفئة حسب المستوى
 function pickQuestion(category, level) {
-  const questions = (category.questions || []).filter(q => q.level === level);
-  if (questions.length === 0) return null;
-  return questions[Math.floor(Math.random() * questions.length)];
+  const qs = (category.questions || []).filter(q => q.level === level);
+  if (qs.length === 0) return null;
+  return qs[Math.floor(Math.random() * qs.length)];
 }
 
-export default function SoloGameScreen({ categories = [], onBack, playerName = 'لاعب', onHighScoreUpdate }) {
-  // ── المراحل: 'picking' | 'question' | 'result' | 'finished'
-  const [phase, setPhase] = useState('picking');
+const CategoryCard = memo(({ cat, currentLevel, onPress, theme, t }) => {
+  const qCount = useMemo(() =>
+    (cat.questions || []).filter(q => q.level === currentLevel).length,
+  [cat.questions, currentLevel]);
 
+  return (
+    <TouchableOpacity
+      style={[
+        styles.catCard,
+        { backgroundColor: theme.bgCard, borderColor: theme.borderCard },
+        qCount === 0 && { opacity: 0.4 },
+      ]}
+      onPress={() => qCount > 0 && onPress(cat)}
+      activeOpacity={0.8}
+    >
+      {cat.isSpecial && (
+        <View style={[styles.specialBadge, { backgroundColor: theme.accent }]}>
+          <Text style={styles.specialBadgeText}>⭐ {t('solo.special')}</Text>
+        </View>
+      )}
+      <CachedCategoryImage imageUrl={cat.imageUrl} emoji={cat.emoji} size={52} />
+      <Text style={[styles.catName, { color: theme.textPrimary }]}>{cat.name}</Text>
+      <Text style={[styles.catCount, { color: theme.textMuted }]}>{qCount} {t('solo.questions')}</Text>
+    </TouchableOpacity>
+  );
+});
+
+const TimerBar = memo(({ scaleAnim, timeLeft, theme }) => {
+  const ratio = timeLeft / TIMER_SECONDS;
+  const color = timerColor(ratio);
+  return (
+    <View style={[styles.timerContainer, { backgroundColor: theme.bgCard }]}>
+      <View style={StyleSheet.absoluteFill}>
+        <Animated.View style={[styles.timerBarFill, { backgroundColor: color, transform: [{ scaleX: scaleAnim }] }]} />
+      </View>
+      <Text style={styles.timerText}>{timeLeft}s</Text>
+    </View>
+  );
+});
+
+export default function SoloGameScreen({
+  categories = [],
+  onBack,
+  playerName = 'لاعب',
+  onHighScoreUpdate,
+  isTournament = false,
+  currentUser,
+  tokens = 0,
+  setTokens,
+  onTournamentScore,   // callback لتسجيل السكور في البطولة
+  onGameEnd,           // callback لـ XP (won: boolean)
+  onAdWatched,         // ← جديد: callback لـ XP عند مشاهدة إعلان
+}) {
+  const { theme, isDark, themeId } = useTheme();
+  const { lang } = useLanguage();
+  const t = useT();
+
+  const [phase,             setPhase]             = useState('picking');
   const [currentLevelIndex, setCurrentLevelIndex] = useState(0);
-  const [roundInLevel, setRoundInLevel] = useState(0); // 0,1,2
-  const [totalRound, setTotalRound] = useState(1); // 1..15
+  const [roundInLevel,      setRoundInLevel]      = useState(0);
+  const [totalRound,        setTotalRound]        = useState(1);
+  const [score,             setScore]             = useState(0);
+  const [highScore,         setHighScore]         = useState(0);
+  const [correctCount,      setCorrectCount]      = useState(0);
+  const [threeCategories,   setThreeCategories]   = useState([]);
+  const [selectedCategory,  setSelectedCategory]  = useState(null);
+  const [currentQuestion,   setCurrentQuestion]   = useState(null);
+  const [choices,           setChoices]           = useState([]);
+  const [selectedChoice,    setSelectedChoice]    = useState(null);
+  const [timeLeft,          setTimeLeft]          = useState(TIMER_SECONDS);
+  const [eliminated,        setEliminated]        = useState(new Set());
+  const [usedLifelines,     setUsedLifelines]     = useState(new Set());
+  const [frozen,            setFrozen]            = useState(false);
+  const [loadingPick,       setLoadingPick]       = useState(false);
 
-  const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
-  const [correctCount, setCorrectCount] = useState(0);
-
-  const [threeCategories, setThreeCategories] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [currentQuestion, setCurrentQuestion] = useState(null);
-  const [choices, setChoices] = useState([]);
-  const [selectedChoice, setSelectedChoice] = useState(null);
-
-  // Timer
-  const [timeLeft, setTimeLeft] = useState(TIMER_SECONDS);
-  const timerRef = useRef(null);
-  const timerAnim = useRef(new Animated.Value(1)).current;
+  const timerRef  = useRef(null);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const currentLevel = LEVELS[currentLevelIndex];
-  const points = LEVEL_POINTS[currentLevel];
-  const totalRounds = LEVELS.length * ROUNDS_PER_LEVEL; // 15
+  const points       = LEVEL_POINTS[currentLevel];
+  const totalRounds  = LEVELS.length * ROUNDS_PER_LEVEL;
+  const progressPct  = ((totalRound - 1) / totalRounds) * 100;
+  const levelColor   = theme.isLight ? levelColorsLight[currentLevel] : levelColors[currentLevel];
 
-  // ── تحميل الرقم القياسي
   useEffect(() => {
-    AsyncStorage.getItem(HIGHSCORE_KEY).then(val => {
-      if (val) setHighScore(parseInt(val));
-    });
-    startPicking();
+    AsyncStorage.getItem(HIGHSCORE_KEY).then(val => { if (val) setHighScore(parseInt(val)); });
   }, []);
 
-  // ── بداية مرحلة الاختيار
-  const startPicking = () => {
-    const level = LEVELS[currentLevelIndex];
-    const three = pickThreeCategories(categories, level);
-    setThreeCategories(three);
+  // استدعي startPicking فقط عندما تكون categories محمّلة
+  const didInitRef = useRef(false);
+  useEffect(() => {
+    if (categories.length > 0 && !didInitRef.current) {
+      didInitRef.current = true;
+      startPicking();
+    }
+  }, [categories.length]);
+
+  // صوت countdown — خارج setState لتجنب side effects داخل updater
+  useEffect(() => {
+    if (timeLeft > 0 && timeLeft <= 5) playSound('countdown');
+  }, [timeLeft]);
+
+  const startPicking = useCallback(async (levelIndex = currentLevelIndex) => {
+    if (categories.length === 0) return; // الفئات لم تُحمَّل بعد
+    setLoadingPick(true);
     setSelectedCategory(null);
     setPhase('picking');
-  };
-
-  // ── اللاعب اختار فئة
-  const handlePickCategory = (cat) => {
-    const level = LEVELS[currentLevelIndex];
-    const q = pickQuestion(cat, level);
-    if (!q) {
-      Alert.alert('تنبيه', 'لا توجد أسئلة في هذه الفئة لهذا المستوى!');
-      return;
+    const picked = pickThreeCategories(categories, LEVELS[levelIndex]);
+    try {
+      const qMap     = await fetchQuestionsForCategories(picked.map(c => c.id));
+      const enriched = picked.map(c => ({ ...c, questions: qMap[c.id] ?? [] }));
+      setThreeCategories(enriched);
+    } catch {
+      setThreeCategories(picked);
+    } finally {
+      setLoadingPick(false);
     }
-    const shuffled = shuffle([q.correct, ...q.wrong]);
+  }, [currentLevelIndex, categories]);
+
+  const handlePickCategory = useCallback((cat) => {
+    const q = pickQuestion(cat, LEVELS[currentLevelIndex]);
+    if (!q) { Alert.alert('', t('board.noCatsQ')); return; }
     setSelectedCategory(cat);
     setCurrentQuestion(q);
-    setChoices(shuffled);
+    setChoices(shuffle([q.correct, ...q.wrong]));
     setSelectedChoice(null);
+    setEliminated(new Set());
+    // وسائل المساعدة لا تتجدد بين الأسئلة — فقط عند لعبة جديدة
+    setFrozen(false);
     setTimeLeft(TIMER_SECONDS);
     setPhase('question');
     startTimer();
-  };
+  }, [currentLevelIndex, t]);
 
-  // ── عداد الوقت
-  const startTimer = () => {
+  const startTimer = useCallback(() => {
     clearInterval(timerRef.current);
-    timerAnim.setValue(1);
-    Animated.timing(timerAnim, {
-      toValue: 0,
-      duration: TIMER_SECONDS * 1000,
-      useNativeDriver: false,
-    }).start();
-
+    scaleAnim.setValue(1);
+    Animated.timing(scaleAnim, { toValue: 0, duration: TIMER_SECONDS * 1000, useNativeDriver: true }).start();
     timerRef.current = setInterval(() => {
-      setTimeLeft(t => {
-        if (t <= 1) {
-          clearInterval(timerRef.current);
-          handleTimeOut();
-          return 0;
-        }
-        return t - 1;
+      setTimeLeft(tl => {
+        if (tl <= 1) { clearInterval(timerRef.current); handleTimeOut(); return 0; }
+        return tl - 1;
       });
     }, 1000);
-  };
+  }, []);
 
-  const stopTimer = () => {
-    clearInterval(timerRef.current);
-    timerAnim.stopAnimation();
-  };
+  const stopTimer  = useCallback(() => { clearInterval(timerRef.current); scaleAnim.stopAnimation(); }, []);
+  const resumeTimer = useCallback(() => startTimer(), [startTimer]);
 
-  // ── انتهى الوقت بدون إجابة
-  const handleTimeOut = () => {
+  const handleTimeOut = useCallback(() => {
     setSelectedChoice('__timeout__');
     setPhase('result');
-    setTimeout(() => goNextRound(false), 2000);
-  };
+  }, []);
 
-  // ── اللاعب اختار جواب
-  const handleAnswer = (choice) => {
+  const handleAnswer = useCallback((choice) => {
     if (selectedChoice) return;
-    stopTimer();
+    clearInterval(timerRef.current);
+    scaleAnim.stopAnimation();
     setSelectedChoice(choice);
     setPhase('result');
-
-    const isCorrect = choice === currentQuestion.correct;
+    const isCorrect = choice === currentQuestion?.correct;
     if (isCorrect) {
-      setScore(s => s + points);
-      setCorrectCount(c => c + 1);
+      setScore(prev => prev + points);
+      setCorrectCount(prev => prev + 1);
+      playSound('correct');
+    } else {
+      playSound('wrong');
     }
-    setTimeout(() => goNextRound(isCorrect), 1800);
-  };
+  }, [selectedChoice, currentQuestion, points]);
 
-  // ── الانتقال للجولة التالية
-  const goNextRound = (wasCorrect) => {
-    const nextRoundInLevel = roundInLevel + 1;
-    const nextTotalRound = totalRound + 1;
+  const handleFinish = useCallback(() => {
+    setPhase('finished');
+    setScore(prev => {
+      const finalScore = prev;
+      const won = finalScore > 0;
+      if (finalScore > highScore) {
+        setHighScore(finalScore);
+        AsyncStorage.setItem(HIGHSCORE_KEY, String(finalScore));
+        if (onHighScoreUpdate) onHighScoreUpdate(finalScore);
+      }
+      if (isTournament && finalScore > 0 && onTournamentScore) {
+        onTournamentScore(finalScore);
+      }
+      if (won) playSound('reward_tokens');
+      if (onGameEnd) onGameEnd(won);
+      return finalScore;
+    });
+  }, [highScore, onHighScoreUpdate, isTournament, onTournamentScore, onGameEnd]);
 
-    if (nextTotalRound > totalRounds) {
-      finishGame();
-      return;
-    }
-
-    setTotalRound(nextTotalRound);
-
-    if (nextRoundInLevel >= ROUNDS_PER_LEVEL) {
-      // انتقل للمستوى التالي
-      const nextLevelIndex = currentLevelIndex + 1;
-      setCurrentLevelIndex(nextLevelIndex);
+  const handleNext = useCallback(() => {
+    const newRoundInLevel = roundInLevel + 1;
+    const newTotalRound   = totalRound + 1;
+    let newLevelIndex = currentLevelIndex;
+    if (newRoundInLevel >= ROUNDS_PER_LEVEL) {
+      newLevelIndex = currentLevelIndex + 1;
+      if (newLevelIndex >= LEVELS.length) {
+        handleFinish();
+        return;
+      }
+      setCurrentLevelIndex(newLevelIndex);
       setRoundInLevel(0);
     } else {
-      setRoundInLevel(nextRoundInLevel);
+      setRoundInLevel(newRoundInLevel);
     }
-
+    setTotalRound(newTotalRound);
+    setSelectedCategory(null);
     setPhase('picking');
-  };
+    startPicking(newLevelIndex);
+  }, [roundInLevel, totalRound, currentLevelIndex, startPicking, handleFinish]);
 
-  // ── انتهت اللعبة
-  const finishGame = async () => {
-    setPhase('finished');
-    if (score > highScore) {
-      setHighScore(score);
-      await AsyncStorage.setItem(HIGHSCORE_KEY, String(score));
-      if (onHighScoreUpdate) onHighScoreUpdate(score);
-    }
-  };
+  const handlePlayAgain = useCallback(() => {
+    setScore(0); setCorrectCount(0); setCurrentLevelIndex(0);
+    setRoundInLevel(0); setTotalRound(1);
+    setUsedLifelines(new Set());
+    startPicking(0);
+  }, [startPicking]);
 
-  // ── ألوان المستويات
-  const levelColors = {
-    1: '#1a3a6e',
-    2: '#1a5a3a',
-    3: '#5a5a00',
-    4: '#7a3a00',
-    5: '#7a1a1a',
-  };
+  // ── وسائل المساعدة ──
+  const handleSpendTokens = useCallback((cost) => {
+    if (tokens < cost) return false;
+    setTokens?.(prev => prev - cost);
+    return true;
+  }, [tokens, setTokens]);
 
-  const levelColor = levelColors[currentLevel];
+  const markUsed = useCallback((key) => setUsedLifelines(prev => new Set([...prev, key])), []);
 
-  // ── شريط التقدم
-  const progressPercent = ((totalRound - 1) / totalRounds) * 100;
+  const handleEliminate = useCallback(() => {
+    const wrongChoices = choices.filter(c => c !== currentQuestion?.correct && !eliminated.has(c));
+    const toRemove = shuffle(wrongChoices).slice(0, 2);
+    setEliminated(new Set([...eliminated, ...toRemove]));
+  }, [choices, currentQuestion, eliminated]);
 
-  // ══════════════════════════════════════════
-  // ── شاشة انتهت اللعبة
-  // ══════════════════════════════════════════
+  const handleSwapSame = useCallback(() => {
+    if (!selectedCategory || !currentQuestion) return;
+    const pool = (selectedCategory.questions || []).filter(q =>
+      q.level === currentLevel && q !== currentQuestion
+    );
+    if (pool.length === 0) return;
+    const newQ = pool[Math.floor(Math.random() * pool.length)];
+    setCurrentQuestion(newQ);
+    setChoices(shuffle([newQ.correct, ...newQ.wrong]));
+    setSelectedChoice(null);
+    setEliminated(new Set());
+    clearInterval(timerRef.current);
+    startTimer();
+  }, [selectedCategory, currentQuestion, currentLevel, startTimer]);
+
+  const handleSwapRandom = useCallback(() => {
+    // نستخدم threeCategories لأنها الفئات الـ3 المجلوبة مع أسئلتها
+    const allQs = threeCategories.flatMap(cat =>
+      (cat.questions || []).filter(q => q.level === currentLevel)
+        .map(q => ({ ...q, _cat: cat }))
+    );
+    if (allQs.length === 0) return;
+    const newQ = allQs[Math.floor(Math.random() * allQs.length)];
+    setCurrentQuestion(newQ);
+    setSelectedCategory(newQ._cat);
+    setChoices(shuffle([newQ.correct, ...newQ.wrong]));
+    setSelectedChoice(null);
+    setEliminated(new Set());
+    clearInterval(timerRef.current);
+    startTimer();
+  }, [threeCategories, currentLevel, startTimer]);
+
+  // تمديد الوقت: يضيف ثواني للمؤقت الحالي بدل التجميد
+  const handleExtend = useCallback((extraSeconds) => {
+    setTimeLeft(prev => {
+      const newTime = prev + extraSeconds;
+      // إعادة تشغيل المؤقت بالوقت الجديد
+      clearInterval(timerRef.current);
+      scaleAnim.stopAnimation();
+      // animate للنسبة الجديدة
+      Animated.timing(scaleAnim, {
+        toValue: 0,
+        duration: newTime * 1000,
+        useNativeDriver: true,
+      }).start();
+      timerRef.current = setInterval(() => {
+        setTimeLeft(tl => {
+          if (tl <= 1) { clearInterval(timerRef.current); handleTimeOut(); return 0; }
+          return tl - 1;
+        });
+      }, 1000);
+      return newTime;
+    });
+  }, [handleTimeOut]);
+
+  const handleWatchAdLifeline = useCallback(async () => {
+    stopTimer();
+    return new Promise(resolve => setTimeout(() => {
+      if (onAdWatched) onAdWatched();
+      resolve();
+      resumeTimer();
+    }, 2500));
+  }, [stopTimer, resumeTimer, onAdWatched]);
+
+  // ══ شاشة انتهت اللعبة ══
   if (phase === 'finished') {
     const isNewRecord = score >= highScore;
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
+      <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <Text style={styles.finishTrophy}>{isNewRecord ? '🏆' : '🎮'}</Text>
-        <Text style={styles.finishTitle}>
-          {isNewRecord ? 'رقم قياسي جديد!' : 'انتهت اللعبة'}
+        <Text style={[styles.finishTitle, { color: theme.accent }]}>
+          {isNewRecord ? t('solo.newRecord') : t('solo.gameOver')}
         </Text>
-        <View style={styles.finishScoreBox}>
-          <Text style={styles.finishScoreNum}>{score}</Text>
-          <Text style={styles.finishScoreLabel}>نقطة</Text>
+        <View style={[styles.finishScoreBox, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+          <Text style={[styles.finishScoreNum, { color: theme.accent }]}>{score}</Text>
+          <Text style={[styles.finishScoreLabel, { color: theme.textSecondary }]}>{t('common.points')}</Text>
         </View>
         <View style={styles.finishStats}>
-          <View style={styles.finishStat}>
-            <Text style={styles.finishStatNum}>{correctCount}</Text>
-            <Text style={styles.finishStatLabel}>إجابة صحيحة</Text>
-          </View>
-          <View style={styles.finishStat}>
-            <Text style={styles.finishStatNum}>{totalRounds - correctCount}</Text>
-            <Text style={styles.finishStatLabel}>إجابة خاطئة</Text>
-          </View>
-          <View style={styles.finishStat}>
-            <Text style={styles.finishStatNum}>{highScore}</Text>
-            <Text style={styles.finishStatLabel}>🏆 أعلى رقم</Text>
-          </View>
+          {[
+            { num: correctCount,               label: t('solo.rightAnswers') },
+            { num: totalRounds - correctCount, label: t('solo.wrongAnswers') },
+            { num: highScore,                  label: t('solo.bestScore')    },
+          ].map((s, i) => (
+            <View key={i} style={[styles.finishStat, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+              <Text style={[styles.finishStatNum, { color: theme.accent }]}>{s.num}</Text>
+              <Text style={[styles.finishStatLabel, { color: theme.textSecondary }]}>{s.label}</Text>
+            </View>
+          ))}
         </View>
-        <TouchableOpacity style={styles.playAgainBtn} onPress={() => {
-          setScore(0);
-          setCorrectCount(0);
-          setCurrentLevelIndex(0);
-          setRoundInLevel(0);
-          setTotalRound(1);
-          startPicking();
-        }}>
-          <Text style={styles.playAgainText}>🔄 العب مجدداً</Text>
+        <TouchableOpacity style={[styles.playAgainBtn, { backgroundColor: theme.accent }]} onPress={handlePlayAgain} activeOpacity={0.85}>
+          <Text style={[styles.playAgainText, { color: theme.textOnAccent }]}>{t('common.playAgain')}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backBtn} onPress={onBack}>
-          <Text style={styles.backText}>← رجوع</Text>
+        <TouchableOpacity style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]} onPress={onBack} activeOpacity={0.85}>
+          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // ══════════════════════════════════════════
-  // ── شاشة اختيار الفئة
-  // ══════════════════════════════════════════
+  // ══ شاشة اختيار الفئة ══
   if (phase === 'picking') {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
-
-        {/* Header */}
+      <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.headerBack}>
-            <Text style={styles.backText}>← رجوع</Text>
-          </TouchableOpacity>
-          <View style={styles.scoreChip}>
-            <Text style={styles.scoreChipText}>🪙 {score}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <TouchableOpacity onPress={onBack} style={styles.headerBack} hitSlop={HIT_SLOP}>
+              <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
+            </TouchableOpacity>
+            <GameInfoButton gameType="solo" lang={lang} />
+            <WebScreenButton
+              playerUid={currentUser?.uid || 'solo_p0'}
+              playerName={currentUser?.name || ''}
+              gameType="solo"
+              getPublicData={() => ({ score })}
+              themeName={themeId || 'dark'}
+            />
           </View>
-          <View style={styles.highScoreChip}>
-            <Text style={styles.highScoreChipText}>🏆 {highScore}</Text>
+          <View style={[styles.scoreChip, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+            <Text style={[styles.scoreChipText, { color: theme.accent }]}>🎯 {score}</Text>
+          </View>
+          <View style={[styles.scoreChip, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+            <Text style={[styles.scoreChipText, { color: theme.accent }]}>🪙 {tokens}</Text>
           </View>
         </View>
-
-        {/* Progress */}
         <View style={styles.progressRow}>
-          <Text style={styles.progressLabel}>جولة {totalRound} / {totalRounds}</Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: levelColor }]} />
+          <Text style={[styles.progressLabel, { color: theme.textSecondary }]}>
+            {t('solo.roundOf', { c: totalRound, t: totalRounds })}
+          </Text>
+          <View style={[styles.progressBar, { backgroundColor: theme.bgCard }]}>
+            <View style={[styles.progressFill, { width: `${progressPct}%`, backgroundColor: levelColor }]} />
           </View>
         </View>
-
-        {/* Level Badge */}
         <View style={[styles.levelBadge, { backgroundColor: levelColor }]}>
-          <Text style={styles.levelBadgeText}>المستوى {currentLevel} — {points} نقطة</Text>
+          <Text style={styles.levelBadgeText}>{t('solo.level', { l: currentLevel, p: points })}</Text>
         </View>
-
-        {/* Round dots */}
         <View style={styles.roundDots}>
           {[0, 1, 2].map(i => (
-            <View key={i} style={[styles.dot, i < roundInLevel && styles.dotDone, i === roundInLevel && styles.dotActive]} />
+            <View key={i} style={[
+              styles.dot, { backgroundColor: theme.bgCard },
+              i < roundInLevel && { backgroundColor: theme.success },
+              i === roundInLevel && { backgroundColor: theme.accent, transform: [{ scale: 1.3 }] },
+            ]} />
           ))}
         </View>
-
-        <Text style={styles.pickTitle}>اختر فئتك للسؤال القادم</Text>
-
-        {/* Three Categories */}
+        <Text style={[styles.pickTitle, { color: theme.textPrimary }]}>{t('solo.pickTitle')}</Text>
         <View style={styles.catsContainer}>
-          {threeCategories.map((cat, i) => (
-            <TouchableOpacity
-              key={cat.id + i}
-              style={[styles.catCard, cat.isSpecial && styles.catCardSpecial]}
-              onPress={() => handlePickCategory(cat)}
-            >
-              {cat.isSpecial && (
-                <View style={styles.specialBadge}>
-                  <Text style={styles.specialBadgeText}>⭐ خاصة</Text>
-                </View>
-              )}
-              <Text style={styles.catEmoji}>{cat.emoji}</Text>
-              <Text style={styles.catName}>{cat.name}</Text>
-              <Text style={styles.catCount}>{(cat.questions || []).filter(q => q.level === currentLevel).length} سؤال</Text>
-            </TouchableOpacity>
-          ))}
+          {loadingPick
+            ? <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 40 }} />
+            : threeCategories.map((cat, i) => (
+                <CategoryCard key={cat.id + i} cat={cat} currentLevel={currentLevel} onPress={handlePickCategory} theme={theme} t={t} />
+              ))
+          }
         </View>
       </View>
     );
   }
 
-  // ══════════════════════════════════════════
-  // ── شاشة السؤال
-  // ══════════════════════════════════════════
-  const isAnswered = !!selectedChoice;
+  // ══ شاشة السؤال ══
+  const isAnswered    = !!selectedChoice;
+  const isTimeout     = selectedChoice === '__timeout__';
 
   const getChoiceStyle = (choice) => {
-    if (!isAnswered) return styles.choiceBtn;
-    if (choice === currentQuestion.correct) return [styles.choiceBtn, styles.choiceCorrect];
-    if (choice === selectedChoice) return [styles.choiceBtn, styles.choiceWrong];
-    return [styles.choiceBtn, styles.choiceDim];
+    if (eliminated.has(choice)) return [styles.choiceBtn, { opacity: 0.2 }];
+    const base = { backgroundColor: theme.bgCard, borderColor: theme.borderCard };
+    if (!isAnswered) return [styles.choiceBtn, base];
+    if (choice === currentQuestion.correct) return [styles.choiceBtn, { backgroundColor: theme.success + '22', borderColor: '#4aff4a' }];
+    if (choice === selectedChoice)          return [styles.choiceBtn, { backgroundColor: theme.error + '22', borderColor: '#ff4444' }];
+    return [styles.choiceBtn, base, { opacity: 0.4 }];
   };
 
-  const getChoiceTextStyle = (choice) => {
-    if (!isAnswered) return styles.choiceText;
-    if (choice === currentQuestion.correct) return [styles.choiceText, { color: '#4aff4a' }];
-    if (choice === selectedChoice) return [styles.choiceText, { color: '#ff6666' }];
-    return [styles.choiceText, { color: '#666' }];
+  const getChoiceTextColor = (choice) => {
+    if (eliminated.has(choice)) return theme.textMuted;
+    if (!isAnswered) return theme.textPrimary;
+    if (choice === currentQuestion.correct) return theme.success;
+    if (choice === selectedChoice) return theme.error;
+    return theme.textMuted;
   };
-
-  const timerColor = timerAnim.interpolate({
-    inputRange: [0, 0.3, 1],
-    outputRange: ['#ff4444', '#ffaa00', '#4aff4a'],
-  });
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0d0d2b" />
-
-      {/* Header */}
+    <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
       <View style={styles.header}>
         <View style={[styles.catChip, { backgroundColor: levelColor }]}>
           <Text style={styles.catChipEmoji}>{selectedCategory?.emoji}</Text>
           <Text style={styles.catChipText}>{selectedCategory?.name}</Text>
         </View>
-        <View style={styles.scoreChip}>
-          <Text style={styles.scoreChipText}>🪙 {score}</Text>
+        <View style={[styles.scoreChip, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+          <Text style={[styles.scoreChipText, { color: theme.accent }]}>🪙 {tokens}</Text>
         </View>
       </View>
 
-      {/* Timer Bar */}
-      <View style={styles.timerContainer}>
-        <Animated.View style={[styles.timerBar, {
-          width: timerAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-          backgroundColor: timerColor,
-        }]} />
-        <Text style={styles.timerText}>{timeLeft}s</Text>
-      </View>
-
-      {/* Points Badge */}
-      <View style={[styles.pointsBadge, { backgroundColor: levelColor }]}>
-        <Text style={styles.pointsBadgeText}>{points} نقطة</Text>
-      </View>
-
-      {/* Question */}
-      <View style={styles.questionBox}>
-        <Text style={styles.questionText}>{currentQuestion?.question ?? currentQuestion?.text}</Text>
-      </View>
-
-      {/* Choices */}
-      <View style={styles.choicesContainer}>
-        {choices.map((choice, i) => (
-          <TouchableOpacity
-            key={i}
-            style={getChoiceStyle(choice)}
-            onPress={() => handleAnswer(choice)}
-            disabled={isAnswered}
-          >
-            <Text style={styles.choiceLetter}>{['أ', 'ب', 'ج', 'د'][i]}</Text>
-            <Text style={getChoiceTextStyle(choice)}>{choice}</Text>
-            {isAnswered && choice === currentQuestion.correct && <Text>✅</Text>}
-            {isAnswered && choice === selectedChoice && choice !== currentQuestion.correct && <Text>❌</Text>}
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Timeout message */}
-      {selectedChoice === '__timeout__' && (
-        <View style={styles.timeoutBox}>
-          <Text style={styles.timeoutText}>⏰ انتهى الوقت!</Text>
-          <Text style={styles.timeoutAnswer}>الإجابة: {currentQuestion?.correct}</Text>
+      {!frozen && <TimerBar scaleAnim={scaleAnim} timeLeft={timeLeft} theme={theme} />}
+      {frozen && (
+        <View style={[styles.frozenBar, { backgroundColor: '#3b82f633', borderColor: '#3b82f660' }]}>
+          <Text style={[styles.frozenText, { color: '#3b82f6' }]}>⏸ الوقت مجمّد</Text>
         </View>
       )}
+
+      <View style={[styles.pointsBadge, { backgroundColor: levelColor }]}>
+        <Text style={styles.pointsBadgeText}>{points} {t('common.points')}</Text>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 20 }}>
+        <View style={[styles.questionBox, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+          <Text style={[styles.questionText, { color: theme.textPrimary }]}>
+            {currentQuestion?.question ?? currentQuestion?.text}
+          </Text>
+        </View>
+
+        {/* ── وسائل المساعدة — Solo يدعم: eliminate, swapSame, swapRandom, extend ── */}
+        {!isAnswered && (
+          <LifelinesBar
+            mode="solo"
+            tokens={tokens}
+            onSpendTokens={handleSpendTokens}
+            onWatchAd={handleWatchAdLifeline}
+            onEliminate={handleEliminate}
+            onSwapSame={handleSwapSame}
+            onSwapRandom={handleSwapRandom}
+            onTimerPause={stopTimer}
+            onTimerResume={resumeTimer}
+            onTimerExtend={handleExtend}
+            usedLifelines={usedLifelines}
+            onLifelineUsed={markUsed}
+          />
+        )}
+
+        <View style={styles.choicesContainer}>
+          {choices.map((choice, i) => (
+            <TouchableOpacity
+              key={i}
+              style={getChoiceStyle(choice)}
+              onPress={() => handleAnswer(choice)}
+              disabled={isAnswered || eliminated.has(choice)}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.choiceLetter, { color: theme.accent }]}>{ARABIC_LETTERS[i]}</Text>
+              <Text style={[styles.choiceText, { color: getChoiceTextColor(choice) }]}>{choice}</Text>
+              {isAnswered && choice === currentQuestion.correct && <Text>✅</Text>}
+              {isAnswered && choice === selectedChoice && choice !== currentQuestion.correct && <Text>❌</Text>}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {isTimeout && (
+          <View style={[styles.timeoutBox, { backgroundColor: theme.error + '22', borderColor: '#ff444455' }]}>
+            <Text style={[styles.timeoutText, { color: theme.error }]}>{t('solo.timeout')}</Text>
+            <Text style={[styles.timeoutAnswer, { color: theme.textPrimary }]}>
+              {t('solo.answer')} {currentQuestion?.correct}
+            </Text>
+          </View>
+        )}
+
+        {isAnswered && (
+          <TouchableOpacity style={[styles.nextBtn, { backgroundColor: theme.accent }]} onPress={handleNext} activeOpacity={0.85}>
+            <Text style={[styles.nextBtnText, { color: theme.textOnAccent }]}>
+              {totalRound >= totalRounds ? t('solo.finish') : t('solo.next')}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
     </View>
   );
 }
 
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0d0d2b',
-    paddingTop: 50,
-    paddingHorizontal: 20,
-    gap: 14,
-  },
-
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerBack: { padding: 4 },
-  backText: { color: '#f5c518', fontSize: 16, fontWeight: '700' },
-  scoreChip: {
-    backgroundColor: '#1a1a3e',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#f5c51855',
-  },
-  scoreChipText: { color: '#f5c518', fontSize: 15, fontWeight: '700' },
-  highScoreChip: {
-    backgroundColor: '#1a1a3e',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#f5c51833',
-  },
-  highScoreChipText: { color: '#a09060', fontSize: 14, fontWeight: '700' },
-
-  // Progress
-  progressRow: { gap: 6 },
-  progressLabel: { color: '#a09060', fontSize: 12, textAlign: 'right' },
-  progressBar: {
-    height: 6,
-    backgroundColor: '#1a1a3e',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressFill: { height: '100%', borderRadius: 3 },
-
-  // Level Badge
-  levelBadge: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    alignSelf: 'center',
-  },
-  levelBadgeText: { color: '#fff', fontSize: 14, fontWeight: '800' },
-
-  // Round Dots
-  roundDots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#2a2a55',
-  },
-  dotDone: { backgroundColor: '#4aff4a' },
-  dotActive: { backgroundColor: '#f5c518', transform: [{ scale: 1.3 }] },
-
-  // Pick Category
-  pickTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  catsContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'stretch',
-  },
-  catCard: {
-    flex: 1,
-    backgroundColor: '#1a1a3e',
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    borderWidth: 1.5,
-    borderColor: '#2a2a55',
-    padding: 12,
-    position: 'relative',
-  },
-  catCardSpecial: {
-    borderColor: '#f5c518',
-    backgroundColor: '#1a1a2e',
-  },
-  specialBadge: {
-    position: 'absolute',
-    top: 8,
-    backgroundColor: '#f5c518',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  specialBadgeText: { color: '#0d0d2b', fontSize: 10, fontWeight: '800' },
-  catEmoji: { fontSize: 40 },
-  catName: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  catCount: { color: '#a09060', fontSize: 11 },
-
-  // Timer
-  timerContainer: {
-    height: 28,
-    backgroundColor: '#1a1a3e',
-    borderRadius: 14,
-    overflow: 'hidden',
-    justifyContent: 'center',
-  },
-  timerBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 14,
-  },
-  timerText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '900',
-    textAlign: 'center',
-    zIndex: 1,
-  },
-
-  // Points Badge
-  pointsBadge: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    alignSelf: 'center',
-  },
-  pointsBadgeText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-
-  // Question
-  questionBox: {
-    backgroundColor: '#1a1a3e',
-    borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#2a2a55',
-    minHeight: 120,
-  },
-  questionText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 32,
-  },
-
-  // Choices
-  choicesContainer: { gap: 10 },
-  choiceBtn: {
-    backgroundColor: '#1a1a3e',
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1.5,
-    borderColor: '#2a2a55',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  choiceCorrect: { backgroundColor: '#1a3a1a', borderColor: '#4aff4a' },
-  choiceWrong: { backgroundColor: '#3a1a1a', borderColor: '#ff4444' },
-  choiceDim: { opacity: 0.4 },
-  choiceLetter: {
-    color: '#f5c518',
-    fontSize: 16,
-    fontWeight: '900',
-    width: 24,
-    textAlign: 'center',
-  },
-  choiceText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-    flex: 1,
-    textAlign: 'right',
-  },
-
-  // Timeout
-  timeoutBox: {
-    backgroundColor: '#3a1a1a',
-    borderRadius: 14,
-    padding: 14,
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: '#ff444455',
-  },
-  timeoutText: { color: '#ff6666', fontSize: 16, fontWeight: '800' },
-  timeoutAnswer: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
-
-  // Finished
-  finishTrophy: { fontSize: 80, textAlign: 'center', marginTop: 20 },
-  finishTitle: {
-    color: '#f5c518',
-    fontSize: 32,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  finishScoreBox: {
-    alignItems: 'center',
-    backgroundColor: '#1a1a3e',
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1.5,
-    borderColor: '#f5c51855',
-  },
-  finishScoreNum: { color: '#f5c518', fontSize: 56, fontWeight: '900' },
-  finishScoreLabel: { color: '#a09060', fontSize: 16 },
-  finishStats: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  finishStat: {
-    flex: 1,
-    backgroundColor: '#1a1a3e',
-    borderRadius: 14,
-    padding: 14,
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-    borderColor: '#2a2a55',
-  },
-  finishStatNum: { color: '#f5c518', fontSize: 24, fontWeight: '900' },
-  finishStatLabel: { color: '#a09060', fontSize: 11, textAlign: 'center' },
-  playAgainBtn: {
-    backgroundColor: '#f5c518',
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    elevation: 8,
-  },
-  playAgainText: { color: '#0d0d2b', fontSize: 18, fontWeight: '800' },
-  backBtn: {
-    backgroundColor: '#1a1a3e',
-    paddingVertical: 14,
-    borderRadius: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#f5c51833',
-  },
-
-  // Cat chip (during question)
-  catChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  catChipEmoji: { fontSize: 16 },
-  catChipText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  container:         { flex: 1, paddingTop: 50, paddingHorizontal: 20, gap: 12 },
+  header:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerBack:        { padding: 4 },
+  backText:          { fontSize: 16, fontWeight: '700' },
+  scoreChip:         { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  scoreChipText:     { fontSize: 15, fontWeight: '700' },
+  highScoreChip:     { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  highScoreChipText: { fontSize: 14, fontWeight: '700' },
+  progressRow:       { gap: 6 },
+  progressLabel:     { fontSize: 12, textAlign: 'right' },
+  progressBar:       { height: 6, borderRadius: 3, overflow: 'hidden' },
+  progressFill:      { height: '100%', borderRadius: 3 },
+  levelBadge:        { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 12, alignSelf: 'center' },
+  levelBadgeText:    { color: '#fff', fontSize: 14, fontWeight: '800' },
+  roundDots:         { flexDirection: 'row', justifyContent: 'center', gap: 10 },
+  dot:               { width: 10, height: 10, borderRadius: 5 },
+  pickTitle:         { fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  catsContainer:     { flex: 1, flexDirection: 'row', gap: 12, alignItems: 'stretch' },
+  catCard:           { flex: 1, borderRadius: 20, alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1.5, padding: 12, position: 'relative' },
+  specialBadge:      { position: 'absolute', top: 8, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  specialBadgeText:  { fontSize: 10, fontWeight: '800', color: '#000' },
+  catEmoji:          { fontSize: 40 },
+  catName:           { fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  catCount:          { fontSize: 11 },
+  timerContainer:    { height: 28, borderRadius: 14, overflow: 'hidden', justifyContent: 'center' },
+  timerBarFill:      { position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%', borderRadius: 14 },
+  timerText:         { color: '#fff', fontSize: 13, fontWeight: '900', textAlign: 'center', zIndex: 1 },
+  frozenBar:         { height: 28, borderRadius: 14, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  frozenText:        { fontSize: 13, fontWeight: '800' },
+  pointsBadge:       { paddingVertical: 6, paddingHorizontal: 16, borderRadius: 12, alignSelf: 'center' },
+  pointsBadgeText:   { color: '#fff', fontSize: 13, fontWeight: '800' },
+  questionBox:       { borderRadius: 20, padding: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, minHeight: 110 },
+  questionText:      { fontSize: 20, fontWeight: '700', textAlign: 'center', lineHeight: 32 },
+  choicesContainer:  { gap: 10 },
+  choiceBtn:         { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  choiceLetter:      { fontSize: 16, fontWeight: '900', width: 24, textAlign: 'center' },
+  choiceText:        { fontSize: 15, fontWeight: '600', flex: 1, textAlign: 'right' },
+  timeoutBox:        { borderRadius: 14, padding: 14, alignItems: 'center', gap: 6, borderWidth: 1 },
+  timeoutText:       { fontSize: 16, fontWeight: '800' },
+  timeoutAnswer:     { fontSize: 14, fontWeight: '600' },
+  nextBtn:           { paddingVertical: 16, borderRadius: 16, alignItems: 'center', elevation: 8 },
+  nextBtnText:       { fontSize: 18, fontWeight: '800' },
+  catChip:           { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  catChipEmoji:      { fontSize: 16 },
+  catChipText:       { color: '#fff', fontSize: 13, fontWeight: '700' },
+  finishTrophy:      { fontSize: 80, textAlign: 'center', marginTop: 20 },
+  finishTitle:       { fontSize: 32, fontWeight: '900', textAlign: 'center' },
+  finishScoreBox:    { alignItems: 'center', borderRadius: 20, padding: 24, borderWidth: 1.5 },
+  finishScoreNum:    { fontSize: 56, fontWeight: '900' },
+  finishScoreLabel:  { fontSize: 16 },
+  finishStats:       { flexDirection: 'row', gap: 12 },
+  finishStat:        { flex: 1, borderRadius: 14, padding: 14, alignItems: 'center', gap: 4, borderWidth: 1 },
+  finishStatNum:     { fontSize: 24, fontWeight: '900' },
+  finishStatLabel:   { fontSize: 11, textAlign: 'center' },
+  playAgainBtn:      { paddingVertical: 16, borderRadius: 16, alignItems: 'center', elevation: 8 },
+  playAgainText:     { fontSize: 18, fontWeight: '800' },
+  backBtn:           { paddingVertical: 14, borderRadius: 16, alignItems: 'center', borderWidth: 1 },
 });

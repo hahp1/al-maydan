@@ -1,943 +1,1637 @@
-import { useState, useEffect, useRef } from 'react';
+/**
+ * MafiaGameScreen.js
+ * لعبة المافيا — أونلاين بكود دعوة
+ *
+ * الأدوار: مافيا 🔴 | محقق 🔵 | طبيب 💚 | مواطن ⚪
+ *
+ * مراحل اللعبة:
+ * lobby      → انتظار اللاعبين (المنشئ يرى كود الغرفة ويبدأ)
+ * role_reveal→ كل لاعب يرى دوره سرًا (10 ثوانٍ)
+ * day        → نقاش + تصويت لطرد مشتبه به
+ * voting     → إظهار نتيجة التصويت + الطرد
+ * night      → المافيا تختار ضحية / الطبيب ينقذ / المحقق يحقق
+ * night_result→ إعلان نتيجة الليل
+ * finished   → إعلان الفائز
+ */
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  StatusBar, Animated, Alert, ActivityIndicator,
-  ScrollView, TextInput, Modal, KeyboardAvoidingView, Platform,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
+  StatusBar, ScrollView, Alert, Animated, Modal, TextInput,
+  Dimensions, Clipboard
 } from 'react-native';
-import { db, auth } from './firebaseConfig';
+import { db } from './firebaseConfig';
 import {
-  doc, setDoc, onSnapshot, updateDoc,
-  collection, serverTimestamp, arrayUnion, getDoc, addDoc, query, orderBy,
+  doc, setDoc, updateDoc, onSnapshot, getDoc, collection,
+  query, where, getDocs, deleteDoc
 } from 'firebase/firestore';
+import { useTheme } from './ThemeContext';
+import { useLanguage } from './I18n';
+import LeaveModal from './LeaveModal';
+import { WebScreenButton, GameInfoButton } from './WebRoomService';
 
-// ══════════════════════════════════════
-// ثوابت
-// ══════════════════════════════════════
-const MIN_PLAYERS  = 4;
-const MAX_PLAYERS  = 12;
-const COST         = 10;
-const DAY_SECONDS  = 90;
-const NIGHT_SECS   = 45;
+const { width: SW } = Dimensions.get('window');
 
-function assignRoles(n) {
-  let mafia;
-  if (n <= 5) mafia = 1; else if (n <= 8) mafia = 2; else mafia = 3;
+// ═══════════════════════════════════════════
+//  ثوابت اللعبة
+// ═══════════════════════════════════════════
+const MIN_PLAYERS = 4;
+const MAX_PLAYERS = 10;
+const DAY_DURATION = 90;   // ثوانٍ للنقاش النهاري
+const NIGHT_DURATION = 30; // ثوانٍ لأفعال الليل
+const REVEAL_DURATION = 12; // ثوانٍ لعرض الدور
+
+// توزيع الأدوار حسب عدد اللاعبين
+function getRoleDistribution(count) {
+  if (count === 4)  return { mafia: 1, detective: 1, doctor: 0, citizen: 2 };
+  if (count === 5)  return { mafia: 1, detective: 1, doctor: 1, citizen: 2 };
+  if (count === 6)  return { mafia: 2, detective: 1, doctor: 1, citizen: 2 };
+  if (count === 7)  return { mafia: 2, detective: 1, doctor: 1, citizen: 3 };
+  if (count === 8)  return { mafia: 2, detective: 1, doctor: 1, citizen: 4 };
+  if (count === 9)  return { mafia: 3, detective: 1, doctor: 1, citizen: 4 };
+  if (count === 10) return { mafia: 3, detective: 1, doctor: 1, citizen: 5 };
+  return { mafia: 1, detective: 1, doctor: 0, citizen: count - 2 };
+}
+
+function assignRoles(players) {
+  const dist = getRoleDistribution(players.length);
   const roles = [];
-  for (let i = 0; i < mafia; i++) roles.push('mafia');
-  roles.push('detective'); roles.push('doctor');
-  while (roles.length < n) roles.push('civilian');
+  for (let i = 0; i < dist.mafia; i++)     roles.push('mafia');
+  for (let i = 0; i < dist.detective; i++) roles.push('detective');
+  for (let i = 0; i < dist.doctor; i++)    roles.push('doctor');
+  for (let i = 0; i < dist.citizen; i++)   roles.push('citizen');
+  // خلط عشوائي
   for (let i = roles.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [roles[i], roles[j]] = [roles[j], roles[i]];
   }
-  return roles;
+  const result = {};
+  players.forEach((p, idx) => { result[p.uid] = roles[idx]; });
+  return result;
 }
 
+function generateRoomCode() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+// ═══════════════════════════════════════════
+//  بيانات الأدوار (اللغة العربية)
+// ═══════════════════════════════════════════
 const ROLE_INFO = {
-  mafia:     { label: 'مافيا',  emoji: '🔪', color: '#ef4444', desc: 'اقتل مواطناً كل ليلة بالاتفاق مع المافيا الآخرين' },
-  detective: { label: 'محقق',  emoji: '🔍', color: '#3b82f6', desc: 'كل ليلة اختر لاعباً لتعرف إذا كان مافيا أم لا' },
-  doctor:    { label: 'طبيب',  emoji: '💊', color: '#22c55e', desc: 'كل ليلة احمِ لاعباً من القتل (يمكنك حماية نفسك)' },
-  civilian:  { label: 'مواطن', emoji: '👤', color: '#a0a0c0', desc: 'صوّت نهاراً لطرد المشتبه به' },
+  mafia:      { label: 'مافيا',   emoji: '🕴️', color: '#ef4444', desc: 'أقصِ المواطنين ليلاً وتجنّب الكشف نهاراً' },
+  detective:  { label: 'محقق',   emoji: '🕵️', color: '#3b82f6', desc: 'كشف هوية أي لاعب ليلاً للتأكد من دوره' },
+  doctor:     { label: 'طبيب',   emoji: '🧑‍⚕️', color: '#22c55e', desc: 'أنقذ لاعبًا من الاغتيال الليلي' },
+  citizen:    { label: 'مواطن',  emoji: '🙋', color: '#94a3b8', desc: 'صوّت بحكمة لكشف المافيا نهاراً' },
 };
 
-function genCode() { return Math.random().toString(36).slice(2, 8).toUpperCase(); }
-function getUid() {
-  const u = auth.currentUser?.uid;
-  if (u) return u;
-  if (!global._gUid) global._gUid = 'guest_' + Math.random().toString(36).slice(2, 10);
-  return global._gUid;
-}
-function getRolesPreview(n) {
-  if (!n) return '';
-  let mafia;
-  if (n <= 5) mafia = 1; else if (n <= 8) mafia = 2; else mafia = 3;
-  const civ = Math.max(0, n - mafia - 2);
-  return `🔪×${mafia}  🔍×1  💊×1  👤×${civ}`;
-}
-
-// ══════════════════════════════════════
-// عداد الوقت
-// ══════════════════════════════════════
-function CountdownBar({ startedAt, totalSeconds, onEnd }) {
-  const [remaining, setRemaining] = useState(totalSeconds);
-  const anim = useRef(new Animated.Value(1)).current;
-  const endCalledRef = useRef(false);
-
-  useEffect(() => {
-    if (!startedAt) return;
-    endCalledRef.current = false;
-    const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-    const left = Math.max(0, totalSeconds - elapsed);
-    setRemaining(left);
-    anim.setValue(left / totalSeconds);
-    Animated.timing(anim, { toValue: 0, duration: left * 1000, useNativeDriver: false }).start();
-    const iv = setInterval(() => {
-      setRemaining(r => {
-        if (r <= 1) {
-          clearInterval(iv);
-          if (!endCalledRef.current) { endCalledRef.current = true; onEnd?.(); }
-          return 0;
-        }
-        return r - 1;
-      });
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [startedAt]);
-
-  const barColor = remaining > totalSeconds * 0.5 ? '#22c55e'
-    : remaining > totalSeconds * 0.25 ? '#f59e0b' : '#ef4444';
+// ═══════════════════════════════════════════
+//  مكوّن Avatar اللاعب
+// ═══════════════════════════════════════════
+function PlayerAvatar({ name, isEliminated, isSelected, role, showRole, theme, size = 48, onPress, disabled }) {
+  const initials = name?.slice(0, 2) || '؟';
+  const roleData = role ? ROLE_INFO[role] : null;
 
   return (
-    <View style={cb.wrap}>
-      <View style={cb.track}>
-        <Animated.View style={[cb.fill, {
-          width: anim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-          backgroundColor: barColor,
-        }]} />
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled || !onPress}
+      activeOpacity={0.75}
+      style={[
+        avatarS.wrap,
+        {
+          width: size + 16, alignItems: 'center',
+          opacity: isEliminated ? 0.4 : 1,
+        }
+      ]}
+    >
+      <View style={[
+        avatarS.circle,
+        {
+          width: size, height: size, borderRadius: size / 2,
+          backgroundColor: isEliminated
+            ? theme.bgElevated
+            : isSelected
+            ? (roleData?.color || theme.accent) + '30'
+            : theme.bgElevated,
+          borderWidth: isSelected ? 2.5 : 1.5,
+          borderColor: isSelected
+            ? (roleData?.color || theme.accent)
+            : theme.borderCard,
+        }
+      ]}>
+        {isEliminated ? (
+          <Text style={{ fontSize: size * 0.45 }}>💀</Text>
+        ) : showRole && roleData ? (
+          <Text style={{ fontSize: size * 0.45 }}>{roleData.emoji}</Text>
+        ) : (
+          <Text style={[avatarS.initials, { color: theme.textPrimary, fontSize: size * 0.32 }]}>
+            {initials}
+          </Text>
+        )}
       </View>
-      <Text style={[cb.num, { color: barColor }]}>{remaining}s</Text>
+      <Text style={[avatarS.name, { color: isEliminated ? theme.textMuted : theme.textSecondary, fontSize: 11 }]}
+        numberOfLines={1}
+      >
+        {isEliminated ? 'مُقصى' : name}
+      </Text>
+      {isSelected && !isEliminated && (
+        <View style={[avatarS.badge, { backgroundColor: roleData?.color || theme.accent }]}>
+          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700' }}>✓</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+const avatarS = StyleSheet.create({
+  wrap: { position: 'relative' },
+  circle: { alignItems: 'center', justifyContent: 'center' },
+  initials: { fontWeight: '700' },
+  name: { marginTop: 4, textAlign: 'center', maxWidth: 60 },
+  badge: {
+    position: 'absolute', top: 0, right: 0,
+    width: 18, height: 18, borderRadius: 9,
+    alignItems: 'center', justifyContent: 'center',
+  },
+});
+
+// ═══════════════════════════════════════════
+//  Timer مؤقت دائري
+// ═══════════════════════════════════════════
+function CircleTimer({ total, remaining, color, theme }) {
+  const r = 28, cx = 34, cy = 34;
+  const circumference = 2 * Math.PI * r;
+  const progress = remaining / total;
+  const strokeDashoffset = circumference * (1 - progress);
+  const urgent = remaining <= 10;
+
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center', width: 68, height: 68 }}>
+      <View style={StyleSheet.absoluteFill}>
+        {/* SVG-like via border */}
+      </View>
+      <View style={{
+        width: 68, height: 68, borderRadius: 34,
+        borderWidth: 3,
+        borderColor: urgent ? '#ef4444' : color,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: urgent ? '#ef444415' : color + '15',
+      }}>
+        <Text style={{ color: urgent ? '#ef4444' : color, fontSize: 22, fontWeight: '800' }}>
+          {remaining}
+        </Text>
+      </View>
     </View>
   );
 }
-const cb = StyleSheet.create({
-  wrap:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 6 },
-  track: { flex: 1, height: 6, backgroundColor: '#1a1a3e', borderRadius: 3, overflow: 'hidden' },
-  fill:  { height: '100%', borderRadius: 3 },
-  num:   { fontSize: 14, fontWeight: '900', minWidth: 32, textAlign: 'right' },
-});
 
-// ══════════════════════════════════════
-// شرح اللعبة
-// ══════════════════════════════════════
-function HowToPlayModal({ visible, onClose }) {
-  return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={ht.overlay}>
-        <View style={ht.box}>
-          <Text style={ht.title}>🎭 كيف تلعب المافيا؟</Text>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={ht.section}>👥 عدد اللاعبين: 4–12 • كل لاعب يدفع {COST} 🪙</Text>
-            <Text style={ht.section}>🌙 الليل ({NIGHT_SECS}s)</Text>
-            <Text style={ht.body}>كل دور يتصرف سراً:{'\n'}🔪 المافيا تتفق على قتل مواطن{'\n'}💊 الطبيب يحمي لاعباً{'\n'}🔍 المحقق يتحقق من هوية لاعب</Text>
-            <Text style={ht.section}>☀️ النهار ({DAY_SECONDS}s)</Text>
-            <Text style={ht.body}>يُعلن من مات ليلاً. الجميع يتناقش عبر الچات ويصوّت لطرد المشتبه به. يمكن تغيير الاختيار حتى انتهاء الوقت.</Text>
-            <Text style={ht.section}>🏆 شروط الفوز</Text>
-            <Text style={ht.body}>🔪 المافيا: عددها = عدد المواطنين أو أكثر{'\n'}🏙️ المدينة: كل المافيا تُطرد</Text>
-            <Text style={ht.section}>الأدوار</Text>
-            {Object.entries(ROLE_INFO).map(([k, r]) => (
-              <Text key={k} style={[ht.role, { color: r.color }]}>
-                {r.emoji} {r.label}: <Text style={ht.roleDesc}>{r.desc}</Text>
-              </Text>
-            ))}
-          </ScrollView>
-          <TouchableOpacity style={ht.btn} onPress={onClose}>
-            <Text style={ht.btnText}>فهمت! 👍</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-const ht = StyleSheet.create({
-  overlay:  { flex: 1, backgroundColor: '#00000099', justifyContent: 'center', alignItems: 'center' },
-  box:      { backgroundColor: '#0f0f2e', borderRadius: 20, padding: 24, width: '88%', maxHeight: '82%', borderWidth: 1, borderColor: '#ffffff15' },
-  title:    { color: '#a855f7', fontSize: 18, fontWeight: '900', textAlign: 'center', marginBottom: 16 },
-  section:  { color: '#a855f7', fontSize: 14, fontWeight: '800', marginTop: 12, marginBottom: 4, textAlign: 'right' },
-  body:     { color: '#9090b0', fontSize: 13, lineHeight: 22, textAlign: 'right' },
-  role:     { fontSize: 13, fontWeight: '700', marginVertical: 3, textAlign: 'right' },
-  roleDesc: { color: '#7070a0', fontWeight: '400' },
-  btn:      { backgroundColor: '#a855f7', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 18 },
-  btnText:  { color: '#fff', fontSize: 16, fontWeight: '900' },
-});
+// ═══════════════════════════════════════════
+//  الشاشة الرئيسية
+// ═══════════════════════════════════════════
+export default function MafiaGameScreen({ onBack, currentUser, onGameEnd }) {
+  const { theme, themeId } = useTheme();
+  const { lang } = useLanguage();
 
-// ══════════════════════════════════════
-// چات اللعبة
-// ══════════════════════════════════════
-function GameChat({ roomId, myUid, myName, disabled }) {
-  const [messages, setMessages] = useState([]);
-  const [text, setText] = useState('');
-  const scrollRef = useRef(null);
-  const unsubRef  = useRef(null);
+  // ── حالة الغرفة ──
+  const [screen, setScreen] = useState('setup'); // setup | lobby | game
+  const [roomCode, setRoomCode] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+  const [roomId, setRoomId] = useState(null);
+  const [roomData, setRoomData] = useState(null);
+  const [isCreator, setIsCreator] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
+  // ── حالة اللعبة (محلية) ──
+  const [myAction, setMyAction] = useState(null);       // uid اللاعب المستهدف
+  const [myVote, setMyVote] = useState(null);           // uid المصوّت ضده
+  const [actionSubmitted, setActionSubmitted] = useState(false);
+  const [voteSubmitted, setVoteSubmitted] = useState(false);
+  const [timerVal, setTimerVal] = useState(0);
+  const [showLeave, setShowLeave] = useState(false);
+  const [roleRevealed, setRoleRevealed] = useState(false);
+
+  const unsubRef = useRef(null);
+  const timerRef = useRef(null);
+  const phaseStartRef = useRef(null);
+
+  const myUid = currentUser?.uid || `guest_${Math.random().toString(36).slice(2, 10)}`;
+  const myName = currentUser?.name || 'لاعب';
+
+  // ── اشتراك Firebase ──
   useEffect(() => {
     if (!roomId) return;
-    const q = query(collection(db, 'mafia_rooms', roomId, 'messages'), orderBy('createdAt', 'asc'));
-    unsubRef.current = onSnapshot(q, snap => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    unsubRef.current = onSnapshot(doc(db, 'mafia_rooms', roomId), snap => {
+      if (snap.exists()) setRoomData(snap.data());
     });
     return () => unsubRef.current?.();
   }, [roomId]);
 
-  async function sendMessage() {
-    const msg = text.trim();
-    if (!msg || disabled) return;
-    setText('');
-    await addDoc(collection(db, 'mafia_rooms', roomId, 'messages'), {
-      uid: myUid, name: myName, text: msg, createdAt: serverTimestamp(),
+  // ── مؤقت المرحلة ──
+  useEffect(() => {
+    if (!roomData) return;
+    const phase = roomData.gamePhase;
+    clearInterval(timerRef.current);
+
+    if (phase === 'role_reveal') {
+      setTimerVal(REVEAL_DURATION);
+      timerRef.current = setInterval(() => {
+        setTimerVal(v => {
+          if (v <= 1) { clearInterval(timerRef.current); return 0; }
+          return v - 1;
+        });
+      }, 1000);
+    } else if (phase === 'day') {
+      setTimerVal(DAY_DURATION);
+      timerRef.current = setInterval(() => {
+        setTimerVal(v => {
+          if (v <= 1) {
+            clearInterval(timerRef.current);
+            // الوقت انتهى → انتقال للتصويت (المنشئ فقط يُحدّث)
+            if (isCreator) _advanceFromDay();
+            return 0;
+          }
+          return v - 1;
+        });
+      }, 1000);
+    } else if (phase === 'night') {
+      setTimerVal(NIGHT_DURATION);
+      setMyAction(null);
+      setActionSubmitted(false);
+      timerRef.current = setInterval(() => {
+        setTimerVal(v => {
+          if (v <= 1) {
+            clearInterval(timerRef.current);
+            if (isCreator) _resolveNight();
+            return 0;
+          }
+          return v - 1;
+        });
+      }, 1000);
+    }
+
+    return () => clearInterval(timerRef.current);
+  }, [roomData?.gamePhase, roomData?.round]);
+
+  // ── reset vote/action عند مرحلة جديدة ──
+  useEffect(() => {
+    setMyVote(null);
+    setVoteSubmitted(false);
+    setActionSubmitted(false);
+    setMyAction(null);
+  }, [roomData?.gamePhase, roomData?.round]);
+
+  // ─────────────────────────────────────────
+  //  Helper: جلب بيانات الغرفة
+  // ─────────────────────────────────────────
+  const getRoom = async (rid) => {
+    const snap = await getDoc(doc(db, 'mafia_rooms', rid));
+    return snap.exists() ? snap.data() : null;
+  };
+
+  const updateRoom = async (updates) => {
+    await updateDoc(doc(db, 'mafia_rooms', roomId), { ...updates, lastUpdate: Date.now() });
+  };
+
+  // ─────────────────────────────────────────
+  //  إنشاء غرفة
+  // ─────────────────────────────────────────
+  const handleCreate = async () => {
+    setLoading(true); setError('');
+    const code = generateRoomCode();
+    const rid = `mafia_${code}`;
+    const newRoom = {
+      id: rid, code,
+      creatorUid: myUid,
+      gamePhase: 'lobby',
+      round: 0,
+      players: [{ uid: myUid, name: myName, alive: true }],
+      roles: {},
+      votes: {},
+      nightActions: {},
+      eliminated: [],
+      nightResult: null,
+      winner: null,
+      createdAt: Date.now(),
+      lastUpdate: Date.now(),
+    };
+    try {
+      await setDoc(doc(db, 'mafia_rooms', rid), newRoom);
+      setRoomCode(code);
+      setRoomId(rid);
+      setIsCreator(true);
+      setScreen('lobby');
+    } catch (e) { setError('حدث خطأ، حاول مرة أخرى'); }
+    setLoading(false);
+  };
+
+  // ─────────────────────────────────────────
+  //  الانضمام بكود
+  // ─────────────────────────────────────────
+  const handleJoin = async () => {
+    if (joinCode.trim().length !== 6) { setError('أدخل الكود المكوّن من 6 أحرف'); return; }
+    setLoading(true); setError('');
+    const rid = `mafia_${joinCode.trim().toUpperCase()}`;
+    try {
+      const data = await getRoom(rid);
+      if (!data) { setError('الغرفة غير موجودة'); setLoading(false); return; }
+      if (data.gamePhase !== 'lobby') { setError('اللعبة بدأت بالفعل'); setLoading(false); return; }
+      if (data.players.length >= MAX_PLAYERS) { setError('الغرفة ممتلئة'); setLoading(false); return; }
+      if (data.players.find(p => p.uid === myUid)) {
+        // أنت موجود أصلاً
+        setRoomId(rid); setRoomCode(data.code); setIsCreator(data.creatorUid === myUid);
+        setScreen('lobby'); setLoading(false); return;
+      }
+      const updatedPlayers = [...data.players, { uid: myUid, name: myName, alive: true }];
+      await updateDoc(doc(db, 'mafia_rooms', rid), { players: updatedPlayers, lastUpdate: Date.now() });
+      setRoomId(rid); setRoomCode(data.code); setIsCreator(false);
+      setScreen('lobby');
+    } catch (e) { setError('فشل الانضمام، تأكد من الكود'); }
+    setLoading(false);
+  };
+
+  // ─────────────────────────────────────────
+  //  بدء اللعبة (المنشئ فقط)
+  // ─────────────────────────────────────────
+  const handleStart = async () => {
+    const data = await getRoom(roomId);
+    if (!data) return;
+    if (data.players.length < MIN_PLAYERS) {
+      Alert.alert('لاعبون غير كافيون', `يحتاج على الأقل ${MIN_PLAYERS} لاعبين لبدء اللعبة`);
+      return;
+    }
+    const roles = assignRoles(data.players);
+    await updateDoc(doc(db, 'mafia_rooms', roomId), {
+      roles, gamePhase: 'role_reveal', round: 1,
+      votes: {}, nightActions: {}, nightResult: null, winner: null,
+      lastUpdate: Date.now(),
     });
+    setScreen('game');
+  };
+
+  // ─────────────────────────────────────────
+  //  انتقال من النهار → تصويت
+  // ─────────────────────────────────────────
+  const _advanceFromDay = async () => {
+    const data = await getRoom(roomId);
+    if (!data || data.gamePhase !== 'day') return;
+    // إذا لا يوجد تصويت، لا أحد يُطرد
+    await updateDoc(doc(db, 'mafia_rooms', roomId), {
+      gamePhase: 'voting', lastUpdate: Date.now()
+    });
+    // بعد 3 ثوانٍ، احسب الأصوات
+    setTimeout(() => _resolveVoting(), 3000);
+  };
+
+  // ─────────────────────────────────────────
+  //  حساب التصويت وطرد اللاعب
+  // ─────────────────────────────────────────
+  const _resolveVoting = async () => {
+    const data = await getRoom(roomId);
+    if (!data || data.gamePhase !== 'voting') return;
+
+    const tally = {};
+    Object.values(data.votes || {}).forEach(uid => {
+      tally[uid] = (tally[uid] || 0) + 1;
+    });
+
+    let maxVotes = 0, eliminated = null;
+    Object.entries(tally).forEach(([uid, count]) => {
+      if (count > maxVotes) { maxVotes = count; eliminated = uid; }
+    });
+
+    const alivePlayers = data.players.filter(p => p.alive);
+    let newPlayers = data.players.map(p =>
+      p.uid === eliminated ? { ...p, alive: false } : p
+    );
+    let newEliminated = [...(data.eliminated || [])];
+    if (eliminated) newEliminated.push(eliminated);
+
+    // فحص الفوز
+    const winner = checkWinner(newPlayers, data.roles);
+    if (winner) {
+      await updateDoc(doc(db, 'mafia_rooms', roomId), {
+        players: newPlayers, eliminated: newEliminated,
+        gamePhase: 'finished', winner, lastUpdate: Date.now(),
+      });
+      return;
+    }
+
+    await updateDoc(doc(db, 'mafia_rooms', roomId), {
+      players: newPlayers, eliminated: newEliminated,
+      dayEliminated: eliminated || null,
+      gamePhase: 'night', votes: {}, lastUpdate: Date.now(),
+    });
+  };
+
+  // ─────────────────────────────────────────
+  //  حل أحداث الليل
+  // ─────────────────────────────────────────
+  const _resolveNight = async () => {
+    const data = await getRoom(roomId);
+    if (!data || data.gamePhase !== 'night') return;
+
+    const actions = data.nightActions || {};
+    // أفعال الليل: { uid: { type: 'kill'|'save'|'investigate', target: uid } }
+
+    let mafiaTarget = null;
+    let doctorSave = null;
+    let detectiveResult = null;
+    let detectiveUid = null;
+
+    Object.entries(actions).forEach(([actorUid, action]) => {
+      const role = data.roles[actorUid];
+      if (role === 'mafia' && action.type === 'kill') mafiaTarget = action.target;
+      if (role === 'doctor' && action.type === 'save') doctorSave = action.target;
+      if (role === 'detective' && action.type === 'investigate') {
+        detectiveResult = data.roles[action.target] || 'citizen';
+        detectiveUid = actorUid;
+      }
+    });
+
+    const actualKill = mafiaTarget && mafiaTarget !== doctorSave ? mafiaTarget : null;
+
+    let newPlayers = data.players.map(p =>
+      p.uid === actualKill ? { ...p, alive: false } : p
+    );
+    let newEliminated = [...(data.eliminated || [])];
+    if (actualKill) newEliminated.push(actualKill);
+
+    const nightResultMsg = actualKill
+      ? `تم اغتيال ${data.players.find(p => p.uid === actualKill)?.name}`
+      : mafiaTarget && mafiaTarget === doctorSave
+      ? 'الطبيب أنقذ الضحية الليلة!'
+      : 'مرّت الليلة بسلام';
+
+    const winner = checkWinner(newPlayers, data.roles);
+    if (winner) {
+      await updateDoc(doc(db, 'mafia_rooms', roomId), {
+        players: newPlayers, eliminated: newEliminated,
+        nightResult: nightResultMsg, gamePhase: 'finished', winner,
+        lastUpdate: Date.now(),
+      });
+      return;
+    }
+
+    await updateDoc(doc(db, 'mafia_rooms', roomId), {
+      players: newPlayers, eliminated: newEliminated,
+      nightResult: nightResultMsg,
+      detectiveReveal: detectiveUid ? {
+        uid: detectiveUid,
+        targetRole: detectiveResult,
+        targetUid: Object.values(data.nightActions || {}).find((a, i) =>
+          Object.keys(data.nightActions || {})[i] === detectiveUid
+        )?.target || null,
+      } : null,
+      gamePhase: 'night_result',
+      lastUpdate: Date.now(),
+    });
+    // بعد 4 ثوانٍ → نهار جديد
+    setTimeout(async () => {
+      const d = await getRoom(roomId);
+      if (!d || d.gamePhase !== 'night_result') return;
+      await updateDoc(doc(db, 'mafia_rooms', roomId), {
+        gamePhase: 'day', round: (d.round || 1) + 1,
+        votes: {}, nightActions: {}, dayEliminated: null,
+        nightResult: null, detectiveReveal: null,
+        lastUpdate: Date.now(),
+      });
+    }, 4500);
+  };
+
+  // ─────────────────────────────────────────
+  //  فحص الفائز
+  // ─────────────────────────────────────────
+  function checkWinner(players, roles) {
+    const alive = players.filter(p => p.alive);
+    const mafiaAlive = alive.filter(p => roles[p.uid] === 'mafia').length;
+    const othersAlive = alive.filter(p => roles[p.uid] !== 'mafia').length;
+    if (mafiaAlive === 0) return 'citizens';
+    if (mafiaAlive >= othersAlive) return 'mafia';
+    return null;
   }
 
+  // ─────────────────────────────────────────
+  //  تصويت اللاعب (نهار)
+  // ─────────────────────────────────────────
+  const handleVote = async (targetUidOrPostpone) => {
+    if (voteSubmitted) return;
+    const data = await getRoom(roomId);
+    if (!data || data.gamePhase !== 'day') return;
+    const myPlayer = data.players.find(p => p.uid === myUid);
+    if (!myPlayer?.alive) return;
+
+    // 'postpone' يُسجَّل كـ null حتى لا يُحسب ضد أحد
+    const voteValue = targetUidOrPostpone === 'postpone' ? null : targetUidOrPostpone;
+    setMyVote(targetUidOrPostpone);
+    setVoteSubmitted(true);
+
+    const newVotes = { ...(data.votes || {}) };
+    if (voteValue) newVotes[myUid] = voteValue;
+    // التأجيل: نسجل المشاركة دون تصويت
+    const newPostpones = { ...(data.postpones || {}) };
+    if (!voteValue) newPostpones[myUid] = true;
+
+    await updateRoom({ votes: newVotes, postpones: newPostpones });
+
+    // إذا صوّت الكل (بما فيهم المؤجِّلون) → انتقال للتصويت
+    if (isCreator) {
+      const alivePlayers = data.players.filter(p => p.alive);
+      const totalResponded = Object.keys(newVotes).length + Object.keys(newPostpones).length;
+      if (totalResponded >= alivePlayers.length) {
+        await _advanceFromDay();
+      }
+    }
+  };
+
+  // ─────────────────────────────────────────
+  //  فعل الليل
+  // ─────────────────────────────────────────
+  const handleNightAction = async (targetUid) => {
+    if (actionSubmitted || !roomData) return;
+    const myRole = roomData.roles[myUid];
+    if (!myRole || myRole === 'citizen') return;
+    const myPlayer = roomData.players.find(p => p.uid === myUid);
+    if (!myPlayer?.alive) return;
+
+    let type = '';
+    if (myRole === 'mafia')      type = 'kill';
+    if (myRole === 'doctor')     type = 'save';
+    if (myRole === 'detective')  type = 'investigate';
+
+    setMyAction(targetUid);
+    setActionSubmitted(true);
+    const newActions = {
+      ...(roomData.nightActions || {}),
+      [myUid]: { type, target: targetUid }
+    };
+    await updateRoom({ nightActions: newActions });
+
+    // إذا كل الأدوار الفعّالة أكملت → حلّ مبكر
+    if (isCreator) {
+      const alive = roomData.players.filter(p => p.alive);
+      const activeRoles = alive.filter(p => ['mafia', 'doctor', 'detective'].includes(roomData.roles[p.uid]));
+      const submitted = Object.keys(newActions).length;
+      if (submitted >= activeRoles.length) {
+        clearInterval(timerRef.current);
+        await _resolveNight();
+      }
+    }
+  };
+
+  // ─────────────────────────────────────────
+  //  مغادرة الغرفة
+  // ─────────────────────────────────────────
+  const handleLeave = async () => {
+    setShowLeave(false);
+    if (roomId) {
+      try {
+        if (isCreator && roomData?.gamePhase === 'lobby') {
+          await deleteDoc(doc(db, 'mafia_rooms', roomId));
+        } else {
+          const data = await getRoom(roomId);
+          if (data) {
+            const newPlayers = data.players.filter(p => p.uid !== myUid);
+            await updateDoc(doc(db, 'mafia_rooms', roomId), {
+              players: newPlayers, lastUpdate: Date.now()
+            });
+          }
+        }
+      } catch (e) {}
+    }
+    unsubRef.current?.();
+    onBack();
+  };
+
+  // ═══════════════════════════════════════════
+  //  RENDER
+  // ═══════════════════════════════════════════
+
+  if (screen === 'setup') return (
+    <SetupScreen
+      theme={theme}
+      joinCode={joinCode}
+      setJoinCode={setJoinCode}
+      loading={loading}
+      error={error}
+      onBack={onBack}
+      onCreate={handleCreate}
+      onJoin={handleJoin}
+    />
+  );
+
+  if (screen === 'lobby') return (
+    <LobbyScreen
+      theme={theme}
+      roomCode={roomCode}
+      roomData={roomData}
+      isCreator={isCreator}
+      myUid={myUid}
+      minPlayers={MIN_PLAYERS}
+      maxPlayers={MAX_PLAYERS}
+      onStart={handleStart}
+      onLeave={() => setShowLeave(true)}
+      showLeave={showLeave}
+      onCancelLeave={() => setShowLeave(false)}
+      onConfirmLeave={handleLeave}
+    />
+  );
+
+  // Game screen
+  if (!roomData) return (
+    <View style={[gs.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, justifyContent: 'center', alignItems: 'center' }]}>
+      <ActivityIndicator size="large" color={theme.accent} />
+    </View>
+  );
+
+  const phase = roomData.gamePhase;
+  const myRole = roomData.roles?.[myUid];
+  const myPlayer = roomData.players?.find(p => p.uid === myUid);
+  const alivePlayers = (roomData.players || []).filter(p => p.alive);
+
   return (
-    <View style={ch.wrap}>
-      <ScrollView ref={scrollRef} style={ch.msgs} contentContainerStyle={{ paddingVertical: 8 }} showsVerticalScrollIndicator={false}>
-        {messages.map(m => (
-          <View key={m.id} style={[ch.bubble, m.uid === myUid && ch.bubbleMe]}>
-            {m.uid !== myUid && <Text style={ch.sender}>{m.name}</Text>}
-            <Text style={[ch.msgTxt, m.uid === myUid && ch.msgTxtMe]}>{m.text}</Text>
-          </View>
-        ))}
-        {messages.length === 0 && <Text style={ch.empty}>💬 ابدأ النقاش...</Text>}
-      </ScrollView>
-      <View style={ch.row}>
-        <TextInput
-          style={[ch.input, disabled && ch.inputOff]}
-          placeholder={disabled ? '🔒 الچات متاح نهاراً فقط' : 'اكتب رسالة...'}
-          placeholderTextColor="#3a3a60"
-          value={text}
-          onChangeText={setText}
-          onSubmitEditing={sendMessage}
-          editable={!disabled}
-          returnKeyType="send"
-          textAlign="right"
-          maxLength={120}
-        />
-        <TouchableOpacity
-          style={[ch.sendBtn, (!text.trim() || disabled) && ch.sendOff]}
-          onPress={sendMessage}
-          disabled={!text.trim() || disabled}
-        >
-          <Text style={ch.sendIco}>↑</Text>
+    <View style={[gs.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} />
+
+      {/* زر الخروج + شاشة كبيرة */}
+      <View style={gs.exitBtnRow}>
+        <TouchableOpacity style={[gs.exitBtn, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
+          onPress={() => setShowLeave(true)}>
+          <Text style={{ fontSize: 18 }}>✕</Text>
         </TouchableOpacity>
+        <GameInfoButton gameType="mafia" lang={lang} />
+        <WebScreenButton
+          playerUid={myUid}
+          playerName={myName}
+          gameType="mafia"
+          gameRoomId={roomId || ''}
+          getPublicData={() => ({ phase, playersCount: roomData?.players?.length || 0 })}
+          themeName={themeId || 'dark'}
+        />
       </View>
+
+      {/* ── role_reveal ── */}
+      {phase === 'role_reveal' && (
+        <RoleRevealPhase
+          theme={theme}
+          myRole={myRole}
+          timerVal={timerVal}
+          total={REVEAL_DURATION}
+          onReady={() => { if (isCreator && timerVal <= 0) {/* auto-advances */} }}
+        />
+      )}
+
+      {/* ── day ── */}
+      {phase === 'day' && (
+        <DayPhase
+          theme={theme}
+          roomData={roomData}
+          myUid={myUid}
+          myRole={myRole}
+          myPlayer={myPlayer}
+          myVote={myVote}
+          voteSubmitted={voteSubmitted}
+          timerVal={timerVal}
+          total={DAY_DURATION}
+          onVote={handleVote}
+          isCreator={isCreator}
+          onForceAdvance={_advanceFromDay}
+        />
+      )}
+
+      {/* ── voting ── */}
+      {phase === 'voting' && (
+        <VotingResultPhase theme={theme} roomData={roomData} myUid={myUid} />
+      )}
+
+      {/* ── night ── */}
+      {phase === 'night' && (
+        <NightPhase
+          theme={theme}
+          roomData={roomData}
+          myUid={myUid}
+          myRole={myRole}
+          myPlayer={myPlayer}
+          myAction={myAction}
+          actionSubmitted={actionSubmitted}
+          timerVal={timerVal}
+          total={NIGHT_DURATION}
+          onAction={handleNightAction}
+          isCreator={isCreator}
+          onForceResolve={_resolveNight}
+        />
+      )}
+
+      {/* ── night_result ── */}
+      {phase === 'night_result' && (
+        <NightResultPhase theme={theme} roomData={roomData} myUid={myUid} />
+      )}
+
+      {/* ── finished ── */}
+      {phase === 'finished' && (() => {
+        const winner    = roomData.winner;
+        const myRole    = roomData.roles?.[myUid];
+        const isMafiaWin = winner === 'mafia';
+        const myTeamWon  = (isMafiaWin && myRole === 'mafia') || (!isMafiaWin && myRole !== 'mafia');
+        if (onGameEnd) onGameEnd(myTeamWon);
+        return (
+          <FinishedPhase
+            theme={theme}
+            roomData={roomData}
+            myUid={myUid}
+            myRole={myRole}
+            onLeave={() => setShowLeave(true)}
+          />
+        );
+      })()}
+
+      <LeaveModal
+        visible={showLeave}
+        onCancel={() => setShowLeave(false)}
+        onConfirm={handleLeave}
+        message="هل تريد مغادرة الغرفة؟"
+      />
     </View>
   );
 }
-const ch = StyleSheet.create({
-  wrap:     { flex: 1, borderTopWidth: 1, borderTopColor: '#ffffff08' },
-  msgs:     { flex: 1, paddingHorizontal: 12 },
-  bubble:   { backgroundColor: '#0f0f2e', borderRadius: 12, padding: 10, marginVertical: 3, maxWidth: '80%', alignSelf: 'flex-start', borderWidth: 1, borderColor: '#ffffff08' },
-  bubbleMe: { backgroundColor: '#1a0a2e', alignSelf: 'flex-end', borderColor: '#a855f720' },
-  sender:   { color: '#a855f7', fontSize: 11, fontWeight: '700', marginBottom: 3 },
-  msgTxt:   { color: '#c0c0e0', fontSize: 14, lineHeight: 20 },
-  msgTxtMe: { color: '#e0e0ff' },
-  empty:    { color: '#3a3a60', textAlign: 'center', marginTop: 20, fontSize: 13 },
-  row:      { flexDirection: 'row', gap: 8, padding: 10, paddingBottom: 14 },
-  input:    { flex: 1, backgroundColor: '#0f0f2e', borderRadius: 12, borderWidth: 1, borderColor: '#ffffff15', color: '#e0e0ff', paddingHorizontal: 14, paddingVertical: 10, fontSize: 14 },
-  inputOff: { opacity: 0.4 },
-  sendBtn:  { width: 42, height: 42, borderRadius: 12, backgroundColor: '#a855f7', alignItems: 'center', justifyContent: 'center' },
-  sendOff:  { backgroundColor: '#2a2a45' },
-  sendIco:  { color: '#fff', fontSize: 18, fontWeight: '900' },
-});
 
-// ══════════════════════════════════════
-// المكوّن الرئيسي
-// ══════════════════════════════════════
-export default function MafiaGameScreen({ onBack, currentUser, tokens, onSpendTokens }) {
-  const [phase,        setPhase]        = useState('menu');
-  const [roomId,       setRoomId]       = useState(null);
-  const [roomData,     setRoomData]     = useState(null);
-  const [myUid,        setMyUid]        = useState(null);
-  const [myName,       setMyName]       = useState('');
-  const [loading,      setLoading]      = useState(false);
-  const [codeInput,    setCodeInput]    = useState('');
-  const [showHow,      setShowHow]      = useState(false);
-  const [myRole,       setMyRole]       = useState(null);
-  const [roleRevealed, setRoleRevealed] = useState(false);
-  const [myVote,       setMyVote]       = useState(null);
-  const [myNightAct,   setMyNightAct]   = useState(null);
-  const [nightResult,  setNightResult]  = useState(null);
-  const [desiredCount, setDesiredCount] = useState(6);
-  const [activeTab,    setActiveTab]    = useState('action');
-  const unsubRef = useRef(null);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+// ═══════════════════════════════════════════
+//  شاشة الإعداد (إنشاء / انضمام)
+// ═══════════════════════════════════════════
+function SetupScreen({ theme, joinCode, setJoinCode, loading, error, onBack, onCreate, onJoin }) {
+  return (
+    <View style={[gs.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} />
 
-  useEffect(() => {
-    const uid = getUid();
-    setMyUid(uid);
-    setMyName(currentUser?.name || auth.currentUser?.displayName || 'لاعب');
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-    return () => { if (unsubRef.current) unsubRef.current(); };
-  }, []);
+      {/* زر الرجوع أعلى يسار */}
+      <TouchableOpacity style={[gs.exitBtn, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
+        onPress={onBack}>
+        <Text style={{ fontSize: 18 }}>✕</Text>
+      </TouchableOpacity>
 
-  function subscribeRoom(id) {
-    if (unsubRef.current) unsubRef.current();
-    unsubRef.current = onSnapshot(doc(db, 'mafia_rooms', id), snap => {
-      if (!snap.exists()) { doReset(); return; }
-      const data = snap.data();
-      setRoomData(data);
-      if (data.phase === 'lobby') {
-        setPhase('lobby');
-      } else if (data.phase === 'role_reveal') {
-        const me = data.players.find(p => p.uid === getUid());
-        if (me) { setMyRole(me.role); setRoleRevealed(false); }
-        setPhase('role');
-      } else if (data.phase === 'night') {
-        setMyNightAct(null); setNightResult(null); setActiveTab('action');
-        setPhase('game');
-      } else if (data.phase === 'day') {
-        setActiveTab('chat');
-        setPhase('game');
-      } else if (data.phase === 'ended') {
-        setPhase('ended');
-      }
-    });
-  }
-
-  function doReset() {
-    setPhase('menu'); setRoomId(null); setRoomData(null);
-    setMyRole(null); setMyVote(null); setMyNightAct(null); setNightResult(null);
-  }
-
-  // ── إنشاء غرفة ──
-  async function createRoom() {
-    if (tokens < COST) { Alert.alert('رصيد غير كافٍ', `تحتاج ${COST} رصيد`); return; }
-    setLoading(true);
-    try {
-      const uid = getUid();
-      const code = genCode();
-      await setDoc(doc(db, 'mafia_rooms', code), {
-        code, phase: 'lobby',
-        maxPlayers: desiredCount, minPlayers: MIN_PLAYERS,
-        createdAt: serverTimestamp(), hostUid: uid,
-        players: [{ uid, name: myName, isHost: true, isAlive: true, role: null }],
-        round: 0, nightActions: {}, votes: {},
-        killedLastNight: null, ejectedToday: null, ejectedRole: null,
-        winTeam: null, dayStartedAt: null, nightStartedAt: null,
-      });
-      onSpendTokens(COST);
-      setRoomId(code);
-      subscribeRoom(code);
-    } catch (e) { Alert.alert('خطأ', e.message); }
-    setLoading(false);
-  }
-
-  // ── انضمام بكود ──
-  async function joinRoom() {
-    const code = codeInput.trim().toUpperCase();
-    if (!code) return;
-    if (tokens < COST) { Alert.alert('رصيد غير كافٍ', `تحتاج ${COST} رصيد`); return; }
-    setLoading(true);
-    try {
-      const uid = getUid();
-      const roomRef = doc(db, 'mafia_rooms', code);
-      const snap = await getDoc(roomRef);
-      if (!snap.exists()) { Alert.alert('الغرفة غير موجودة'); setLoading(false); return; }
-      const data = snap.data();
-      if (data.phase !== 'lobby') { Alert.alert('اللعبة بدأت'); setLoading(false); return; }
-      if (data.players.length >= data.maxPlayers) { Alert.alert('الغرفة ممتلئة'); setLoading(false); return; }
-      if (!data.players.some(p => p.uid === uid)) {
-        await updateDoc(roomRef, {
-          players: arrayUnion({ uid, name: myName, isHost: false, isAlive: true, role: null }),
-        });
-      }
-      onSpendTokens(COST);
-      setRoomId(code);
-      subscribeRoom(code);
-    } catch (e) { Alert.alert('خطأ', e.message); }
-    setLoading(false);
-  }
-
-  // ── بدء اللعبة (هوست) ──
-  async function startGame() {
-    if (!roomData || roomData.players.length < MIN_PLAYERS) {
-      Alert.alert(`تحتاج ${MIN_PLAYERS} لاعبين على الأقل`); return;
-    }
-    const roles = assignRoles(roomData.players.length);
-    const updatedPlayers = roomData.players.map((p, i) => ({ ...p, role: roles[i] }));
-    await updateDoc(doc(db, 'mafia_rooms', roomId), {
-      phase: 'role_reveal', players: updatedPlayers, round: 1,
-    });
-  }
-
-  // ── تأكيد الدور ──
-  async function confirmRole() {
-    setRoleRevealed(true);
-    if (roomData?.hostUid === myUid) {
-      setTimeout(async () => {
-        await updateDoc(doc(db, 'mafia_rooms', roomId), {
-          phase: 'night', nightActions: {}, nightStartedAt: Date.now(),
-        });
-      }, 3000);
-    }
-  }
-
-  // ── إجراء ليلي ──
-  async function submitNightAction(targetUid) {
-    setMyNightAct(targetUid);
-    await updateDoc(doc(db, 'mafia_rooms', roomId), { [`nightActions.${myUid}`]: targetUid });
-    if (myRole === 'detective') {
-      const target = roomData.players.find(p => p.uid === targetUid);
-      if (target) setNightResult(target.role === 'mafia' ? '🔪 هذا مافيا!' : '✅ هذا بريء');
-    }
-    // الهوست يتحقق إذا اكتملت الأفعال
-    if (roomData?.hostUid === myUid) {
-      const snap = await getDoc(doc(db, 'mafia_rooms', roomId));
-      const data = snap.data();
-      const actions = { ...data.nightActions, [myUid]: targetUid };
-      const alive = data.players.filter(p => p.isAlive);
-      const mafiaP = alive.filter(p => p.role === 'mafia');
-      const docP   = alive.find(p => p.role === 'doctor');
-      const detP   = alive.find(p => p.role === 'detective');
-      const allDone = mafiaP.every(p => actions[p.uid])
-        && (!docP || actions[docP.uid])
-        && (!detP || actions[detP.uid]);
-      if (allDone) await resolveNight(data, actions);
-    }
-  }
-
-  async function resolveNight(data, actions) {
-    const alive = data.players.filter(p => p.isAlive);
-    const mafia = alive.filter(p => p.role === 'mafia');
-    const docP  = alive.find(p => p.role === 'doctor');
-    const targets = mafia.map(p => actions[p.uid]).filter(Boolean);
-    const killTarget = targets.sort((a, b) =>
-      targets.filter(v => v === b).length - targets.filter(v => v === a).length
-    )[0];
-    const saveTarget    = docP ? actions[docP.uid] : null;
-    const killed        = (killTarget && killTarget !== saveTarget) ? killTarget : null;
-    let updPlayers      = data.players.map(p => p.uid === killed ? { ...p, isAlive: false } : p);
-    const newAlive      = updPlayers.filter(p => p.isAlive);
-    const mafiaAlive    = newAlive.filter(p => p.role === 'mafia').length;
-    const civAlive      = newAlive.filter(p => p.role !== 'mafia').length;
-    const winTeam       = mafiaAlive === 0 ? 'city' : mafiaAlive >= civAlive ? 'mafia' : null;
-    const killedName    = killed ? data.players.find(p => p.uid === killed)?.name : null;
-    await updateDoc(doc(db, 'mafia_rooms', roomId), {
-      phase: winTeam ? 'ended' : 'day',
-      players: updPlayers, nightActions: {}, votes: {},
-      killedLastNight: killedName || null,
-      winTeam: winTeam || null,
-      dayStartedAt: winTeam ? null : Date.now(),
-    });
-  }
-
-  // ── تصويت نهاري (قابل للتغيير) ──
-  async function submitVote(targetUid) {
-    setMyVote(targetUid);
-    await updateDoc(doc(db, 'mafia_rooms', roomId), { [`votes.${myUid}`]: targetUid });
-  }
-
-  // ── إنهاء النهار (انتهى الوقت / الهوست) ──
-  async function endDay() {
-    const snap = await getDoc(doc(db, 'mafia_rooms', roomId));
-    const data = snap.data();
-    if (data.phase !== 'day') return;
-    const tally = {};
-    Object.values(data.votes || {}).forEach(uid => { tally[uid] = (tally[uid] || 0) + 1; });
-    const ejectedUid    = Object.entries(tally).sort((a, b) => b[1] - a[1])[0]?.[0];
-    const ejectedPlayer = data.players.find(p => p.uid === ejectedUid);
-    let updPlayers      = data.players.map(p => p.uid === ejectedUid ? { ...p, isAlive: false } : p);
-    const newAlive      = updPlayers.filter(p => p.isAlive);
-    const mafiaAlive    = newAlive.filter(p => p.role === 'mafia').length;
-    const civAlive      = newAlive.filter(p => p.role !== 'mafia').length;
-    const winTeam       = mafiaAlive === 0 ? 'city' : mafiaAlive >= civAlive ? 'mafia' : null;
-    await updateDoc(doc(db, 'mafia_rooms', roomId), {
-      phase: winTeam ? 'ended' : 'night',
-      players: updPlayers, nightActions: {}, votes: {},
-      ejectedToday: ejectedPlayer?.name || null,
-      ejectedRole:  ejectedPlayer?.role  || null,
-      round: data.round + 1, winTeam: winTeam || null,
-      nightStartedAt: winTeam ? null : Date.now(),
-      dayStartedAt: null,
-    });
-  }
-
-  function alivePlayers(excludeSelf = false) {
-    if (!roomData) return [];
-    return roomData.players.filter(p => p.isAlive && (!excludeSelf || p.uid !== myUid));
-  }
-
-  const isHost = roomData?.hostUid === myUid;
-
-  // ════════════════════════════════════════
-  // RENDER
-  // ════════════════════════════════════════
-
-  // ── القائمة ──
-  if (phase === 'menu') return (
-    <View style={s.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <HowToPlayModal visible={showHow} onClose={() => setShowHow(false)} />
-      <Animated.View style={[s.header, { opacity: fadeAnim }]}>
-        <TouchableOpacity onPress={onBack} style={s.iconBtn}>
-          <Text style={s.iconBtnTxt}>←</Text>
-        </TouchableOpacity>
-        <View style={s.headerCenter}>
-          <Text style={{ fontSize: 28 }}>🎭</Text>
-          <Text style={s.headerTitle}>المافيا</Text>
-          <Text style={s.headerSub}>{MIN_PLAYERS}–{MAX_PLAYERS} لاعبين  •  {COST} 🪙 للاعب</Text>
-        </View>
-        <TouchableOpacity onPress={() => setShowHow(true)} style={s.iconBtn}>
-          <Text style={{ fontSize: 18 }}>ℹ️</Text>
-        </TouchableOpacity>
-      </Animated.View>
-
-      <Animated.View style={[s.menuBody, { opacity: fadeAnim }]}>
-        <View style={s.card}>
-          <Text style={s.cardLbl}>عدد اللاعبين المطلوب</Text>
-          <View style={s.countRow}>
-            <TouchableOpacity style={s.countBtn} onPress={() => setDesiredCount(c => Math.max(MIN_PLAYERS, c - 1))}>
-              <Text style={s.countBtnTxt}>−</Text>
-            </TouchableOpacity>
-            <Text style={s.countNum}>{desiredCount}</Text>
-            <TouchableOpacity style={s.countBtn} onPress={() => setDesiredCount(c => Math.min(MAX_PLAYERS, c + 1))}>
-              <Text style={s.countBtnTxt}>+</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={s.rolesPreview}>{getRolesPreview(desiredCount)}</Text>
+      <ScrollView contentContainerStyle={gs.setupScroll} showsVerticalScrollIndicator={false}>
+        {/* العنوان */}
+        <View style={gs.titleWrap}>
+          <Text style={gs.titleEmoji}>🕵️</Text>
+          <Text style={[gs.titleText, { color: theme.textPrimary }]}>المافيا</Text>
+          <Text style={[gs.titleSub, { color: theme.textSecondary }]}>لعبة الاستراتيجية والخداع</Text>
         </View>
 
-        <TouchableOpacity style={s.primaryBtn} onPress={createRoom} disabled={loading} activeOpacity={0.85}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryBtnTxt}>🎲 أنشئ غرفة  •  {COST} 🪙</Text>}
-        </TouchableOpacity>
-
-        <View style={s.joinRow}>
-          <TextInput
-            style={s.codeInput}
-            placeholder="كود الغرفة"
-            placeholderTextColor="#3a3a60"
-            value={codeInput}
-            onChangeText={t => setCodeInput(t.toUpperCase())}
-            autoCapitalize="characters"
-            maxLength={6}
-            textAlign="center"
-          />
-          <TouchableOpacity style={s.joinBtn} onPress={joinRoom} disabled={loading} activeOpacity={0.85}>
-            <Text style={s.joinBtnTxt}>انضم  •  {COST} 🪙</Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
-    </View>
-  );
-
-  // ── لوبي ──
-  if (phase === 'lobby') return (
-    <View style={s.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => { if (unsubRef.current) unsubRef.current(); doReset(); }} style={s.iconBtn}>
-          <Text style={s.iconBtnTxt}>←</Text>
-        </TouchableOpacity>
-        <View style={s.headerCenter}>
-          <Text style={{ fontSize: 22 }}>🎭</Text>
-          <Text style={s.headerTitle}>انتظار اللاعبين</Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <View style={s.codeBox}>
-        <Text style={s.codeLbl}>كود الغرفة</Text>
-        <Text style={s.codeBig}>{roomId}</Text>
-        <Text style={s.codeHint}>📲 شارك الكود مع أصدقائك</Text>
-      </View>
-      <Text style={s.rolesHint}>{getRolesPreview(roomData?.maxPlayers || desiredCount)}  عند {roomData?.maxPlayers} لاعبين</Text>
-
-      <ScrollView style={{ flex: 1, paddingHorizontal: 20 }}>
-        {roomData?.players.map(p => (
-          <View key={p.uid} style={s.playerRow}>
-            <Text style={s.playerName}>{p.name} {p.isHost ? '👑' : ''}</Text>
-            <Text style={s.playerStatus}>✅</Text>
-          </View>
-        ))}
-      </ScrollView>
-
-      <View style={s.lobbyFooter}>
-        <Text style={s.lobbyCnt}>{roomData?.players.length || 0} / {roomData?.maxPlayers || desiredCount} لاعبين</Text>
-        {isHost ? (
-          <TouchableOpacity
-            style={[s.primaryBtn, (roomData?.players.length || 0) < MIN_PLAYERS && s.primaryBtnOff]}
-            onPress={startGame} activeOpacity={0.85}
-          >
-            <Text style={s.primaryBtnTxt}>ابدأ اللعبة 🎭</Text>
-          </TouchableOpacity>
-        ) : (
-          <Text style={s.waitTxt}>في انتظار المضيف...</Text>
-        )}
-      </View>
-    </View>
-  );
-
-  // ── كشف الدور ──
-  if (phase === 'role') {
-    const r = ROLE_INFO[myRole] || ROLE_INFO.civilian;
-    return (
-      <View style={s.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-        <View style={s.roleWrap}>
-          {!roleRevealed ? (
-            <>
-              <Text style={s.roleRevTitle}>دورك السري 🤫</Text>
-              <Text style={s.roleRevHint}>اضغط للكشف — لا تريه لأحد!</Text>
-              <TouchableOpacity style={s.primaryBtn} onPress={() => setRoleRevealed(true)}>
-                <Text style={s.primaryBtnTxt}>اكشف دوري 👁️</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <Text style={{ fontSize: 80 }}>{r.emoji}</Text>
-              <Text style={[s.roleBigLbl, { color: r.color }]}>{r.label}</Text>
-              <Text style={s.roleDescTxt}>{r.desc}</Text>
-              {myRole === 'mafia' && roomData && (
-                <View style={s.mafiaBox}>
-                  <Text style={s.mafiaBoxTitle}>🔪 فريق المافيا</Text>
-                  {roomData.players.filter(p => p.role === 'mafia').map(p => (
-                    <Text key={p.uid} style={s.mafiaBoxMbr}>
-                      {p.uid === myUid ? `${p.name} (أنت)` : p.name}
-                    </Text>
-                  ))}
-                </View>
-              )}
-              <TouchableOpacity style={s.primaryBtn} onPress={confirmRole}>
-                <Text style={s.primaryBtnTxt}>فهمت ✅</Text>
-              </TouchableOpacity>
-              <Text style={s.waitSmall}>
-                {isHost ? 'سيبدأ الليل تلقائياً...' : 'في انتظار المضيف...'}
-              </Text>
-            </>
-          )}
-        </View>
-      </View>
-    );
-  }
-
-  // ── اللعبة ──
-  if (phase === 'game' && roomData) {
-    const isNight  = roomData.phase === 'night';
-    const isDay    = roomData.phase === 'day';
-    const myPlayer = roomData.players.find(p => p.uid === myUid);
-    const amAlive  = myPlayer?.isAlive;
-    const r        = ROLE_INFO[myRole] || ROLE_INFO.civilian;
-
-    return (
-      <KeyboardAvoidingView
-        style={s.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-
-        {/* هيدر اللعبة */}
-        <View style={s.gameHeader}>
-          <View style={[s.phaseBadge, { backgroundColor: isNight ? '#080820' : '#100a00' }]}>
-            <Text style={s.phaseText}>{isNight ? '🌙 ليل' : '☀️ نهار'} — جولة {roomData.round}</Text>
-          </View>
-          <View style={[s.roleBadge, { borderColor: r.color + '50' }]}>
-            <Text style={[s.roleBadgeTxt, { color: r.color }]}>{r.emoji} {r.label}</Text>
-          </View>
-        </View>
-
-        {/* عداد */}
-        {isDay && (
-          <CountdownBar
-            startedAt={roomData.dayStartedAt}
-            totalSeconds={DAY_SECONDS}
-            onEnd={() => { if (isHost) endDay(); }}
-          />
-        )}
-        {isNight && (
-          <CountdownBar
-            startedAt={roomData.nightStartedAt}
-            totalSeconds={NIGHT_SECS}
-            onEnd={async () => {
-              if (!isHost) return;
-              const sn = await getDoc(doc(db, 'mafia_rooms', roomId));
-              await resolveNight(sn.data(), sn.data().nightActions || {});
-            }}
-          />
-        )}
-
-        {/* حدث */}
-        {isDay && (
-          <View style={s.eventBox}>
-            {roomData.killedLastNight
-              ? <Text style={s.eventTxt}>🔪 قُتل ليلاً: <Text style={{ color: '#ef4444', fontWeight: '900' }}>{roomData.killedLastNight}</Text></Text>
-              : <Text style={s.eventTxt}>🛡️ لم يُقتل أحد الليلة!</Text>
-            }
-          </View>
-        )}
-        {isNight && roomData.ejectedToday && (
-          <View style={s.eventBox}>
-            <Text style={s.eventTxt}>
-              🗳️ طُرد: <Text style={{ color: '#f59e0b', fontWeight: '900' }}>{roomData.ejectedToday}</Text>
-              {roomData.ejectedRole ? ` (${ROLE_INFO[roomData.ejectedRole]?.label})` : ''}
-            </Text>
-          </View>
-        )}
-        {!amAlive && (
-          <View style={s.deadBanner}>
-            <Text style={s.deadTxt}>💀 أنت خارج اللعبة — متابع فقط</Text>
-          </View>
-        )}
-
-        {/* تابز */}
-        <View style={s.tabs}>
-          {[
-            { key: 'action', label: isNight ? '🌙 إجراء' : '🗳️ تصويت' },
-            { key: 'chat',   label: `💬 نقاش${isNight ? ' 🔒' : ''}` },
-            { key: 'players',label: '👥 لاعبون' },
-          ].map(t => (
-            <TouchableOpacity
-              key={t.key}
-              style={[s.tab, activeTab === t.key && s.tabActive]}
-              onPress={() => setActiveTab(t.key)}
-            >
-              <Text style={[s.tabTxt, activeTab === t.key && s.tabTxtActive]}>{t.label}</Text>
-            </TouchableOpacity>
+        {/* البطاقات الأدوار */}
+        <View style={gs.rolesRow}>
+          {Object.entries(ROLE_INFO).map(([key, info]) => (
+            <View key={key} style={[gs.roleChip, { backgroundColor: info.color + '18', borderColor: info.color + '50' }]}>
+              <Text style={{ fontSize: 20 }}>{info.emoji}</Text>
+              <Text style={{ color: info.color, fontSize: 11, fontWeight: '700', marginTop: 2 }}>{info.label}</Text>
+            </View>
           ))}
         </View>
 
-        {/* محتوى */}
-        {activeTab === 'action' && (
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
-            {isNight && amAlive && (
-              <>
-                {myRole === 'mafia' && (
-                  <View style={s.actionBox}>
-                    <Text style={s.actionTitle}>🔪 اختر من تقتل الليلة</Text>
-                    {alivePlayers(true).filter(p => p.role !== 'mafia').map(p => (
-                      <TouchableOpacity
-                        key={p.uid}
-                        style={[s.targetBtn, myNightAct === p.uid && s.targetSel]}
-                        onPress={() => submitNightAction(p.uid)}
-                      >
-                        <Text style={s.targetName}>{p.name}</Text>
-                        {myNightAct === p.uid && <Text>🎯</Text>}
-                      </TouchableOpacity>
-                    ))}
-                    {myNightAct && <Text style={s.doneTxt}>صوّتك سُجِّل ✅</Text>}
-                  </View>
-                )}
-                {myRole === 'doctor' && (
-                  <View style={s.actionBox}>
-                    <Text style={s.actionTitle}>💊 اختر من تحمي الليلة</Text>
-                    {alivePlayers().map(p => (
-                      <TouchableOpacity
-                        key={p.uid}
-                        style={[s.targetBtn, myNightAct === p.uid && s.targetSel]}
-                        onPress={() => !myNightAct && submitNightAction(p.uid)}
-                      >
-                        <Text style={s.targetName}>{p.name}{p.uid === myUid ? ' (أنت)' : ''}</Text>
-                        {myNightAct === p.uid && <Text>🛡️</Text>}
-                      </TouchableOpacity>
-                    ))}
-                    {myNightAct && <Text style={s.doneTxt}>اخترت ✅</Text>}
-                  </View>
-                )}
-                {myRole === 'detective' && (
-                  <View style={s.actionBox}>
-                    <Text style={s.actionTitle}>🔍 اختر من تحقق منه</Text>
-                    {alivePlayers(true).map(p => (
-                      <TouchableOpacity
-                        key={p.uid}
-                        style={[s.targetBtn, myNightAct === p.uid && s.targetSel]}
-                        onPress={() => !myNightAct && submitNightAction(p.uid)}
-                        disabled={!!myNightAct}
-                      >
-                        <Text style={s.targetName}>{p.name}</Text>
-                        {myNightAct === p.uid && <Text>🔍</Text>}
-                      </TouchableOpacity>
-                    ))}
-                    {nightResult && (
-                      <View style={s.detectBox}>
-                        <Text style={s.detectTxt}>{nightResult}</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-                {myRole === 'civilian' && (
-                  <View style={s.sleepBox}>
-                    <Text style={{ fontSize: 50 }}>😴</Text>
-                    <Text style={s.sleepTxt}>أنت مواطن — انتظر الصباح</Text>
-                  </View>
-                )}
-              </>
-            )}
-            {isNight && !amAlive && (
-              <View style={s.sleepBox}>
-                <Text style={{ fontSize: 50 }}>👁️</Text>
-                <Text style={s.sleepTxt}>أنت تراقب فقط</Text>
-              </View>
-            )}
-            {isDay && amAlive && (
-              <View style={s.actionBox}>
-                <Text style={s.actionTitle}>🗳️ صوّت لطرد المشتبه به</Text>
-                <Text style={s.actionSub}>يمكنك تغيير اختيارك حتى انتهاء الوقت</Text>
-                {alivePlayers(true).map(p => (
-                  <TouchableOpacity
-                    key={p.uid}
-                    style={[s.targetBtn, myVote === p.uid && s.targetSel]}
-                    onPress={() => submitVote(p.uid)}
-                  >
-                    <Text style={s.targetName}>{p.name}</Text>
-                    {myVote === p.uid && <Text style={s.myVoteTag}>صوتك ✓</Text>}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-            {isDay && !amAlive && (
-              <View style={s.sleepBox}>
-                <Text style={{ fontSize: 50 }}>👁️</Text>
-                <Text style={s.sleepTxt}>أنت تراقب التصويت</Text>
-              </View>
-            )}
-            {isHost && (
-              <TouchableOpacity style={s.hostBtn} onPress={isNight
-                ? async () => { const sn = await getDoc(doc(db,'mafia_rooms',roomId)); await resolveNight(sn.data(), sn.data().nightActions||{}); }
-                : endDay
-              }>
-                <Text style={s.hostBtnTxt}>⏭️ {isNight ? 'إنهاء الليل' : 'إنهاء التصويت'} (مضيف)</Text>
-              </TouchableOpacity>
-            )}
-          </ScrollView>
-        )}
-
-        {activeTab === 'chat' && (
-          <GameChat roomId={roomId} myUid={myUid} myName={myName} disabled={isNight} />
-        )}
-
-        {activeTab === 'players' && (
-          <ScrollView style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8 }}>
-            {roomData.players.map(p => {
-              const pr   = ROLE_INFO[p.role] || ROLE_INFO.civilian;
-              const isMe = p.uid === myUid;
-              return (
-                <View key={p.uid} style={[s.playerRow, !p.isAlive && { opacity: 0.35 }]}>
-                  <Text style={[s.playerName, !p.isAlive && { color: '#444' }]}>
-                    {p.name}{isMe ? ' (أنت)' : ''}
-                  </Text>
-                  <Text style={s.playerStatus}>
-                    {!p.isAlive ? `💀 ${pr.label}` : isMe ? `${pr.emoji} ${pr.label}` : '✅'}
-                  </Text>
-                </View>
-              );
-            })}
-          </ScrollView>
-        )}
-      </KeyboardAvoidingView>
-    );
-  }
-
-  // ── نهاية اللعبة ──
-  if (phase === 'ended' && roomData) {
-    const win    = roomData.winTeam;
-    const myTeam = myRole === 'mafia' ? 'mafia' : 'city';
-    const iWon   = myTeam === win;
-    return (
-      <View style={s.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-        <ScrollView contentContainerStyle={s.endWrap}>
-          <Text style={{ fontSize: 80 }}>{win === 'mafia' ? '🔪' : '🏙️'}</Text>
-          <Text style={s.endTitle}>{win === 'mafia' ? 'المافيا تنتصر!' : 'المدينة تنتصر!'}</Text>
-          <Text style={[s.endYou, { color: iWon ? '#22c55e' : '#ef4444' }]}>
-            {iWon ? '🏆 أنت من الفريق الفائز!' : '😔 خسرت هذه الجولة'}
+        {/* إنشاء غرفة */}
+        <View style={[gs.card, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+          <Text style={[gs.cardTitle, { color: theme.textPrimary }]}>إنشاء غرفة جديدة</Text>
+          <Text style={[gs.cardSub, { color: theme.textSecondary }]}>
+            شارك كود الغرفة مع أصدقائك ({MIN_PLAYERS}–{MAX_PLAYERS} لاعبين)
           </Text>
-          <Text style={s.endRolesTitle}>الأدوار الحقيقية</Text>
-          {roomData.players.map(p => {
-            const pr = ROLE_INFO[p.role] || ROLE_INFO.civilian;
-            return (
-              <View key={p.uid} style={s.endRow}>
-                <Text style={[s.endRole, { color: pr.color }]}>{pr.emoji} {pr.label}</Text>
-                <Text style={s.endName}>{p.name}{p.uid === myUid ? ' (أنت)' : ''}</Text>
-              </View>
-            );
-          })}
           <TouchableOpacity
-            style={[s.primaryBtn, { marginTop: 24, width: '100%' }]}
-            onPress={() => { if (unsubRef.current) unsubRef.current(); doReset(); }}
-            activeOpacity={0.85}
+            style={[gs.btnPrimary, { backgroundColor: theme.accent }]}
+            onPress={onCreate} disabled={loading} activeOpacity={0.85}
           >
-            <Text style={s.primaryBtnTxt}>🏠 العودة للقائمة</Text>
+            {loading
+              ? <ActivityIndicator color={theme.textOnAccent} />
+              : <Text style={[gs.btnText, { color: theme.textOnAccent }]}>إنشاء غرفة ✦</Text>
+            }
           </TouchableOpacity>
-        </ScrollView>
-      </View>
-    );
-  }
+        </View>
 
-  return (
-    <View style={s.container}>
-      <ActivityIndicator color="#a855f7" size="large" style={{ marginTop: 120 }} />
+        {/* انضمام بكود */}
+        <View style={[gs.card, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+          <Text style={[gs.cardTitle, { color: theme.textPrimary }]}>الانضمام بكود</Text>
+          <TextInput
+            style={[gs.codeInput, { backgroundColor: theme.bgInput, color: theme.textPrimary, borderColor: theme.borderCard }]}
+            placeholder="أدخل كود الغرفة"
+            placeholderTextColor={theme.textMuted}
+            value={joinCode}
+            onChangeText={t => setJoinCode(t.toUpperCase())}
+            maxLength={6}
+            autoCapitalize="characters"
+            textAlign="center"
+          />
+          <TouchableOpacity
+            style={[gs.btnSecondary, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
+            onPress={onJoin} disabled={loading} activeOpacity={0.85}
+          >
+            <Text style={[gs.btnText, { color: theme.textPrimary }]}>انضمام</Text>
+          </TouchableOpacity>
+        </View>
+
+        {error ? <Text style={gs.errorText}>{error}</Text> : null}
+      </ScrollView>
     </View>
   );
 }
 
-// ══════════════════════════════════════
-// الستايلات
-// ══════════════════════════════════════
-const s = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: '#06061a' },
-  header:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 52, paddingBottom: 12 },
-  headerCenter:   { alignItems: 'center', gap: 2 },
-  headerTitle:    { color: '#a855f7', fontSize: 17, fontWeight: '900' },
-  headerSub:      { color: '#5050a0', fontSize: 12 },
-  iconBtn:        { width: 40, height: 40, borderRadius: 12, backgroundColor: '#0f0f2e', borderWidth: 1, borderColor: '#a855f730', alignItems: 'center', justifyContent: 'center' },
-  iconBtnTxt:     { color: '#a855f7', fontSize: 18, fontWeight: '700' },
-  menuBody:       { flex: 1, paddingHorizontal: 20, paddingTop: 10, gap: 14 },
-  card:           { backgroundColor: '#0f0f2e', borderRadius: 18, borderWidth: 1, borderColor: '#ffffff10', padding: 18, alignItems: 'center', gap: 10 },
-  cardLbl:        { color: '#a0a0c0', fontSize: 14, fontWeight: '700' },
-  countRow:       { flexDirection: 'row', alignItems: 'center', gap: 20 },
-  countBtn:       { width: 44, height: 44, borderRadius: 12, backgroundColor: '#1a1a3e', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#a855f740' },
-  countBtnTxt:    { color: '#a855f7', fontSize: 24, fontWeight: '900' },
-  countNum:       { color: '#fff', fontSize: 38, fontWeight: '900', minWidth: 52, textAlign: 'center' },
-  rolesPreview:   { color: '#5050a0', fontSize: 12 },
-  primaryBtn:     { backgroundColor: '#a855f7', borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
-  primaryBtnOff:  { backgroundColor: '#2a2a45' },
-  primaryBtnTxt:  { color: '#fff', fontSize: 17, fontWeight: '900' },
-  joinRow:        { flexDirection: 'row', gap: 10 },
-  codeInput:      { flex: 1, backgroundColor: '#0f0f2e', borderRadius: 14, borderWidth: 1, borderColor: '#ffffff15', color: '#e0e0ff', fontSize: 18, fontWeight: '800', paddingVertical: 14, letterSpacing: 4, textAlign: 'center' },
-  joinBtn:        { backgroundColor: '#1a1a3e', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 14, borderWidth: 1, borderColor: '#a855f740', justifyContent: 'center' },
-  joinBtnTxt:     { color: '#a855f7', fontSize: 13, fontWeight: '800' },
-  codeBox:        { backgroundColor: '#0f0f2e', margin: 20, borderRadius: 18, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#a855f720' },
-  codeLbl:        { color: '#7070a0', fontSize: 13, marginBottom: 4 },
-  codeBig:        { color: '#a855f7', fontSize: 44, fontWeight: '900', letterSpacing: 6 },
-  codeHint:       { color: '#505070', fontSize: 12, marginTop: 4 },
-  rolesHint:      { color: '#5050a0', fontSize: 12, textAlign: 'center', marginBottom: 8 },
-  playerRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#ffffff08' },
-  playerName:     { color: '#e0e0ff', fontSize: 15, fontWeight: '700' },
-  playerStatus:   { color: '#6060a0', fontSize: 13 },
-  lobbyFooter:    { padding: 20, gap: 10 },
-  lobbyCnt:       { color: '#7070a0', fontSize: 13, textAlign: 'center' },
-  waitTxt:        { color: '#5050a0', fontSize: 13, textAlign: 'center' },
-  roleWrap:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30, gap: 16 },
-  roleRevTitle:   { color: '#a855f7', fontSize: 24, fontWeight: '900' },
-  roleRevHint:    { color: '#6060a0', fontSize: 14, textAlign: 'center' },
-  roleBigLbl:     { fontSize: 34, fontWeight: '900' },
-  roleDescTxt:    { color: '#8080a0', fontSize: 14, textAlign: 'center', lineHeight: 22 },
-  mafiaBox:       { backgroundColor: '#1a0a0a', borderRadius: 14, padding: 14, width: '100%', borderWidth: 1, borderColor: '#ef444430', alignItems: 'center', gap: 4 },
-  mafiaBoxTitle:  { color: '#ef4444', fontSize: 14, fontWeight: '800' },
-  mafiaBoxMbr:    { color: '#ffaaaa', fontSize: 14 },
-  waitSmall:      { color: '#404060', fontSize: 12, textAlign: 'center' },
-  gameHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 4 },
-  phaseBadge:     { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#ffffff10' },
-  phaseText:      { color: '#e0e0ff', fontSize: 13, fontWeight: '800' },
-  roleBadge:      { borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6 },
-  roleBadgeTxt:   { fontSize: 12, fontWeight: '800' },
-  eventBox:       { marginHorizontal: 16, marginVertical: 4, backgroundColor: '#0f0f2e', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#ffffff10' },
-  eventTxt:       { color: '#e0e0ff', fontSize: 14, textAlign: 'center', fontWeight: '700' },
-  deadBanner:     { marginHorizontal: 16, marginVertical: 4, backgroundColor: '#1a0a0a', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#ef444430' },
-  deadTxt:        { color: '#ef4444', fontSize: 13, textAlign: 'center' },
-  tabs:           { flexDirection: 'row', marginHorizontal: 16, marginTop: 6, borderRadius: 12, backgroundColor: '#0f0f2e', padding: 4, gap: 2 },
-  tab:            { flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center' },
-  tabActive:      { backgroundColor: '#a855f715', borderWidth: 1, borderColor: '#a855f740' },
-  tabTxt:         { color: '#5050a0', fontSize: 11, fontWeight: '700' },
-  tabTxtActive:   { color: '#a855f7' },
-  actionBox:      { backgroundColor: '#0f0f2e', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#ffffff10', gap: 10 },
-  actionTitle:    { color: '#a855f7', fontSize: 15, fontWeight: '800', textAlign: 'center' },
-  actionSub:      { color: '#5050a0', fontSize: 12, textAlign: 'center', marginTop: -4 },
-  targetBtn:      { backgroundColor: '#1a1a3e', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#ffffff10' },
-  targetSel:      { borderColor: '#a855f7', backgroundColor: '#1a0a2e' },
-  targetName:     { color: '#e0e0ff', fontSize: 15, fontWeight: '700' },
-  myVoteTag:      { color: '#a855f7', fontSize: 12, fontWeight: '800' },
-  doneTxt:        { color: '#22c55e', fontSize: 13, textAlign: 'center', fontWeight: '700' },
-  detectBox:      { backgroundColor: '#0a0a2e', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#3b82f640' },
-  detectTxt:      { color: '#93c5fd', fontSize: 15, fontWeight: '800', textAlign: 'center' },
-  sleepBox:       { alignItems: 'center', paddingVertical: 30, gap: 12 },
-  sleepTxt:       { color: '#5050a0', fontSize: 14 },
-  hostBtn:        { marginTop: 14, backgroundColor: '#1a1a3e', borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: '#a855f730' },
-  hostBtnTxt:     { color: '#a855f7', fontSize: 13, fontWeight: '700' },
-  endWrap:        { alignItems: 'center', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40, gap: 10 },
-  endTitle:       { color: '#a855f7', fontSize: 28, fontWeight: '900' },
-  endYou:         { fontSize: 17, fontWeight: '800' },
-  endRolesTitle:  { color: '#7070a0', fontSize: 14, fontWeight: '700', marginTop: 14, marginBottom: 4 },
-  endRow:         { flexDirection: 'row', justifyContent: 'space-between', width: '100%', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#ffffff08' },
-  endName:        { color: '#e0e0ff', fontSize: 14 },
-  endRole:        { fontSize: 13, fontWeight: '700' },
+// ═══════════════════════════════════════════
+//  شاشة اللوبي
+// ═══════════════════════════════════════════
+function LobbyScreen({ theme, roomCode, roomData, isCreator, myUid, minPlayers, maxPlayers,
+  onStart, onLeave, showLeave, onCancelLeave, onConfirmLeave }) {
+  const players = roomData?.players || [];
+  const canStart = players.length >= minPlayers;
+
+  const copyCode = () => {
+    Clipboard.setString(roomCode);
+  };
+
+  return (
+    <View style={[gs.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} />
+
+      <View style={gs.exitBtnRow}>
+        <TouchableOpacity style={[gs.exitBtn, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
+          onPress={onLeave}>
+          <Text style={{ fontSize: 18 }}>✕</Text>
+        </TouchableOpacity>
+        <GameInfoButton gameType="mafia" lang={lang} />
+        <WebScreenButton
+          playerUid={myUid}
+          playerName={myName}
+          gameType="mafia"
+          gameRoomId={roomId || ''}
+          getPublicData={() => ({ phase: 'lobby', playersCount: roomData?.players?.length || 0 })}
+          themeName={themeId || 'dark'}
+        />
+      </View>
+
+      <ScrollView contentContainerStyle={gs.lobbyScroll} showsVerticalScrollIndicator={false}>
+
+        <Text style={[gs.lobbyTitle, { color: theme.textPrimary }]}>صالة الانتظار</Text>
+        <Text style={[gs.lobbyGame, { color: theme.textSecondary }]}>🕵️ المافيا</Text>
+
+        {/* كود الغرفة */}
+        <TouchableOpacity
+          style={[gs.codeBox, { backgroundColor: theme.bgCard, borderColor: theme.accent + '60' }]}
+          onPress={copyCode} activeOpacity={0.8}
+        >
+          <Text style={[gs.codeLabel, { color: theme.textSecondary }]}>كود الغرفة</Text>
+          <Text style={[gs.codeValue, { color: theme.accent }]}>{roomCode}</Text>
+          <Text style={[gs.codeCopy, { color: theme.textMuted }]}>اضغط للنسخ 📋</Text>
+        </TouchableOpacity>
+
+        {/* قائمة اللاعبين */}
+        <View style={[gs.playerListCard, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+          <Text style={[gs.sectionTitle, { color: theme.textSecondary }]}>
+            اللاعبون ({players.length}/{maxPlayers})
+          </Text>
+          {players.map((p, i) => (
+            <View key={p.uid} style={[gs.lobbyPlayerRow, { borderBottomColor: theme.divider }]}>
+              <View style={[gs.lobbyAvatar, { backgroundColor: theme.bgElevated }]}>
+                <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 15 }}>
+                  {p.name?.slice(0, 2)}
+                </Text>
+              </View>
+              <Text style={[gs.lobbyPlayerName, { color: theme.textPrimary }]}>{p.name}</Text>
+              {p.uid === myUid && (
+                <View style={[gs.youBadge, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
+                  <Text style={{ color: theme.accent, fontSize: 10, fontWeight: '700' }}>أنت</Text>
+                </View>
+              )}
+              {roomData?.creatorUid === p.uid && (
+                <View style={[gs.creatorBadge, { backgroundColor: '#f5c51820', borderColor: '#f5c51840' }]}>
+                  <Text style={{ color: theme.accent, fontSize: 10, fontWeight: '700' }}>👑 منشئ</Text>
+                </View>
+              )}
+            </View>
+          ))}
+          {players.length < minPlayers && (
+            <Text style={[gs.waitingText, { color: theme.textMuted }]}>
+              في انتظار {minPlayers - players.length} لاعبين على الأقل...
+            </Text>
+          )}
+        </View>
+
+        {isCreator && (
+          <TouchableOpacity
+            style={[
+              gs.btnPrimary,
+              {
+                backgroundColor: canStart ? theme.accent : theme.bgElevated,
+                borderWidth: 1,
+                borderColor: canStart ? theme.accent : theme.borderCard,
+                marginTop: 8,
+              }
+            ]}
+            onPress={onStart}
+            disabled={!canStart}
+            activeOpacity={0.85}
+          >
+            <Text style={[gs.btnText, { color: canStart ? theme.textOnAccent : theme.textMuted }]}>
+              {canStart ? 'بدء اللعبة ▶' : `يحتاج ${minPlayers} لاعبين على الأقل`}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {!isCreator && (
+          <Text style={[gs.waitingText, { color: theme.textMuted, marginTop: 16, textAlign: 'center' }]}>
+            في انتظار المنشئ لبدء اللعبة...
+          </Text>
+        )}
+      </ScrollView>
+
+      <LeaveModal visible={showLeave} onCancel={onCancelLeave} onConfirm={onConfirmLeave}
+        message="هل تريد مغادرة الغرفة؟" />
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════
+//  الكشف عن الدور
+// ═══════════════════════════════════════════
+function RoleRevealPhase({ theme, myRole, timerVal, total }) {
+  const info = myRole ? ROLE_INFO[myRole] : ROLE_INFO.citizen;
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(scaleAnim, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }).start();
+  }, []);
+
+  return (
+    <View style={[gs.phaseContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+      <Text style={[gs.phaseLabel, { color: theme.textSecondary }]}>دورك هذه الجولة</Text>
+      <Text style={{ color: theme.textMuted, fontSize: 12, marginBottom: 24 }}>
+        لا تُظهر هاتفك لأي شخص!
+      </Text>
+      <Animated.View style={[
+        gs.roleRevealCard,
+        {
+          backgroundColor: info.color + '15',
+          borderColor: info.color + '60',
+          transform: [{ scale: scaleAnim }]
+        }
+      ]}>
+        <Text style={gs.roleRevealEmoji}>{info.emoji}</Text>
+        <Text style={[gs.roleRevealName, { color: info.color }]}>{info.label}</Text>
+        <Text style={[gs.roleRevealDesc, { color: theme.textSecondary }]}>{info.desc}</Text>
+      </Animated.View>
+      <View style={{ marginTop: 32 }}>
+        <CircleTimer total={total} remaining={timerVal} color={info.color} theme={theme} />
+        <Text style={[gs.timerLabel, { color: theme.textMuted }]}>تبقى حتى انتهاء العرض</Text>
+      </View>
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════
+//  مرحلة النهار
+// ═══════════════════════════════════════════
+function DayPhase({ theme, roomData, myUid, myRole, myPlayer, myVote, voteSubmitted,
+  timerVal, total, onVote, isCreator, onForceAdvance }) {
+  const info = myRole ? ROLE_INFO[myRole] : ROLE_INFO.citizen;
+  const alivePlayers = (roomData.players || []).filter(p => p.alive);
+  const votesCount = Object.keys(roomData.votes || {}).length;
+
+  // الاختيار المؤقت قبل التأكيد
+  const [pendingVote, setPendingVote] = useState(null); // uid | 'postpone'
+
+  const handleSelect = (uid) => {
+    if (voteSubmitted) return;
+    setPendingVote(uid);
+  };
+
+  const handleConfirm = () => {
+    if (!pendingVote || voteSubmitted) return;
+    onVote(pendingVote); // 'postpone' أو uid
+  };
+
+  const pendingPlayer = pendingVote && pendingVote !== 'postpone'
+    ? roomData.players?.find(p => p.uid === pendingVote)
+    : null;
+
+  return (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={gs.phaseScroll} showsVerticalScrollIndicator={false}>
+      {/* هيدر */}
+      <View style={gs.dayHeader}>
+        <View style={[gs.roundBadge, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
+          <Text style={{ color: theme.accent, fontWeight: '700' }}>الجولة {roomData.round}</Text>
+        </View>
+        <CircleTimer total={total} remaining={timerVal} color="#f59e0b" theme={theme} />
+      </View>
+
+      <Text style={[gs.phaseLabel, { color: '#f59e0b' }]}>☀️ النهار — وقت النقاش</Text>
+      <Text style={[gs.phaseSub, { color: theme.textSecondary }]}>
+        من الذي تختار لطرده من المدينة؟ ({votesCount}/{alivePlayers.length} صوّتوا)
+      </Text>
+
+      {/* دوري */}
+      <View style={[gs.myRoleStrip, { backgroundColor: info.color + '12', borderColor: info.color + '40' }]}>
+        <Text style={{ fontSize: 16 }}>{info.emoji}</Text>
+        <Text style={[gs.myRoleText, { color: info.color }]}>أنت: {info.label}</Text>
+      </View>
+
+      {!myPlayer?.alive && (
+        <View style={[gs.deadBanner, { backgroundColor: '#ef444420', borderColor: '#ef444450' }]}>
+          <Text style={{ color: '#ef4444', fontWeight: '700' }}>💀 أنت مقصى — يمكنك المشاهدة فقط</Text>
+        </View>
+      )}
+
+      {myPlayer?.alive && !voteSubmitted && (
+        <>
+          {/* اللاعبون */}
+          <Text style={[gs.sectionTitle, { color: theme.textSecondary, marginTop: 16 }]}>اختر اللاعب</Text>
+          <View style={gs.playersGrid}>
+            {(roomData.players || []).map(p => {
+              const isMe = p.uid === myUid;
+              if (!p.alive || isMe) return null;
+              return (
+                <PlayerAvatar
+                  key={p.uid}
+                  name={p.name}
+                  isEliminated={false}
+                  isSelected={pendingVote === p.uid}
+                  theme={theme}
+                  size={52}
+                  onPress={() => handleSelect(p.uid)}
+                />
+              );
+            })}
+          </View>
+
+          {/* خيار التأجيل */}
+          <TouchableOpacity
+            style={[
+              gs.postponeBtn,
+              {
+                backgroundColor: pendingVote === 'postpone'
+                  ? theme.bgElevated
+                  : theme.bgCard,
+                borderColor: pendingVote === 'postpone'
+                  ? theme.accent
+                  : theme.borderCard,
+                borderWidth: pendingVote === 'postpone' ? 2 : 1,
+              }
+            ]}
+            onPress={() => handleSelect('postpone')}
+            activeOpacity={0.8}
+          >
+            <Text style={{ fontSize: 20 }}>🕊️</Text>
+            <Text style={[gs.postponeText, { color: pendingVote === 'postpone' ? theme.accent : theme.textSecondary }]}>
+              تأجيل التصويت للغد
+            </Text>
+          </TouchableOpacity>
+
+          {/* زر التأكيد */}
+          {pendingVote && (
+            <TouchableOpacity
+              style={[gs.confirmVoteBtn, { backgroundColor: '#f59e0b' }]}
+              onPress={handleConfirm}
+              activeOpacity={0.85}
+            >
+              <Text style={[gs.confirmVoteBtnText, { color: theme.textOnAccent }]}>
+                {pendingVote === 'postpone'
+                  ? '✓ تأكيد التأجيل'
+                  : `✓ طرد ${pendingPlayer?.name}`
+                }
+              </Text>
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+
+      {/* لاعبون مقصيون — للعرض فقط */}
+      {(roomData.players || []).filter(p => !p.alive).length > 0 && (
+        <View style={gs.eliminatedRow}>
+          {(roomData.players || []).filter(p => !p.alive).map(p => (
+            <PlayerAvatar
+              key={p.uid}
+              name={p.name}
+              isEliminated
+              theme={theme}
+              size={40}
+            />
+          ))}
+        </View>
+      )}
+
+      {voteSubmitted && (
+        <Text style={[gs.submittedText, { color: theme.success }]}>
+          ✓ تم تسجيل صوتك
+        </Text>
+      )}
+
+      {isCreator && (
+        <TouchableOpacity
+          style={[gs.btnSecondary, { borderColor: theme.borderCard, marginTop: 8 }]}
+          onPress={onForceAdvance}
+        >
+          <Text style={{ color: theme.textSecondary, fontSize: 13 }}>⏩ إنهاء التصويت مبكرًا</Text>
+        </TouchableOpacity>
+      )}
+    </ScrollView>
+  );
+}
+
+// ═══════════════════════════════════════════
+//  نتيجة التصويت
+// ═══════════════════════════════════════════
+function VotingResultPhase({ theme, roomData, myUid }) {
+  const tally = {};
+  Object.values(roomData.votes || {}).forEach(uid => {
+    tally[uid] = (tally[uid] || 0) + 1;
+  });
+  let maxVotes = 0, eliminated = null;
+  Object.entries(tally).forEach(([uid, count]) => {
+    if (count > maxVotes) { maxVotes = count; eliminated = uid; }
+  });
+  const eliminatedPlayer = roomData.players?.find(p => p.uid === eliminated);
+
+  return (
+    <View style={[gs.phaseContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+      <Text style={[gs.phaseLabel, { color: theme.textPrimary }]}>نتيجة التصويت</Text>
+      {eliminatedPlayer ? (
+        <>
+          <Text style={{ fontSize: 64, marginVertical: 16 }}>💀</Text>
+          <Text style={[gs.resultName, { color: '#ef4444' }]}>{eliminatedPlayer.name}</Text>
+          <Text style={[gs.resultSub, { color: theme.textSecondary }]}>تم طرده بـ {maxVotes} أصوات</Text>
+        </>
+      ) : (
+        <>
+          <Text style={{ fontSize: 64, marginVertical: 16 }}>🤷</Text>
+          <Text style={[gs.resultSub, { color: theme.textSecondary }]}>لم يحصل أحد على أغلبية الأصوات</Text>
+        </>
+      )}
+      <ActivityIndicator color={theme.accent} style={{ marginTop: 24 }} />
+      <Text style={[gs.timerLabel, { color: theme.textMuted }]}>جاري الانتقال للليل...</Text>
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════
+//  مرحلة الليل
+// ═══════════════════════════════════════════
+function NightPhase({ theme, roomData, myUid, myRole, myPlayer, myAction, actionSubmitted,
+  timerVal, total, onAction, isCreator, onForceResolve }) {
+  const info = myRole ? ROLE_INFO[myRole] : ROLE_INFO.citizen;
+  const isCitizen = myRole === 'citizen' || !myRole;
+  const alivePlayers = (roomData.players || []).filter(p => p.alive);
+
+  // الاختيار المؤقت قبل التأكيد
+  const [pendingAction, setPendingAction] = useState(null);
+
+  const pendingPlayer = pendingAction
+    ? alivePlayers.find(p => p.uid === pendingAction)
+    : null;
+
+  const nightPrompt = {
+    mafia:      'من تختار لإزالته هذه الليلة؟ 🔪',
+    detective:  'من تريد التحقيق معه الليلة؟ 🔍',
+    doctor:     'من تريد حمايته من غدر المافيا؟ 💉',
+    citizen:    '',
+  };
+
+  // رسالة التأكيد المخصصة
+  const confirmMessage = () => {
+    if (!pendingPlayer) return '';
+    if (myRole === 'mafia')
+      return `لقد اخترت الذهاب إلى ${pendingPlayer.name} لقتله هذه الليلة 🔪`;
+    if (myRole === 'doctor')
+      return `لقد اخترت حماية ${pendingPlayer.name} من غدر المافيا 💚`;
+    if (myRole === 'detective')
+      return `لقد اخترت التحقيق مع ${pendingPlayer.name} 🔍`;
+    return '';
+  };
+
+  // رسالة بعد التأكيد (actionSubmitted)
+  const submittedMessage = () => {
+    if (!myAction) return '';
+    const target = alivePlayers.find(p => p.uid === myAction)
+      || roomData.players?.find(p => p.uid === myAction);
+    if (!target) return '';
+    if (myRole === 'mafia')
+      return `أرسلت المافيا إلى ${target.name}... انتظر نتيجة الليلة 🌑`;
+    if (myRole === 'doctor')
+      return `ستحرس ${target.name} طوال الليل 💚`;
+    if (myRole === 'detective')
+      return `جارٍ التحقيق مع ${target.name}... ستعرف النتيجة عند الفجر 🔍`;
+    return '';
+  };
+
+  return (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={gs.phaseScroll} showsVerticalScrollIndicator={false}>
+      <View style={gs.dayHeader}>
+        <View style={[gs.roundBadge, { backgroundColor: '#3b82f620', borderColor: '#3b82f640' }]}>
+          <Text style={{ color: theme.textPrimary, fontWeight: '700' }}>الجولة {roomData.round}</Text>
+        </View>
+        <CircleTimer total={total} remaining={timerVal} color="#6366f1" theme={theme} />
+      </View>
+
+      <Text style={[gs.phaseLabel, { color: theme.accent }]}>🌙 الليل — الجميع ينام</Text>
+
+      {/* دور الشخص — إيموجي كبير وسط الشاشة */}
+      <View style={[gs.nightRoleCard, { backgroundColor: info.color + '10', borderColor: info.color + '40' }]}>
+        <Text style={gs.nightRoleEmoji}>{info.emoji}</Text>
+        <Text style={[gs.nightRoleLabel, { color: info.color }]}>{info.label}</Text>
+      </View>
+
+      {!myPlayer?.alive ? (
+        <View style={[gs.deadBanner, { backgroundColor: '#ef444420', borderColor: '#ef444450' }]}>
+          <Text style={{ color: '#ef4444', fontWeight: '700' }}>💀 أنت مقصى — في انتظار انتهاء الليل</Text>
+        </View>
+      ) : isCitizen ? (
+        <View style={[gs.citizenNightBanner, { backgroundColor: '#6366f110', borderColor: '#6366f130' }]}>
+          <Text style={{ fontSize: 36, textAlign: 'center' }}>😴</Text>
+          <Text style={{ color: theme.textSecondary, textAlign: 'center', fontWeight: '600', marginTop: 8, fontSize: 14 }}>
+            المواطنون ينامون هذه الليلة...{'\n'}انتظر حتى يحلّ الصباح
+          </Text>
+        </View>
+      ) : actionSubmitted ? (
+        /* رسالة بعد التأكيد */
+        <View style={[gs.submittedBanner, { backgroundColor: info.color + '12', borderColor: info.color + '40' }]}>
+          <Text style={{ color: info.color, fontWeight: '700', fontSize: 14, textAlign: 'center', lineHeight: 22 }}>
+            {submittedMessage()}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <Text style={[gs.phaseSub, { color: theme.textSecondary, marginTop: 4 }]}>
+            {nightPrompt[myRole]}
+          </Text>
+
+          {/* شبكة اللاعبين بإيموجي مكبّر */}
+          <View style={gs.nightPlayersGrid}>
+            {alivePlayers
+              .filter(p => {
+                if (myRole === 'mafia')     return p.uid !== myUid;
+                if (myRole === 'detective') return p.uid !== myUid;
+                if (myRole === 'doctor')   return true;
+                return false;
+              })
+              .map(p => {
+                const isSelected = pendingAction === p.uid;
+                return (
+                  <TouchableOpacity
+                    key={p.uid}
+                    onPress={() => setPendingAction(p.uid)}
+                    activeOpacity={0.75}
+                    style={[
+                      gs.nightPlayerTile,
+                      {
+                        backgroundColor: isSelected ? info.color + '20' : theme.bgCard,
+                        borderColor: isSelected ? info.color : theme.borderCard,
+                        borderWidth: isSelected ? 2.5 : 1,
+                      }
+                    ]}
+                  >
+                    <Text style={gs.nightPlayerEmoji}>🎭</Text>
+                    <Text style={[gs.nightPlayerName, { color: theme.textPrimary }]}>{p.name}</Text>
+                    {isSelected && (
+                      <View style={[gs.nightSelectCheck, { backgroundColor: info.color }]}>
+                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>✓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            }
+          </View>
+
+          {/* رسالة التأكيد المعلّقة */}
+          {pendingAction && (
+            <View style={[gs.pendingConfirmBox, { backgroundColor: info.color + '10', borderColor: info.color + '30' }]}>
+              <Text style={[gs.pendingConfirmText, { color: info.color }]}>
+                {confirmMessage()}
+              </Text>
+              <TouchableOpacity
+                style={[gs.confirmNightBtn, { backgroundColor: info.color }]}
+                onPress={() => { onAction(pendingAction); }}
+                activeOpacity={0.85}
+              >
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>تأكيد الاختيار ✓</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
+      )}
+
+      {isCreator && (
+        <TouchableOpacity
+          style={[gs.btnSecondary, { borderColor: theme.borderCard, marginTop: 12 }]}
+          onPress={onForceResolve}
+        >
+          <Text style={{ color: theme.textSecondary, fontSize: 13 }}>⏩ إنهاء الليل مبكرًا</Text>
+        </TouchableOpacity>
+      )}
+    </ScrollView>
+  );
+}
+
+// ═══════════════════════════════════════════
+//  نتيجة الليل
+// ═══════════════════════════════════════════
+function NightResultPhase({ theme, roomData, myUid }) {
+  const msg = roomData.nightResult || 'مرّت الليلة بسلام';
+  const wasKilled = msg.includes('اغتيال');
+  const myRole = roomData.roles?.[myUid];
+  const detectiveReveal = roomData.detectiveReveal;
+  const isMyDetectiveReveal = detectiveReveal && detectiveReveal.uid === myUid;
+
+  const targetPlayer = isMyDetectiveReveal
+    ? roomData.players?.find(p => {
+        // نحتاج uid الهدف — نحفظه في detectiveReveal
+        return p.uid === detectiveReveal.targetUid;
+      })
+    : null;
+  const isGuilty = detectiveReveal?.targetRole === 'mafia';
+
+  return (
+    <View style={[gs.phaseContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+      <Text style={[gs.phaseLabel, { color: theme.textPrimary }]}>انتهت الليلة</Text>
+      <Text style={{ fontSize: 64, marginVertical: 16 }}>{wasKilled ? '🔪' : '🌅'}</Text>
+      <Text style={[gs.resultName, { color: wasKilled ? '#ef4444' : theme.success }]}>{msg}</Text>
+
+      {isMyDetectiveReveal && (
+        <View style={[gs.detectiveBanner, { backgroundColor: '#3b82f620', borderColor: '#3b82f650' }]}>
+          <Text style={{ color: theme.textPrimary, fontSize: 14, fontWeight: '800', marginBottom: 8 }}>
+            🔵 نتيجة التحقيق
+          </Text>
+          {isGuilty ? (
+            <Text style={{ color: theme.textSecondary, fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 24 }}>
+              {targetPlayer?.name || 'الهدف'} هو القاتل 🔴
+            </Text>
+          ) : (
+            <Text style={{ color: theme.success, fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 24 }}>
+              {targetPlayer?.name || 'الهدف'} ليس قاتلاً ✅
+            </Text>
+          )}
+        </View>
+      )}
+
+      <ActivityIndicator color={theme.accent} style={{ marginTop: 24 }} />
+      <Text style={[gs.timerLabel, { color: theme.textMuted }]}>جاري الانتقال للنهار...</Text>
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════
+//  شاشة انتهاء اللعبة
+// ═══════════════════════════════════════════
+function FinishedPhase({ theme, roomData, myUid, myRole, onLeave }) {
+  const winner = roomData.winner;
+  const isMafiaWin = winner === 'mafia';
+  const myRoleInfo = myRole ? ROLE_INFO[myRole] : ROLE_INFO.citizen;
+  const myTeamWon = (isMafiaWin && myRole === 'mafia') || (!isMafiaWin && myRole !== 'mafia');
+
+  const allPlayers = roomData.players || [];
+  const roles = roomData.roles || {};
+
+  return (
+    <ScrollView contentContainerStyle={[gs.phaseScroll, { alignItems: 'center' }]} showsVerticalScrollIndicator={false}>
+      {/* النتيجة الرئيسية */}
+      <Text style={{ fontSize: 72, marginTop: 32 }}>{myTeamWon ? '🏆' : '😞'}</Text>
+      <Text style={[gs.phaseLabel, { color: myTeamWon ? theme.accent : '#ef4444', fontSize: 26 }]}>
+        {myTeamWon ? 'فزت!' : 'خسرت!'}
+      </Text>
+      <View style={[gs.winnerBanner, {
+        backgroundColor: isMafiaWin ? '#ef444418' : '#22c55e18',
+        borderColor: isMafiaWin ? '#ef444450' : '#22c55e50',
+      }]}>
+        <Text style={{ fontSize: 32 }}>{isMafiaWin ? '🔴' : '⚪'}</Text>
+        <Text style={[gs.winnerText, { color: isMafiaWin ? '#ef4444' : '#22c55e' }]}>
+          {isMafiaWin ? 'المافيا انتصرت!' : 'المواطنون انتصروا!'}
+        </Text>
+      </View>
+
+      {/* كشف أدوار الجميع */}
+      <Text style={[gs.sectionTitle, { color: theme.textSecondary, marginTop: 24 }]}>كشف الأدوار</Text>
+      <View style={gs.rolesRevealGrid}>
+        {allPlayers.map(p => {
+          const role = roles[p.uid];
+          const info = role ? ROLE_INFO[role] : ROLE_INFO.citizen;
+          return (
+            <View key={p.uid} style={[
+              gs.rolesRevealCard,
+              {
+                backgroundColor: info.color + '12',
+                borderColor: info.color + '40',
+              }
+            ]}>
+              <Text style={{ fontSize: 24 }}>{info.emoji}</Text>
+              <Text style={[gs.rolesRevealName, { color: theme.textPrimary }]}>{p.name}</Text>
+              <Text style={[gs.rolesRevealRole, { color: info.color }]}>{info.label}</Text>
+              {!p.alive && <Text style={{ color: '#ef4444', fontSize: 11 }}>💀 مقصى</Text>}
+              {p.uid === myUid && <Text style={{ color: theme.accent, fontSize: 10, fontWeight: '700' }}>أنت</Text>}
+            </View>
+          );
+        })}
+      </View>
+
+      <TouchableOpacity
+        style={[gs.btnPrimary, { backgroundColor: theme.accent, marginTop: 24, marginBottom: 40 }]}
+        onPress={onLeave}
+        activeOpacity={0.85}
+      >
+        <Text style={[gs.btnText, { color: theme.textOnAccent }]}>العودة للقائمة</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
+// ═══════════════════════════════════════════
+//  الستايل العام
+// ═══════════════════════════════════════════
+const gs = StyleSheet.create({
+  container: { flex: 1, paddingTop: 52 },
+
+  // زر الخروج
+  exitBtn: {
+    width: 40, height: 40, borderRadius: 12, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  exitBtnRow: {
+    position: 'absolute', top: 52, left: 16, zIndex: 99,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+
+  // Setup
+  setupScroll: { paddingHorizontal: 20, paddingTop: 48, paddingBottom: 40 },
+  titleWrap: { alignItems: 'center', marginBottom: 24 },
+  titleEmoji: { fontSize: 56 },
+  titleText: { fontSize: 32, fontWeight: '800', letterSpacing: 1, marginTop: 8 },
+  titleSub: { fontSize: 14, marginTop: 4 },
+  rolesRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 24, flexWrap: 'wrap' },
+  roleChip: {
+    alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10,
+    borderRadius: 12, borderWidth: 1, minWidth: 70,
+  },
+  card: {
+    borderRadius: 16, borderWidth: 1, padding: 20, marginBottom: 16,
+  },
+  cardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  cardSub: { fontSize: 13, marginBottom: 16 },
+  codeInput: {
+    borderRadius: 12, borderWidth: 1, paddingVertical: 14,
+    fontSize: 22, fontWeight: '800', letterSpacing: 6, marginBottom: 12,
+  },
+  btnPrimary: {
+    paddingVertical: 15, borderRadius: 14, alignItems: 'center', marginTop: 4,
+  },
+  btnSecondary: {
+    paddingVertical: 13, borderRadius: 14, alignItems: 'center', borderWidth: 1,
+  },
+  btnText: { fontSize: 16, fontWeight: '700' },
+  errorText: { color: '#ef4444', textAlign: 'center', marginTop: 8, fontSize: 13 },
+
+  // Lobby
+  lobbyScroll: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 40 },
+  lobbyTitle: { fontSize: 24, fontWeight: '800', textAlign: 'center', marginBottom: 4 },
+  lobbyGame: { fontSize: 16, textAlign: 'center', marginBottom: 24 },
+  codeBox: {
+    borderRadius: 16, borderWidth: 2, padding: 20, alignItems: 'center', marginBottom: 20,
+  },
+  codeLabel: { fontSize: 13, marginBottom: 4 },
+  codeValue: { fontSize: 36, fontWeight: '900', letterSpacing: 10 },
+  codeCopy: { fontSize: 11, marginTop: 6 },
+  playerListCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 16 },
+  sectionTitle: { fontSize: 13, fontWeight: '600', marginBottom: 12 },
+  lobbyPlayerRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
+    borderBottomWidth: 1, gap: 10,
+  },
+  lobbyAvatar: {
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+  },
+  lobbyPlayerName: { flex: 1, fontSize: 15, fontWeight: '600' },
+  youBadge: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1,
+  },
+  creatorBadge: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1,
+  },
+  waitingText: { fontSize: 13, textAlign: 'center', paddingVertical: 12 },
+
+  // Game phases
+  phaseContainer: { flex: 1, padding: 20 },
+  phaseScroll: { padding: 20, paddingTop: 64 },
+  phaseLabel: { fontSize: 22, fontWeight: '800', textAlign: 'center', marginBottom: 6 },
+  phaseSub: { fontSize: 14, textAlign: 'center', marginBottom: 16 },
+
+  dayHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16,
+  },
+  roundBadge: {
+    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1,
+  },
+  myRoleStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10,
+    borderRadius: 12, borderWidth: 1, marginVertical: 8,
+  },
+  myRoleText: { fontSize: 14, fontWeight: '700' },
+  deadBanner: {
+    padding: 16, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginVertical: 12,
+  },
+  submittedBanner: {
+    padding: 16, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginVertical: 12,
+  },
+  playersGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 12,
+  },
+  submittedText: { textAlign: 'center', marginTop: 12, fontSize: 14, fontWeight: '600' },
+
+  // Role reveal
+  roleRevealCard: {
+    width: SW - 80, borderRadius: 24, borderWidth: 2,
+    padding: 32, alignItems: 'center',
+  },
+  roleRevealEmoji: { fontSize: 64 },
+  roleRevealName: { fontSize: 28, fontWeight: '800', marginTop: 12 },
+  roleRevealDesc: { fontSize: 14, textAlign: 'center', marginTop: 8, lineHeight: 22 },
+
+  // Results
+  resultName: { fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  resultSub: { fontSize: 14, textAlign: 'center', marginTop: 8 },
+  timerLabel: { fontSize: 12, textAlign: 'center', marginTop: 8 },
+  detectiveBanner: {
+    marginTop: 20, padding: 16, borderRadius: 12, borderWidth: 1, width: SW - 60, alignItems: 'flex-start',
+  },
+
+  // Finished
+  winnerBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 16, borderRadius: 16, borderWidth: 1, marginTop: 16,
+  },
+  winnerText: { fontSize: 18, fontWeight: '800' },
+  rolesRevealGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center',
+  },
+  rolesRevealCard: {
+    width: (SW - 60) / 3, borderRadius: 12, borderWidth: 1,
+    padding: 12, alignItems: 'center', gap: 2,
+  },
+  rolesRevealName: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  rolesRevealRole: { fontSize: 11, fontWeight: '600' },
+
+  // Night phase — إيموجي مكبّر للدور
+  nightRoleCard: {
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: 20, borderWidth: 1.5,
+    paddingVertical: 20, marginBottom: 12,
+  },
+  nightRoleEmoji: { fontSize: 56 },
+  nightRoleLabel: { fontSize: 16, fontWeight: '800', marginTop: 6 },
+
+  nightPlayersGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 10,
+    justifyContent: 'center', marginTop: 12,
+  },
+  nightPlayerTile: {
+    width: (SW - 60) / 3,
+    borderRadius: 14,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    gap: 6,
+  },
+  nightPlayerEmoji: { fontSize: 42 },
+  nightPlayerName: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  nightSelectCheck: {
+    position: 'absolute', top: 6, right: 6,
+    width: 18, height: 18, borderRadius: 9,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  // رسالة التأكيد المعلّقة
+  pendingConfirmBox: {
+    borderRadius: 16, borderWidth: 1,
+    padding: 16, marginTop: 14, gap: 12,
+  },
+  pendingConfirmText: {
+    fontSize: 14, fontWeight: '600', lineHeight: 22, textAlign: 'center',
+  },
+  confirmNightBtn: {
+    paddingVertical: 13, borderRadius: 13,
+    alignItems: 'center',
+  },
+
+  citizenNightBanner: {
+    borderRadius: 16, borderWidth: 1,
+    padding: 24, marginTop: 12, alignItems: 'center',
+  },
+
+  // تصويت النهار
+  postponeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 14, paddingHorizontal: 16,
+    borderRadius: 14, marginTop: 8,
+  },
+  postponeText: { fontSize: 14, fontWeight: '600' },
+  confirmVoteBtn: {
+    paddingVertical: 15, borderRadius: 14,
+    alignItems: 'center', marginTop: 12,
+  },
+  confirmVoteBtnText: { fontSize: 16, fontWeight: '800' },
+  eliminatedRow: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 4,
+    justifyContent: 'center', marginTop: 16,
+    opacity: 0.6,
+  },
 });

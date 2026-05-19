@@ -24,7 +24,7 @@ import {
   collection, getDocs, query, orderBy,
   serverTimestamp, onSnapshot,
 } from 'firebase/firestore';
-import { db } from './FirebaseConfig';
+import { db } from './firebaseConfig';
 
 const PRO_CACHE_KEY = 'arena_is_pro_v2';
 const PRO_UID_KEY   = 'arena_pro_uid';

@@ -43,22 +43,22 @@ import { WebScreenButton, GameInfoButton } from './WebRoomService';
 // 4 صور لكل لون: 0-3 أزرق، 4-7 أحمر، 8-11 بيج/محايد
 const CARD_IMAGES = {
   blue:    [
-    require('./assets/codenames/card_00.png'),
-    require('./assets/codenames/card_04.png'),
-    require('./assets/codenames/card_08.png'),
-    require('./assets/codenames/card_11.png'),
+    require('./assets/codenames/card_00.webp'),
+    require('./assets/codenames/card_04.webp'),
+    require('./assets/codenames/card_08.webp'),
+    require('./assets/codenames/card_11.webp'),
   ],
   red:     [
-    require('./assets/codenames/card_01.png'),
-    require('./assets/codenames/card_05.png'),
-    require('./assets/codenames/card_06.png'),
-    require('./assets/codenames/card_10.png'),
+    require('./assets/codenames/card_01.webp'),
+    require('./assets/codenames/card_05.webp'),
+    require('./assets/codenames/card_06.webp'),
+    require('./assets/codenames/card_10.webp'),
   ],
   neutral: [
-    require('./assets/codenames/card_02.png'),
-    require('./assets/codenames/card_03.png'),
-    require('./assets/codenames/card_07.png'),
-    require('./assets/codenames/card_09.png'),
+    require('./assets/codenames/card_02.webp'),
+    require('./assets/codenames/card_03.webp'),
+    require('./assets/codenames/card_07.webp'),
+    require('./assets/codenames/card_09.webp'),
   ],
 };
 

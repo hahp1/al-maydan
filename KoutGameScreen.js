@@ -1,1163 +1,1528 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  StatusBar, Animated, Alert, ActivityIndicator,
-  ScrollView, TextInput, Modal,
+  View, Text, TouchableOpacity, StyleSheet, StatusBar,
+  Dimensions, Animated, Platform, Modal,
 } from 'react-native';
-import { db, auth } from './firebaseConfig';
-import LeaveModal from './LeaveModal';
-import {
-  doc, setDoc, onSnapshot, updateDoc, deleteDoc,
-  collection, serverTimestamp, arrayUnion, getDoc, query, where, getDocs,
-} from 'firebase/firestore';
+import { useTheme } from './ThemeContext';
+import { useLanguage } from './I18n';
+import { useOnlineGame } from './useOnlineGame';
+import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { playSound } from './SoundService';
 
-// ══════════════════════════════════════════════════════════════
-// ثوابت
-// ══════════════════════════════════════════════════════════════
-const COST      = 10;   // تكلفة اللعبة لكل لاعب
-const WIN_LIMIT = 51;   // حد الفوز بالنقاط
+const { width: SW, height: SH } = Dimensions.get('window');
 
-// المزايدة: عدد اللمات 5-9
-const BID_LABELS = { 5:'باب (٥)', 6:'ستة (٦)', 7:'سبعة (٧)', 8:'ثمانية (٨)', 9:'باون (٩)' };
+/* ═══════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════ */
+const CARD_W   = 48;  // hand card width
+const CARD_H   = 68;  // hand card height
+const CARD_OVERLAP = -22; // negative margin = overlap
+const TRICK_W  = 52;
+const TRICK_H  = 72;
+const TURN_SEC = 15;
 
-const SUITS    = ['♠','♥','♦','♣'];
-const RANKS    = ['5','6','7','8','9','10','J','Q','K','A'];
-const RANK_VAL = { '5':1,'6':2,'7':3,'8':4,'9':5,'10':6,'J':7,'Q':8,'K':9,'A':10 };
-const RANK_AR  = { '5':'٥','6':'٦','7':'٧','8':'٨','9':'٩','10':'١٠','J':'جاك','Q':'دامة','K':'كنج','A':'خال' };
-const SUIT_COLOR = { '♠':'#c8c8ff','♣':'#c8c8ff','♥':'#ff6b6b','♦':'#ff6b6b' };
+const SUITS = { spades: '♠', hearts: '♥', diamonds: '♦', clubs: '♣' };
+const SUIT_COLOR = { spades: '#1a1a2a', hearts: '#c0392b', diamonds: '#c0392b', clubs: '#1a1a2a' };
+const SUIT_NAME_AR = { spades: 'بستوني', hearts: 'قلوب', diamonds: 'ديامونا', clubs: 'شومة' };
 
-const TEAM_OF    = { 0:0, 1:1, 2:0, 3:1 }; // فريق٠: مقاعد 0+2 | فريق١: مقاعد 1+3
-const SEAT_LABEL = ['جنوب','شرق','شمال','غرب'];
-
-// ── بناء وتوزيع الورق ──
-function buildDeck() {
-  const d = [];
-  for (const s of SUITS) for (const r of RANKS) d.push({ suit:s, rank:r, id:`${r}${s}` });
-  return d; // 40 ورقة
-}
-function shuffle(a) {
-  const b=[...a];
-  for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}
-  return b;
-}
-function dealKout(n) {
-  const deck = shuffle(buildDeck());
-  const hands = Array.from({length:n},()=>[]);
-  deck.forEach((c,i)=>hands[i%n].push(c));
-  return hands;
-}
-
-function genCode(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
-function getUid(){
-  const u = auth.currentUser?.uid;
-  if (u) return u;
-  if (!global._gUid) global._gUid = 'guest_'+Math.random().toString(36).slice(2,10);
-  return global._gUid;
+/* ═══════════════════════════════════════════════
+   DECK BUILDER  (4-player: red 6-A, black 7-A + joker + maker = 36)
+═══════════════════════════════════════════════ */
+function buildDeck4() {
+  const deck = [];
+  // Red suits: 6-A (9 ranks each = 18 cards)
+  ['hearts', 'diamonds'].forEach(suit => {
+    ['6','7','8','9','10','J','Q','K','A'].forEach((rank, i) => {
+      deck.push({ suit, rank, value: i + 6, isHokm: false });
+    });
+  });
+  // Black suits: 7-A (8 ranks each = 16 cards)
+  ['spades', 'clubs'].forEach(suit => {
+    ['7','8','9','10','J','Q','K','A'].forEach((rank, i) => {
+      deck.push({ suit, rank, value: i + 7, isHokm: false });
+    });
+  });
+  // Joker (red) = value 100, Maker (black) = value 99
+  deck.push({ suit: 'joker', rank: 'JOKER', value: 100, isHokm: false });
+  deck.push({ suit: 'maker', rank: 'MAKER', value: 99,  isHokm: false });
+  return deck; // 36 cards
 }
 
-// ── منطق الورق ──
-function cardPower(card, trumpSuit, leadSuit) {
-  if (!card) return -1;
-  const base = RANK_VAL[card.rank] || 0;
-  if (card.suit === trumpSuit) return base + 200;
-  if (card.suit === leadSuit)  return base + 100;
-  return base;
+function buildDeck6() {
+  const deck = [];
+  ['spades','hearts','diamonds','clubs'].forEach(suit => {
+    ['5','6','7','8','9','10','J','Q','K','A'].forEach((rank, i) => {
+      deck.push({ suit, rank, value: i + 5, isHokm: false });
+    });
+  });
+  deck.push({ suit: 'joker', rank: 'JOKER', value: 100, isHokm: false });
+  deck.push({ suit: 'maker', rank: 'MAKER', value: 99,  isHokm: false });
+  return deck; // 42 cards
 }
-function winnerOfTrick(trick, trumpSuit) {
-  if (!trick || trick.length === 0) return null;
-  const lead = trick[0].card.suit;
-  let best = trick[0];
-  for (const t of trick) {
-    if (cardPower(t.card, trumpSuit, lead) > cardPower(best.card, trumpSuit, lead)) best = t;
+
+function shuffleDeck(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
-  return best.seat;
+  return a;
 }
 
-// ── حساب نتيجة الجولة ──
-// القواعد:
-// - نجح الفريق المزايد: يأخذ عدد اللمات المزايَد نقاطاً
-// - فشل غير ملزوم: الخصم يأخذ ضعف عدد اللمات المزايَد
-// - فشل ملزوم: الخصم يأخذ نفس عدد اللمات (بدون ضعف)
-// - كوت ناجح: الفريق المزايد يأخذ اللمات × 2
-// - كوت فاشل: الخصم يأخذ اللمات × 2
-function calcRoundResult(bidWinner, bidValue, t0tricks, t1tricks, nPlayers, isForcedBid) {
-  const bidTeam      = TEAM_OF[bidWinner ?? 0];
-  const bidderTricks = bidTeam === 0 ? t0tricks : t1tricks;
-  const allTricks    = nPlayers === 4 ? 10 : 9;
+/* ═══════════════════════════════════════════════
+   CARD STRENGTH (after hokm is set)
+   Red Joker > A-of-hokm > Black Joker (Maker) > rest of hokm > others
+═══════════════════════════════════════════════ */
+function cardStrength(card, hokm, ledSuit) {
+  if (card.suit === 'joker') return 1000;
+  if (card.suit === hokm && card.rank === 'A') return 999;
+  if (card.suit === 'maker') return 998;
+  if (card.suit === hokm) return 100 + card.value;
+  if (card.suit === ledSuit) return card.value;
+  return 0; // can't win
+}
 
-  if (bidValue === 'kout') {
-    const pts = allTricks * 2;
-    if (bidderTricks === allTricks) {
-      return bidTeam === 0
-        ? { team0: pts, team1: 0, note: `كوت ناجح! الفريق ١ يأخذ ${pts} نقطة` }
-        : { team0: 0, team1: pts, note: `كوت ناجح! الفريق ٢ يأخذ ${pts} نقطة` };
-    } else {
-      return bidTeam === 0
-        ? { team0: 0, team1: pts, note: `كوت فاشل! الفريق ٢ يأخذ ${pts} نقطة` }
-        : { team0: pts, team1: 0, note: `كوت فاشل! الفريق ١ يأخذ ${pts} نقطة` };
+function determineTrickWinner(trick, hokm) {
+  if (!trick || trick.length === 0) return null;
+  const ledSuit = trick[0].card.suit === 'joker' ? hokm : trick[0].card.suit;
+  let best = trick[0];
+  for (let i = 1; i < trick.length; i++) {
+    if (cardStrength(trick[i].card, hokm, ledSuit) > cardStrength(best.card, hokm, ledSuit)) {
+      best = trick[i];
     }
   }
-
-  const bid = parseInt(bidValue) || 5;
-  if (bidderTricks >= bid) {
-    return bidTeam === 0
-      ? { team0: bid, team1: 0, note: `الفريق ١ نجح (${bidderTricks}/${bid} لمة)` }
-      : { team0: 0, team1: bid, note: `الفريق ٢ نجح (${bidderTricks}/${bid} لمة)` };
-  } else {
-    // فشل: ملزوم → نفس العدد | غير ملزوم → ضعف العدد
-    const pts = isForcedBid ? bid : bid * 2;
-    const tag = isForcedBid ? '' : ' (ضعف)';
-    return bidTeam === 0
-      ? { team0: 0, team1: pts, note: `الفريق ١ فشل — الفريق ٢ يأخذ ${pts} نقطة${tag}` }
-      : { team0: pts, team1: 0, note: `الفريق ٢ فشل — الفريق ١ يأخذ ${pts} نقطة${tag}` };
-  }
+  return best.uid;
 }
 
-// ── حالة جولة مزايدة جديدة ──
-function buildNextBiddingState(players, prevBidWinner) {
-  const n        = players.length;
-  const newHands = dealKout(n);
-  const updated  = players.map((p,i) => ({ ...p, hand: newHands[i] }));
-  const nextSeat = ((prevBidWinner ?? 0) + 1) % n;
-  return {
-    players:        updated,
-    phase:          'bidding',
-    bids:           [],
-    currentBidSeat: nextSeat,
-    bidWinner:      null,
-    bidValue:       null,
-    isForcedBid:    false,
-    trumpSuit:      null,
-    choosingTrump:  false,
-    currentTrick:   [],
-    tricks:         [],
-    team0Tricks:    0,
-    team1Tricks:    0,
-    trickStartedAt: Date.now(),
+/* ═══════════════════════════════════════════════
+   SORT HAND: most-count suit left, alternating color, joker/maker rightmost
+═══════════════════════════════════════════════ */
+function sortHand(hand) {
+  const jokers = hand.filter(c => c.suit === 'joker' || c.suit === 'maker')
+    .sort((a, b) => b.value - a.value);
+  const normal = hand.filter(c => c.suit !== 'joker' && c.suit !== 'maker');
+
+  // count per suit
+  const counts = {};
+  ['spades','hearts','diamonds','clubs'].forEach(s => {
+    counts[s] = normal.filter(c => c.suit === s).length;
+  });
+
+  // sort suits: most cards first, alternating color (black, red, black, red)
+  const blacks = ['spades','clubs'].sort((a,b) => counts[b] - counts[a]);
+  const reds   = ['hearts','diamonds'].sort((a,b) => counts[b] - counts[a]);
+
+  // interleave: dominant black, dominant red, other black, other red
+  const suitOrder = [blacks[0], reds[0], blacks[1], reds[1]]
+    .filter(s => counts[s] > 0);
+
+  const sorted = [];
+  suitOrder.forEach(s => {
+    sorted.push(...normal.filter(c => c.suit === s).sort((a,b) => b.value - a.value));
+  });
+  return [...sorted, ...jokers];
+}
+
+/* ═══════════════════════════════════════════════
+   FORBIDDEN BID (mulzoom last player)
+   If all 3 others passed → last player must bid, forced min=5 (M/ملزوم)
+   Otherwise: must bid higher than current max bid
+═══════════════════════════════════════════════ */
+function getForbiddenBid(bids, playerCount, isLastBidder, allOthersPassedOrZero) {
+  return null; // logic handled in bidding modal
+}
+
+/* ═══════════════════════════════════════════════
+   FACE-DOWN STACK (overlapping like real cards)
+   direction: 'horizontal' (top) | 'vertical-left' | 'vertical-right'
+═══════════════════════════════════════════════ */
+function FaceDownStack({ count, direction = 'horizontal' }) {
+  const isH = direction === 'horizontal';
+  // card back small size
+  const cW = isH ? 26 : 38;
+  const cH = isH ? 38 : 26;
+  const overlap = isH ? -10 : -11;
+  const containerStyle = {
+    flexDirection: isH ? 'row' : 'column',
+    alignItems: 'center',
   };
-}
 
-// ══════════════════════════════════════════════════════════════
-// شريط الوقت
-// ══════════════════════════════════════════════════════════════
-function TimerBar({ startedAt, seconds, onTimeout, active }) {
-  const [rem, setRem] = useState(seconds);
-  const anim    = useRef(new Animated.Value(1)).current;
-  const animRef = useRef(null);
-  const cbRef   = useRef(false);
-
-  useEffect(() => {
-    if (!startedAt) return;
-    cbRef.current = false;
-    const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-    const left    = Math.max(0, seconds - elapsed);
-    setRem(left);
-    if (animRef.current) animRef.current.stop();
-    anim.setValue(left / seconds);
-    animRef.current = Animated.timing(anim, { toValue:0, duration:left*1000, useNativeDriver:false });
-    animRef.current.start();
-    const iv = setInterval(() => {
-      setRem(r => {
-        if (r <= 1) {
-          clearInterval(iv);
-          if (active && !cbRef.current) { cbRef.current = true; onTimeout?.(); }
-          return 0;
-        }
-        return r - 1;
-      });
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [startedAt]);
-
-  const color = rem > 20 ? '#22c55e' : rem > 10 ? '#f59e0b' : '#ef4444';
   return (
-    <View style={tb.wrap}>
-      <View style={tb.track}>
-        <Animated.View style={[tb.fill, {
-          width: anim.interpolate({ inputRange:[0,1], outputRange:['0%','100%'] }),
-          backgroundColor: color,
-        }]} />
-      </View>
-      <Text style={[tb.num, { color }]}>{rem}s</Text>
+    <View style={containerStyle}>
+      {Array.from({ length: count }).map((_, i) => (
+        <View key={i} style={{
+          width: cW, height: cH,
+          backgroundColor: '#0f2848',
+          borderRadius: 4,
+          borderWidth: 1.5,
+          borderColor: 'rgba(255,255,255,0.15)',
+          marginLeft: isH && i > 0 ? overlap : 0,
+          marginTop: !isH && i > 0 ? overlap : 0,
+          shadowColor: '#000',
+          shadowOffset: { width: 1, height: 1 },
+          shadowOpacity: 0.4, shadowRadius: 2, elevation: 2,
+          overflow: 'hidden',
+        }}>
+          <View style={{
+            position: 'absolute', inset: 3,
+            borderRadius: 2, borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.08)',
+          }} />
+        </View>
+      ))}
     </View>
   );
 }
-const tb = StyleSheet.create({
-  wrap:  { flexDirection:'row', alignItems:'center', gap:8, paddingHorizontal:16, paddingVertical:4 },
-  track: { flex:1, height:6, backgroundColor:'#1a1a3e', borderRadius:3, overflow:'hidden' },
-  fill:  { height:'100%', borderRadius:3 },
-  num:   { fontSize:13, fontWeight:'900', minWidth:30, textAlign:'right' },
-});
 
-// ══════════════════════════════════════════════════════════════
-// المكوّن الرئيسي
-// ══════════════════════════════════════════════════════════════
-export default function KoutGameScreen({ onBack, currentUser, tokens, onSpendTokens }) {
-  const [phase,          setPhase]         = useState('menu');
-  const [roomId,         setRoomId]        = useState(null);
-  const [roomData,       setRoomData]      = useState(null);
-  const [myUid,          setMyUid]         = useState(null);
-  const [myName,         setMyName]        = useState('');
-  const [loading,        setLoading]       = useState(false);
-  const [joinCode,       setJoinCode]      = useState('');
-  const [friendSearch,   setFriendSearch]  = useState('');
-  const [friendResults,  setFriendResults] = useState([]);
-  const [searching,      setSearching]     = useState(false);
-  const [desiredCount,   setDesiredCount]  = useState(4);
-  const [selectedCard,   setSelectedCard]  = useState(null);
-  const [showLeave,      setShowLeave]     = useState(false);
-  const startedRef = useRef(false);
-  const unsubRef   = useRef(null);
-  const fadeAnim   = useRef(new Animated.Value(0)).current;
+/* ═══════════════════════════════════════════════
+   PLAYER LABEL — identical to Domino style
+   (avatar + online dot + name tag, timer below)
+   side: 'top' | 'left' | 'right' | 'bottom'
+═══════════════════════════════════════════════ */
+function PlayerLabel({ name, isActive, timerPct, showTimer, isBot, side = 'top' }) {
+  const isLeft  = side === 'left';
+  const isRight = side === 'right';
 
+  const avatarEl = (
+    <View style={{ position: 'relative' }}>
+      <View style={[styles.avatar, {
+        borderColor: isActive ? '#f5c842' : 'rgba(255,255,255,0.15)',
+        borderWidth: isActive ? 2.5 : 2,
+        shadowColor: isActive ? '#f5c842' : '#000',
+        shadowOpacity: isActive ? 0.55 : 0.2,
+        shadowRadius: isActive ? 8 : 3,
+        elevation: isActive ? 6 : 2,
+      }]}>
+        <Text style={{ fontSize: 16 }}>{isBot ? '🤖' : '👤'}</Text>
+      </View>
+      <View style={styles.onlineDot} />
+    </View>
+  );
+
+  const nameEl = (
+    <View style={[styles.nameTag, isActive && styles.nameTagActive]}>
+      <Text style={styles.nameText} numberOfLines={1}>{name}</Text>
+    </View>
+  );
+
+  return (
+    <View style={{
+      alignItems: isRight ? 'flex-end' : isLeft ? 'flex-start' : 'center',
+      gap: 4,
+    }}>
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center', gap: 6,
+      }}>
+        {avatarEl}
+        {nameEl}
+      </View>
+      {showTimer && (
+        <View style={[styles.timerBar]}>
+          <View style={[styles.timerFill, {
+            width: `${timerPct}%`,
+            backgroundColor: timerPct > 50 ? '#2ecc71' : timerPct > 22 ? '#f39c12' : '#e74c3c',
+          }]} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   PLAYING CARD COMPONENT (face-up)
+═══════════════════════════════════════════════ */
+function PlayingCard({ card, selected, disabled, winning, style, width = CARD_W, height = CARD_H, onPress }) {
+  if (!card) return null;
+
+  const isJoker = card.suit === 'joker';
+  const isMaker = card.suit === 'maker';
+  const isSpecial = isJoker || isMaker;
+  const color = isSpecial ? (isJoker ? '#c9922a' : '#333') : SUIT_COLOR[card.suit];
+  const suitChar = isSpecial ? '' : SUITS[card.suit];
+  const fontSize = width < 44 ? 10 : 12;
+  const suitBig  = width < 44 ? 16 : 22;
+
+  return (
+    <TouchableOpacity
+      activeOpacity={disabled ? 1 : 0.85}
+      onPress={disabled ? undefined : onPress}
+      style={[{
+        width, height,
+        backgroundColor: isJoker ? '#fff8e6' : isMaker ? '#f0f0f0' : '#f8f2e4',
+        borderRadius: 7,
+        borderWidth: selected ? 2.5 : winning ? 2.5 : 1.5,
+        borderColor: selected ? '#f59e0b' : winning ? '#4ade80' : (card.isHokm ? '#c9922a' : '#d5cbb8'),
+        alignItems: 'center', justifyContent: 'center',
+        opacity: disabled ? 0.28 : 1,
+        shadowColor: selected ? '#f59e0b' : winning ? '#4ade80' : '#000',
+        shadowOffset: { width: 0, height: selected ? 5 : 2 },
+        shadowOpacity: selected ? 0.6 : 0.35,
+        shadowRadius: selected ? 8 : 3,
+        elevation: selected ? 10 : 3,
+        transform: [{ translateY: selected ? -14 : 0 }],
+        overflow: 'hidden',
+      }, style]}>
+
+      {/* corner top-left */}
+      <View style={{ position: 'absolute', top: 3, left: 4, alignItems: 'center' }}>
+        <Text style={{ fontSize, fontWeight: '900', color, lineHeight: fontSize + 1, fontFamily: 'Georgia' }}>
+          {isSpecial ? (isJoker ? '🃏' : '🂿') : card.rank}
+        </Text>
+        {!isSpecial && (
+          <Text style={{ fontSize: fontSize - 1, color, lineHeight: fontSize }}>{suitChar}</Text>
+        )}
+      </View>
+
+      {/* center big suit */}
+      {!isSpecial && (
+        <Text style={{ fontSize: suitBig, color, lineHeight: suitBig + 2 }}>{suitChar}</Text>
+      )}
+      {isSpecial && (
+        <Text style={{ fontSize: suitBig - 4, color }}>{isJoker ? '🃏' : '🂿'}</Text>
+      )}
+
+      {/* corner bottom-right (rotated) */}
+      <View style={{
+        position: 'absolute', bottom: 3, right: 4,
+        alignItems: 'center', transform: [{ rotate: '180deg' }],
+      }}>
+        <Text style={{ fontSize, fontWeight: '900', color, lineHeight: fontSize + 1, fontFamily: 'Georgia' }}>
+          {isSpecial ? '' : card.rank}
+        </Text>
+        {!isSpecial && (
+          <Text style={{ fontSize: fontSize - 1, color, lineHeight: fontSize }}>{suitChar}</Text>
+        )}
+      </View>
+
+      {/* gold shimmer for hokm */}
+      {card.isHokm && !isSpecial && (
+        <View style={{
+          position: 'absolute', inset: 0, borderRadius: 7,
+          borderWidth: 1.5, borderColor: 'rgba(201,146,42,0.5)',
+          backgroundColor: 'rgba(201,146,42,0.04)',
+        }} pointerEvents="none" />
+      )}
+    </TouchableOpacity>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   LAMAS DOTS TRACK
+   bid: number, teamATricks, teamBTricks, maxTricks
+   teamA = bidding team (side=left), teamB = defending (side=right)
+   target dot at position = bid from teamA side
+═══════════════════════════════════════════════ */
+function LamasDots({ bid, teamATricks, teamBTricks, maxTricks = 9 }) {
+  const dots = Array.from({ length: maxTricks });
+  // teamA (blue) fills from left (index 0..bid-1), target dot at bid-1
+  // teamB (red) fills from right (index maxTricks-1 downward), target at maxTricks-bid (from left = bid tricks needed to defeat)
+  const targetAIdx = bid > 0 ? bid - 1 : Math.floor(maxTricks / 2);
+  // red team needs (maxTricks - bid + 1) tricks to win (defeat bidder)
+  // their target dot = index (maxTricks - bid) from left = bid tricks short of defeat
+  const targetBIdx = bid > 0 ? maxTricks - bid : Math.floor(maxTricks / 2);
+
+  return (
+    <View style={{ alignItems: 'center', gap: 2 }}>
+      <View style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
+        {dots.map((_, i) => {
+          const isTargetA = i === targetAIdx;
+          const isTargetB = i === targetBIdx;
+          const isTarget  = isTargetA || isTargetB;
+          // blue fills left-to-right from 0
+          const filledA  = i < teamATricks;
+          // red fills right-to-left from maxTricks-1
+          const filledB  = i >= (maxTricks - teamBTricks);
+          return (
+            <View key={i} style={{
+              width: isTarget ? 9 : 7,
+              height: isTarget ? 9 : 7,
+              borderRadius: 99,
+              backgroundColor: isTarget
+                ? '#fff'
+                : filledA ? '#3b9eff'
+                : filledB ? '#ff7043'
+                : 'rgba(255,255,255,0.18)',
+              shadowColor: isTarget ? '#fff' : 'transparent',
+              shadowOpacity: isTarget ? 0.7 : 0,
+              shadowRadius: isTarget ? 4 : 0,
+              elevation: isTarget ? 3 : 0,
+            }} />
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   BID MODAL
+═══════════════════════════════════════════════ */
+function BidModal({ visible, currentHighBid, isMalzoom, timerPct, onBid, onPass }) {
+  const options = [null, 5, 6, 7, 8, 9]; // null = pass/hand
+
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.bidOverlay}>
+        <View style={[styles.bidModal, { backgroundColor: theme.bgElevated }]}>
+          <Text style={styles.bidTitle}>🤝 اختر مزايدتك</Text>
+          {currentHighBid > 0 && (
+            <Text style={styles.bidSub}>المزايدة الحالية: {currentHighBid} · يجب أن تزايد بأعلى أو تمرّر</Text>
+          )}
+          {isMalzoom && (
+            <Text style={[styles.bidSub, { color: '#ef4444' }]}>ملزوم — يجب أن تختار حكماً (M أو رقم)</Text>
+          )}
+          {/* timer bar */}
+          <View style={styles.bidTimerWrap}>
+            <View style={[styles.bidTimerFill, {
+              width: `${timerPct}%`,
+              backgroundColor: timerPct > 50 ? '#4ade80' : timerPct > 22 ? '#f59e0b' : '#ef4444',
+            }]} />
+          </View>
+          <View style={styles.bidGrid}>
+            {/* Pass / Hand icon */}
+            {!isMalzoom && (
+              <TouchableOpacity style={styles.bidBtn} onPress={onPass}>
+                <Text style={{ fontSize: 26 }}>✋</Text>
+                <Text style={styles.bidBtnLabel}>تمرير</Text>
+              </TouchableOpacity>
+            )}
+            {[5, 6, 7, 8, 9].map(n => {
+              const disabled = !isMalzoom && currentHighBid >= n;
+              const isMLabel = isMalzoom && n === 5;
+              return (
+                <TouchableOpacity
+                  key={n}
+                  style={[styles.bidBtn, disabled && styles.bidBtnDisabled]}
+                  onPress={disabled ? undefined : () => onBid(n, isMalzoom && n === 5)}
+                  disabled={disabled}
+                >
+                  <Text style={[styles.bidBtnNum, disabled && { opacity: 0.3 }]}>
+                    {isMLabel ? 'M' : n}
+                  </Text>
+                  {n === 9 && <Text style={styles.bidBtnLabel}>بوان</Text>}
+                  {isMLabel && <Text style={[styles.bidBtnLabel, { color: '#ef4444' }]}>ملزوم</Text>}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   HOKM CHOOSE MODAL
+═══════════════════════════════════════════════ */
+function HokmModal({ visible, hand, timerPct, onChoose }) {
+  const [sel, setSel] = useState(null);
+  const suitsList = ['spades', 'hearts', 'diamonds', 'clubs'];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.bidOverlay}>
+        <View style={[styles.bidModal, { backgroundColor: theme.bgElevated }]}>
+          <Text style={styles.bidTitle}>اختر الحكم (الكوز)</Text>
+          <Text style={styles.bidSub}>فزت بالمزايدة — اختر الرمز الأقوى</Text>
+          <View style={styles.bidTimerWrap}>
+            <View style={[styles.bidTimerFill, {
+              width: `${timerPct}%`,
+              backgroundColor: timerPct > 50 ? '#4ade80' : timerPct > 22 ? '#f59e0b' : '#ef4444',
+            }]} />
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 16 }}>
+            {suitsList.map(s => (
+              <TouchableOpacity
+                key={s}
+                style={[styles.hokmSuit, sel === s && styles.hokmSuitSel]}
+                onPress={() => setSel(s)}
+              >
+                <Text style={{ fontSize: 30, color: SUIT_COLOR[s] }}>{SUITS[s]}</Text>
+                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: '700', marginTop: 2 }}>
+                  {SUIT_NAME_AR[s]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={[styles.bidConfirm, !sel && { opacity: 0.4 }]}
+            onPress={sel ? () => onChoose(sel) : undefined}
+            disabled={!sel}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>✓ تأكيد الحكم</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   ROUND RESULT MODAL
+═══════════════════════════════════════════════ */
+function RoundResultModal({ visible, teamA, teamB, bid, hokmSuit, isMalzoom, onNext }) {
+  if (!visible) return null;
+  const teamAWon = teamA.tricks >= bid;
+  const pts = teamAWon ? bid : isMalzoom ? bid : bid * 2;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.bidOverlay}>
+        <View style={[styles.bidModal, { backgroundColor: theme.bgElevated, paddingVertical: 26 }]}>
+          <Text style={styles.bidTitle}>انتهت الجولة!</Text>
+          {/* Team A */}
+          <View style={[styles.resultCard, { borderColor: '#3b9eff33' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#3b9eff' }} />
+              <Text style={{ color: '#fff', fontWeight: '700', flex: 1 }}>{teamA.name}</Text>
+              <Text style={{ color: '#3b9eff', fontWeight: '900', fontSize: 13 }}>
+                {bid} {SUITS[hokmSuit]} حكم
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={styles.resLbl}>المزايدة</Text>
+                <Text style={styles.resVal}>{bid}</Text>
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={styles.resLbl}>الرميات</Text>
+                <Text style={styles.resVal}>{teamA.tricks}</Text>
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={styles.resLbl}>النتيجة</Text>
+                <Text style={[styles.resVal, { color: teamAWon ? '#4ade80' : '#f87171' }]}>
+                  {teamAWon ? `+${bid}` : '+0'}
+                </Text>
+              </View>
+            </View>
+          </View>
+          {/* Team B */}
+          <View style={[styles.resultCard, { borderColor: '#ff704333', marginTop: 10 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#ff7043' }} />
+              <Text style={{ color: '#fff', fontWeight: '700' }}>{teamB.name}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={styles.resLbl}>الرميات</Text>
+                <Text style={styles.resVal}>{teamB.tricks}</Text>
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={styles.resLbl}>النتيجة</Text>
+                <Text style={[styles.resVal, { color: teamAWon ? '#888' : '#4ade80' }]}>
+                  {teamAWon ? '+0' : `+${pts}`}
+                </Text>
+              </View>
+            </View>
+          </View>
+          {/* Totals */}
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 14, justifyContent: 'center' }}>
+            {[
+              { name: teamA.name, total: teamA.total, color: '#3b9eff' },
+              { name: teamB.name, total: teamB.total, color: '#ff7043' },
+            ].map((t, i) => (
+              <View key={i} style={[styles.totalChip, { borderColor: t.color + '44' }]}>
+                <Text style={{ fontSize: 9, color: t.color, fontWeight: '600', marginBottom: 2 }}>{t.name}</Text>
+                <Text style={{ fontSize: 22, fontWeight: '900', color: '#fff' }}>{t.total}</Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity style={[styles.bidConfirm, { marginTop: 16, backgroundColor: '#16a34a' }]} onPress={onNext}>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>▶ الجولة التالية</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   GAME OVER MODAL
+═══════════════════════════════════════════════ */
+function GameOverModal({ visible, teamA, teamB, onNewGame, onExit }) {
+  if (!visible) return null;
+  const aWon = teamA.total >= teamB.total;
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.bidOverlay}>
+        <View style={[styles.bidModal, { backgroundColor: theme.bgElevated, paddingVertical: 28, alignItems: "center" }]}>
+          <Text style={{ fontSize: 50 }}>🏆</Text>
+          <Text style={styles.bidTitle}>
+            {aWon ? `فاز ${teamA.name}!` : `فاز ${teamB.name}!`}
+          </Text>
+          {[
+            { ...teamA, color: '#3b9eff' },
+            { ...teamB, color: '#ff7043' },
+          ].map((t, i) => (
+            <View key={i} style={[styles.totalChip, { borderColor: t.color + '44', marginTop: 8, minWidth: 160 }]}>
+              <Text style={{ fontSize: 11, color: t.color, fontWeight: '700' }}>{t.name}</Text>
+              <Text style={{ fontSize: 28, fontWeight: '900', color: '#fff' }}>{t.total}</Text>
+            </View>
+          ))}
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+            <TouchableOpacity style={styles.outlineBtn} onPress={onExit}>
+              <Text style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '700' }}>🚪 خروج</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.bidConfirm} onPress={onNewGame}>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>▶ جولة جديدة</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   MAIN SCREEN
+═══════════════════════════════════════════════ */
+export default function KoutGameScreen({ onBack, currentUser, onGameEnd }) {
+  const { theme, themeId } = useTheme();
+  const { lang } = useLanguage();
+  const { roomId, isPlayer1, roomData, loading, error, updateRoom, endGame, leaveRoom } =
+    useOnlineGame('kout', currentUser);
+
+  /* ── Local game state (mirrors Firestore) ── */
+  const [phase, setPhase] = useState('waiting'); // waiting|lobby|bidding|hokmChoice|playing|roundEnd|gameOver
+  const [players, setPlayers] = useState([]);
+  const [myHand, setMyHand] = useState([]);
+  const [currentTrick, setCurrentTrick] = useState([]); // [{uid, card}]
+  const [trickWinner, setTrickWinner] = useState(null); // uid
+  const [hokm, setHokm] = useState(null); // suit string
+  const [bids, setBids] = useState({}); // { uid: number | 'pass' }
+  const [currentBidder, setCurrentBidder] = useState(null); // uid
+  const [highBid, setHighBid] = useState(0);
+  const [highBidder, setHighBidder] = useState(null);
+  const [isMalzoom, setIsMalzoom] = useState(false);
+  const [teamScores, setTeamScores] = useState({ a: 0, b: 0 }); // cumulative
+  const [teamTricks, setTeamTricks] = useState({ a: 0, b: 0 }); // this round
+  const [currentLeader, setCurrentLeader] = useState(null); // uid who leads next trick
+  const [selectedCard, setSelectedCard] = useState(null);
+  const [round, setRound] = useState(1);
+  const [showRoundResult, setShowRoundResult] = useState(false);
+  const [showGameOver, setShowGameOver] = useState(false);
+
+  /* ── Timer ── */
+  const [timerPct, setTimerPct] = useState(100);
+  const timerRef = useRef(null);
+
+  const myUid = currentUser?.uid;
+  const myName = currentUser?.name || 'أنت';
+
+  /* ── seat helpers ──
+     seat 0 = me (bottom), seat 1 = top (partner), seat 2 = left (opponent), seat 3 = right (opponent)
+     Team A = seats 0,1 (me + top), Team B = seats 2,3 (left + right)
+  ── */
+  const myIdx   = players.findIndex(p => p.uid === myUid);
+  const seated  = (offset) => players[(myIdx + offset) % players.length];
+  const topP    = seated(2); // across from me
+  const leftP   = seated(1); // to my left (clockwise)
+  const rightP  = seated(3); // to my right
+
+  const isMyTurn = currentLeader === myUid && phase === 'playing';
+  const isMyBidTurn = currentBidder === myUid && phase === 'bidding';
+  const isMyHokmTurn = highBidder === myUid && phase === 'hokmChoice';
+
+  /* ── Sync from Firestore ── */
   useEffect(() => {
-    setMyUid(getUid());
-    setMyName(currentUser?.name || auth.currentUser?.displayName || 'لاعب');
-    Animated.timing(fadeAnim, { toValue:1, duration:400, useNativeDriver:true }).start();
-    return () => { if (unsubRef.current) unsubRef.current(); };
+    if (!roomData) return;
+    if (roomData.phase) setPhase(roomData.phase);
+    if (roomData.players) setPlayers(roomData.players);
+    if (roomData.hands?.[myUid]) setMyHand(sortHand(roomData.hands[myUid]));
+    if (roomData.currentTrick) setCurrentTrick(roomData.currentTrick);
+    if (roomData.hokm) setHokm(roomData.hokm);
+    if (roomData.bids) setBids(roomData.bids);
+    if (roomData.currentBidder) setCurrentBidder(roomData.currentBidder);
+    if (roomData.highBid !== undefined) setHighBid(roomData.highBid);
+    if (roomData.highBidder) setHighBidder(roomData.highBidder);
+    if (roomData.isMalzoom !== undefined) setIsMalzoom(roomData.isMalzoom);
+    if (roomData.teamScores) setTeamScores(roomData.teamScores);
+    if (roomData.teamTricks) setTeamTricks(roomData.teamTricks);
+    if (roomData.currentLeader) setCurrentLeader(roomData.currentLeader);
+    if (roomData.round) setRound(roomData.round);
+    if (roomData.phase === 'roundEnd') setShowRoundResult(true);
+    if (roomData.phase === 'gameOver') {
+      setShowGameOver(true);
+      // تسجيل XP — teamA = فريق اللاعب دائماً (seat 0 و 2)
+      const sc = roomData.teamScores || { a: 0, b: 0 };
+      if (onGameEnd) onGameEnd(sc.a > sc.b);
+    }
+  }, [roomData]);
+
+  /* ── Timer logic ── */
+  const startTimer = useCallback((onTimeout) => {
+    clearInterval(timerRef.current);
+    let elapsed = 0;
+    setTimerPct(100);
+    timerRef.current = setInterval(() => {
+      elapsed += 100;
+      const pct = Math.max(0, 100 - (elapsed / (TURN_SEC * 1000)) * 100);
+      setTimerPct(pct);
+      if (elapsed >= TURN_SEC * 1000) {
+        clearInterval(timerRef.current);
+        onTimeout();
+      }
+    }, 100);
   }, []);
 
-  // ── مراقبة الغرفة ──
-  function subscribeRoom(id) {
-    if (unsubRef.current) unsubRef.current();
-    startedRef.current = false;
-    unsubRef.current = onSnapshot(doc(db,'kout_rooms',id), async snap => {
-      if (!snap.exists()) { setPhase('menu'); setRoomId(null); setRoomData(null); return; }
-      const data = snap.data();
-      setRoomData(data);
-
-      // اكتملت الغرفة → ابدأ تلقائياً (الهوست فقط)
-      if (data.phase === 'lobby'
-          && data.hostUid === getUid()
-          && data.players.length >= data.maxPlayers
-          && !startedRef.current) {
-        startedRef.current = true;
-        await autoStartGame(data, id);
-        return;
-      }
-
-      if      (data.phase === 'lobby')   setPhase('lobby');
-      else if (data.phase === 'bidding') setPhase('bidding');
-      else if (data.phase === 'game')    setPhase('game');
-      else if (data.phase === 'result')  setPhase('result');
-    });
-  }
-
-  async function autoStartGame(data, id) {
-    const players  = [...data.players];
-    const n        = players.length;
-    const newHands = dealKout(n);
-    const updated  = players.map((p,i) => ({ ...p, hand: newHands[i] }));
-    await updateDoc(doc(db,'kout_rooms',id), {
-      phase:          'bidding',
-      players:        updated,
-      bids:           [],
-      currentBidSeat: 0,
-      bidWinner:      null,
-      bidValue:       null,
-      isForcedBid:    false,
-      trumpSuit:      null,
-      choosingTrump:  false,
-      currentTrick:   [],
-      tricks:         [],
-      team0Tricks:    0,
-      team1Tricks:    0,
-      totalScore:     { team0: 0, team1: 0 },
-      trickStartSeat: 0,
-      trickStartedAt: Date.now(),
-      gameStartedAt:  Date.now(),
-    });
-  }
-
-  // ── إنشاء غرفة ──
-  async function createRoom(isRandom = false) {
-    if (tokens < COST) { Alert.alert('رصيد غير كافٍ', `تحتاج ${COST} رصيد`); return; }
-    setLoading(true);
-    try {
-      const uid  = getUid();
-      const code = genCode();
-      const maxP = isRandom ? 4 : desiredCount;
-      await setDoc(doc(collection(db,'kout_rooms'), code), {
-        code,
-        phase:      'lobby',
-        isRandom,
-        maxPlayers: maxP,
-        hostUid:    uid,
-        players:    [{ uid, name: myName, seatIndex: 0 }],
-        totalScore: { team0: 0, team1: 0 },
-        createdAt:  serverTimestamp(),
-      });
-      onSpendTokens(COST);
-      setRoomId(code);
-      subscribeRoom(code);
-    } catch (e) { Alert.alert('خطأ', e.message); }
-    setLoading(false);
-  }
-
-  // ── انضمام ──
-  async function joinRoom(code) {
-    const id = (code || '').trim().toUpperCase();
-    if (!id) return;
-    if (tokens < COST) { Alert.alert('رصيد غير كافٍ', `تحتاج ${COST} رصيد`); return; }
-    setLoading(true);
-    try {
-      const ref  = doc(db,'kout_rooms',id);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) { Alert.alert('الغرفة غير موجودة'); setLoading(false); return; }
-      const data = snap.data();
-      if (data.players.length >= data.maxPlayers) { Alert.alert('الغرفة ممتلئة'); setLoading(false); return; }
-      if (data.phase !== 'lobby') { Alert.alert('اللعبة بدأت'); setLoading(false); return; }
-      const uid = getUid();
-      if (!data.players.find(p => p.uid === uid)) {
-        const seat = data.players.length;
-        await updateDoc(ref, {
-          players: arrayUnion({ uid, name: myName, seatIndex: seat }),
-        });
-        onSpendTokens(COST);
-      }
-      setRoomId(id);
-      subscribeRoom(id);
-    } catch (e) { Alert.alert('خطأ', e.message); }
-    setLoading(false);
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // المزايدة
-  // ══════════════════════════════════════════════════════════════
-  async function placeBid(value) {
-    const uid      = getUid();
-    const me       = roomData?.players.find(p => p.uid === uid);
-    if (!me) return;
-    const seat     = me.seatIndex;
-    const bids     = roomData.bids || [];
-    const nPlayers = roomData.players.length;
-    const newBid   = { uid, seat, value, name: me.name };
-    const newBids  = [...bids, newBid];
-    const nextSeat = (seat + 1) % nPlayers;
-
-    if (value === 'kout' || newBids.length >= nPlayers) {
-      // انتهت المزايدة
-      const realBids = newBids.filter(b => b.value !== 'pass');
-      let winner, winVal, forcedBids = newBids, isForced = false;
-
-      if (value === 'kout') {
-        winner = seat; winVal = 'kout';
-      } else if (realBids.length === 0) {
-        // كل اللاعبين مرروا → اللاعب الأخير ملزوم بـ 5
-        const lastPlayer = roomData.players.find(p => p.seatIndex === seat);
-        const forcedEntry = { uid: lastPlayer.uid, seat, value: 5, name: lastPlayer.name, forced: true };
-        forcedBids = [...newBids, forcedEntry];
-        winner = seat; winVal = 5; isForced = true;
-      } else {
-        const top = realBids.reduce((a,b) =>
-          (b.value === 'kout' ? 99 : b.value) > (a.value === 'kout' ? 99 : a.value) ? b : a
-        );
-        winner = top.seat; winVal = top.value;
-      }
-
-      await updateDoc(doc(db,'kout_rooms',roomId), {
-        bids:           forcedBids,
-        phase:          'game',
-        bidWinner:      winner,
-        bidValue:       winVal,
-        isForcedBid:    isForced,
-        trumpSuit:      null,
-        choosingTrump:  true,
-        currentSeat:    winner,
-        trickStartSeat: winner,
-        trickStartedAt: Date.now(),
-      });
-    } else {
-      await updateDoc(doc(db,'kout_rooms',roomId), {
-        bids:           newBids,
-        currentBidSeat: nextSeat,
-      });
+  useEffect(() => {
+    if (isMyTurn) {
+      startTimer(() => autoPlayCard());
+    } else if (isMyBidTurn) {
+      startTimer(() => autoPass());
+    } else if (isMyHokmTurn) {
+      startTimer(() => autoChooseHokm());
     }
-  }
+    return () => clearInterval(timerRef.current);
+  }, [isMyTurn, isMyBidTurn, isMyHokmTurn]);
 
-  // ── اختيار الحكم ──
-  async function chooseTrump(suit) {
-    await updateDoc(doc(db,'kout_rooms',roomId), {
-      trumpSuit:     suit,
-      choosingTrump: false,
-    });
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // لعب ورقة
-  // ══════════════════════════════════════════════════════════════
-  async function playCard(card) {
-    const uid      = getUid();
-    const me       = roomData?.players.find(p => p.uid === uid);
-    if (!me) return;
-    const seat     = me.seatIndex;
-    const nPlayers = roomData.players.length;
-    if (roomData.currentSeat !== seat) return;
-
-    const trick = roomData.currentTrick || [];
-    if (trick.length > 0) {
-      const leadSuit = trick[0].card.suit;
-      const hasLead  = me.hand.some(c => c.suit === leadSuit);
-      if (hasLead && card.suit !== leadSuit) {
-        Alert.alert('يجب لعب نفس اللون', `عندك ${leadSuit}`);
-        return;
-      }
+  /* ── Auto actions ── */
+  const autoPlayCard = useCallback(() => {
+    const playable = getPlayableCards();
+    if (playable.length > 0) {
+      const best = playable.reduce((a, b) => b.value > a.value ? b : a);
+      handlePlayCard(best);
     }
+  }, [myHand, currentTrick, hokm]);
 
-    const newHand  = me.hand.filter(c => c.id !== card.id);
-    const newTrick = [...trick, { uid, seat, card, name: me.name }];
-    const players  = roomData.players.map(p => p.uid===uid ? { ...p, hand: newHand } : p);
+  const autoPass = useCallback(() => {
+    handleBid(null, false);
+  }, []);
 
-    if (newTrick.length === nPlayers) {
-      const winSeat   = winnerOfTrick(newTrick, roomData.trumpSuit);
-      const winTeam   = TEAM_OF[winSeat];
-      const t0t       = (roomData.team0Tricks || 0) + (winTeam===0 ? 1 : 0);
-      const t1t       = (roomData.team1Tricks || 0) + (winTeam===1 ? 1 : 0);
-      const newTricks = [...(roomData.tricks || []), { cards: newTrick, winner: winSeat }];
-      const cardsLeft = players.reduce((s,p) => s + p.hand.length, 0);
+  const autoChooseHokm = useCallback(() => {
+    // choose suit with most cards in hand
+    const counts = { spades: 0, hearts: 0, diamonds: 0, clubs: 0 };
+    myHand.forEach(c => { if (counts[c.suit] !== undefined) counts[c.suit]++; });
+    const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+    handleChooseHokm(best);
+  }, [myHand]);
 
-      if (cardsLeft === 0) {
-        const result = calcRoundResult(
-          roomData.bidWinner, roomData.bidValue, t0t, t1t, nPlayers, roomData.isForcedBid
-        );
-        const newTotal = {
-          team0: (roomData.totalScore?.team0 || 0) + result.team0,
-          team1: (roomData.totalScore?.team1 || 0) + result.team1,
-        };
-        const gameWinner = newTotal.team0 >= WIN_LIMIT ? 0
-                         : newTotal.team1 >= WIN_LIMIT ? 1
-                         : null;
-        const nextState = gameWinner === null
-          ? buildNextBiddingState(players, roomData.bidWinner)
-          : {};
-        await updateDoc(doc(db,'kout_rooms',roomId), {
-          players,
-          tricks:          newTricks,
-          team0Tricks:     t0t,
-          team1Tricks:     t1t,
-          totalScore:      newTotal,
-          lastRoundResult: result,
-          phase:           gameWinner !== null ? 'result' : 'bidding',
-          winner:          gameWinner,
-          ...nextState,
+  /* ── Get playable cards (follow-suit rule) ── */
+  const getPlayableCards = useCallback(() => {
+    if (!currentTrick || currentTrick.length === 0) return myHand;
+    const ledSuit = currentTrick[0].card.suit;
+    if (ledSuit === 'joker' || ledSuit === 'maker') return myHand;
+    const sameSuit = myHand.filter(c => c.suit === ledSuit);
+    // joker and maker can always be played
+    const specials = myHand.filter(c => c.suit === 'joker' || c.suit === 'maker');
+    if (sameSuit.length > 0) return [...sameSuit, ...specials];
+    return myHand;
+  }, [myHand, currentTrick]);
+
+  const isPlayable = (card) => {
+    const playable = getPlayableCards();
+    return playable.some(c => c.suit === card.suit && c.rank === card.rank);
+  };
+
+  /* ── Actions ── */
+  const handleBid = async (amount, malzoom = false) => {
+    if (!isMyBidTurn) return;
+    const newBids = { ...bids, [myUid]: amount ?? 'pass' };
+    // figure out next bidder and state
+    const bidOrder = players.map(p => p.uid);
+    const myBidIdx = bidOrder.indexOf(myUid);
+    const nextBidderUid = bidOrder[(myBidIdx + 1) % bidOrder.length];
+
+    // check if bidding is over
+    const allBid = Object.keys(newBids).length === players.length;
+    const allPassed = Object.values(newBids).every(v => v === 'pass' || v === null);
+    const activeBids = Object.entries(newBids).filter(([, v]) => v !== 'pass' && v !== null);
+    const newHighBid = amount ?? highBid;
+    const newHighBidder = amount ? myUid : highBidder;
+
+    if (allBid) {
+      if (allPassed) {
+        // malzoom — last bidder forced
+        await updateRoom({
+          bids: newBids, highBid: 5, highBidder: myUid, isMalzoom: true,
+          phase: 'hokmChoice', currentBidder: null,
         });
       } else {
-        await updateDoc(doc(db,'kout_rooms',roomId), {
-          players,
-          currentTrick:    [],
-          tricks:          newTricks,
-          team0Tricks:     t0t,
-          team1Tricks:     t1t,
-          currentSeat:     winSeat,
-          trickStartSeat:  winSeat,
-          trickStartedAt:  Date.now(),
-          lastTrickWinner: winSeat,
+        await updateRoom({
+          bids: newBids, highBid: newHighBid, highBidder: newHighBidder,
+          isMalzoom: malzoom,
+          phase: 'hokmChoice', currentBidder: null,
         });
       }
     } else {
-      // اتجاه اللعب: عكس عقارب الساعة
-      const nextSeat = (seat - 1 + nPlayers) % nPlayers;
-      await updateDoc(doc(db,'kout_rooms',roomId), {
-        players,
-        currentTrick:   newTrick,
-        currentSeat:    nextSeat,
-        trickStartedAt: Date.now(),
+      await updateRoom({
+        bids: newBids, currentBidder: nextBidderUid,
+        highBid: newHighBid, highBidder: newHighBidder,
+      });
+    }
+  };
+
+  const handleChooseHokm = async (suit) => {
+    if (!isMyHokmTurn) return;
+    // mark hokm cards in all hands — update Firestore
+    await updateRoom({
+      hokm: suit, phase: 'playing',
+      currentLeader: highBidder,
+    });
+  };
+
+  const handlePlayCard = async (card) => {
+    if (!isMyTurn) return;
+    if (!isPlayable(card)) return;
+    playSound('card_play');
+    clearInterval(timerRef.current);
+    const newHand = myHand.filter(c => !(c.suit === card.suit && c.rank === card.rank));
+    const newTrick = [...currentTrick, { uid: myUid, card }];
+
+    if (newTrick.length < players.length) {
+      // not all played yet
+      const playerOrder = players.map(p => p.uid);
+      const myPos = playerOrder.indexOf(myUid);
+      const nextLeader = playerOrder[(myPos + 1) % playerOrder.length];
+      await updateRoom({
+        [`hands.${myUid}`]: newHand,
+        currentTrick: newTrick,
+        currentLeader: nextLeader,
+      });
+    } else {
+      // trick complete — determine winner
+      const winnerUid = determineTrickWinner(newTrick, hokm);
+      // update team tricks
+      const winnerIdx = players.findIndex(p => p.uid === winnerUid);
+      const winnerSeat = (winnerIdx - myIdx + players.length) % players.length;
+      const winTeam = (winnerSeat === 0 || winnerSeat === 2) ? 'a' : 'b'; // seat 0=me, 2=top = team A
+      const newTeamTricks = { ...teamTricks, [winTeam]: (teamTricks[winTeam] || 0) + 1 };
+
+      const roundDone = newHand.length === 0 && newTeamTricks.a + newTeamTricks.b === 9;
+
+      await updateRoom({
+        [`hands.${myUid}`]: newHand,
+        currentTrick: newTrick,
+        trickWinner: winnerUid,
+        teamTricks: newTeamTricks,
+        currentLeader: winnerUid,
+        phase: roundDone ? 'roundEnd' : 'playing',
       });
     }
     setSelectedCard(null);
-  }
+  };
 
-  // ── بحث أصدقاء ──
-  async function searchFriends(text) {
-    setFriendSearch(text);
-    if (text.length < 2) { setFriendResults([]); return; }
-    setSearching(true);
-    try {
-      const q = query(collection(db,'users'), where('displayName','>=',text), where('displayName','<=',text+'\uf8ff'));
-      const snap = await getDocs(q);
-      setFriendResults(snap.docs.map(d=>({ uid:d.id, ...d.data() })).filter(u=>u.uid!==getUid()));
-    } catch {}
-    setSearching(false);
-  }
-  async function inviteFriend(friend) {
-    if (!roomId) return;
-    try {
-      await updateDoc(doc(db,'users',friend.uid), {
-        invites: arrayUnion({ roomId, game:'kout', from: myName, at: Date.now() }),
-      });
-      Alert.alert('تمت الدعوة ✓', `دُعي ${friend.displayName}`);
-    } catch {}
-  }
+  const handleNextRound = async () => {
+    // calculate scores
+    const bidNum = highBid;
+    const aWon = teamTricks.a >= bidNum;
+    const pts = aWon ? bidNum : (isMalzoom ? bidNum : bidNum * 2);
+    const newScores = {
+      a: teamScores.a + (aWon ? bidNum : 0),
+      b: teamScores.b + (aWon ? 0 : pts),
+    };
 
-  // ── مغادرة ──
-  function leaveRoom() { setShowLeave(true); }
+    const gameOver = newScores.a >= 51 || newScores.b >= 51;
 
-  async function confirmLeave() {
-    setShowLeave(false);
-    if (unsubRef.current) unsubRef.current();
-    if (roomId) {
-      try {
-        const snap = await getDoc(doc(db,'kout_rooms',roomId));
-        if (snap.exists()) {
-          const data = snap.data();
-          if (data.phase === 'lobby') onSpendTokens && onSpendTokens(-COST);
-          if (data.phase === 'lobby' && data.hostUid === getUid()) {
-            await deleteDoc(doc(db,'kout_rooms',roomId));
-          } else {
-            await updateDoc(doc(db,'kout_rooms',roomId), {
-              players: data.players.filter(p => p.uid !== getUid()),
-            });
-          }
-        }
-      } catch {}
+    if (gameOver) {
+      await updateRoom({ teamScores: newScores, phase: 'gameOver' });
+      return;
     }
-    setRoomId(null); setRoomData(null); setPhase('menu');
+
+    // next round
+    const newLeader = players[(round) % players.length]?.uid;
+    await updateRoom({
+      teamScores: newScores,
+      teamTricks: { a: 0, b: 0 },
+      bids: {}, highBid: 0, highBidder: null, hokm: null, isMalzoom: false,
+      currentTrick: [], trickWinner: null,
+      currentLeader: null, currentBidder: newLeader,
+      round: round + 1, phase: 'bidding',
+    });
+    setShowRoundResult(false);
+  };
+
+  /* ── LOBBY: player1 deals when game starts ── */
+  useEffect(() => {
+    if (isPlayer1 && roomData?.phase === 'lobby' && roomData?.players?.length >= 2) {
+      const deck = shuffleDeck(buildDeck4());
+      const N = roomData.players.length;
+      const hands = {};
+      roomData.players.forEach((p, i) => {
+        hands[p.uid] = sortHand(deck.slice(i * 9, (i + 1) * 9));
+      });
+      const firstBidder = roomData.players[0]?.uid;
+      updateRoom({
+        hands, phase: 'bidding',
+        currentBidder: firstBidder, highBid: 0, highBidder: null,
+        bids: {}, currentTrick: [], teamTricks: { a: 0, b: 0 },
+        teamScores: roomData.teamScores || { a: 0, b: 0 },
+        hokm: null, trickWinner: null, round: 1,
+      });
+    }
+  }, [roomData?.phase, roomData?.players?.length]);
+
+  /* ── Team names ── */
+  const teamAName = `${myName} و${topP?.name || '…'}`;
+  const teamBName = `${leftP?.name || '…'} و${rightP?.name || '…'}`;
+
+  /* ── Trick cards: each rendered horizontally, no player label ── */
+  // Map uid → seat position to know rotation
+  const uidToSeat = (uid) => {
+    const idx = players.findIndex(p => p.uid === uid);
+    if (idx < 0) return 0;
+    return (idx - myIdx + players.length) % players.length;
+    // 0=me(bottom), 1=left, 2=top, 3=right (clockwise from me)
+  };
+
+  const trickRotations = { 0: '0deg', 1: '90deg', 2: '180deg', 3: '-90deg' };
+
+  /* ── error / loading ── */
+  if (error) {
+    return (
+      <View style={[styles.container, { backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }]}>
+        <StatusBar barStyle={theme.statusBar} />
+        <Text style={{ color: '#ef4444', fontSize: 14 }}>❌ {error}</Text>
+        <TouchableOpacity onPress={onBack} style={[styles.bidConfirm, { marginTop: 16 }]}>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>رجوع</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // قيم مشتقة
-  // ══════════════════════════════════════════════════════════════
-  const myPlayer   = roomData?.players?.find(p => p.uid === myUid);
-  const mySeat     = myPlayer?.seatIndex ?? 0;
-  const myTeam     = TEAM_OF[mySeat] ?? 0;
-  const isMyTurn   = roomData?.currentSeat === mySeat;
-  const isBidTurn  = roomData?.currentBidSeat === mySeat;
-  const isChoosing = roomData?.choosingTrump && roomData?.bidWinner === mySeat;
-  const totalScore = roomData?.totalScore || { team0:0, team1:0 };
-  const myScore    = myTeam===0 ? totalScore.team0 : totalScore.team1;
-  const oppScore   = myTeam===0 ? totalScore.team1 : totalScore.team0;
-  const bidVal     = roomData?.bidValue;
-  const bidWinSeat = roomData?.bidWinner ?? 0;
-  const bidWinTeam = TEAM_OF[bidWinSeat];
-  const bidLabel   = bidVal==='kout'?'كوت!':BID_LABELS[bidVal]||String(bidVal);
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ◀ قائمة
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (phase === 'menu') return (
-    <View style={s.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <Animated.View style={{ opacity: fadeAnim, flex:1 }}>
-        <View style={s.header}>
-          <TouchableOpacity onPress={onBack} style={s.backBtn}>
-            <Text style={s.backText}>←</Text>
-          </TouchableOpacity>
-          <View style={s.headerCenter}>
-            <Text style={s.headerEmoji}>🂡</Text>
-            <Text style={s.headerTitle}>كوت بو 6</Text>
-          </View>
-          <View style={s.tokenBadge}><Text style={s.tokenText}>🪙 {tokens}</Text></View>
-        </View>
-
-        <ScrollView contentContainerStyle={s.menuScroll} showsVerticalScrollIndicator={false}>
-          <View style={s.infoBox}>
-            <Text style={s.infoTitle}>🂡 كيف تلعب كوت؟</Text>
-            <Text style={s.infoText}>
-              لعبة ورق خليجية لـ4 لاعبين (فريقان). تبدأ بالمزايدة على عدد اللمات (5-9).
-              الرابح يحدد نوع الحكم ويحاول تحقيق مزايدته.{'\n\n'}
-              • نجح → يأخذ عدد اللمات نقاطاً{'\n'}
-              • فشل → الخصم يأخذ نفس العدد{'\n'}
-              • كل مرروا → اللاعب الأخير ملزوم بـ 5 (باب){'\n'}
-              • كوت (كل اللمات) → نقاط مضاعفة{'\n'}
-              • الفائز: أول فريق يصل {WIN_LIMIT} نقطة
-            </Text>
-            <View style={s.infoMeta}>
-              <Text style={s.infoMetaText}>👥 4–6 لاعبين</Text>
-              <Text style={s.infoMetaText}>🪙 {COST} رصيد</Text>
-              <Text style={s.infoMetaText}>🏆 حد: {WIN_LIMIT} نقطة</Text>
-            </View>
-          </View>
-
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>عدد اللاعبين (غرفة الأصدقاء)</Text>
-            <View style={s.countRow}>
-              {[4,6].map(n => (
-                <TouchableOpacity
-                  key={n} style={[s.countBtn, desiredCount===n&&s.countBtnActive]}
-                  onPress={() => setDesiredCount(n)}
-                >
-                  <Text style={[s.countBtnText, desiredCount===n&&s.countBtnTextActive]}>{n}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={s.btnGroup}>
-            <TouchableOpacity style={s.btnPrimary} onPress={() => createRoom(true)} disabled={loading}>
-              <Text style={s.btnIcon}>🎲</Text>
-              <View>
-                <Text style={s.btnPrimaryText}>لعب عشوائي</Text>
-                <Text style={s.btnSub}>4 لاعبين • {COST} رصيد</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.btnSecondary} onPress={() => createRoom(false)} disabled={loading}>
-              <Text style={s.btnIcon}>👥</Text>
-              <View>
-                <Text style={s.btnSecondaryText}>أنشئ غرفة أصدقاء</Text>
-                <Text style={[s.btnSub,{color:'#a0a0c0'}]}>{desiredCount} لاعبين • {COST} رصيد</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>انضم بكود</Text>
-            <View style={s.joinBox}>
-              <TextInput
-                style={s.joinInput} placeholder="أدخل الكود" placeholderTextColor="#555577"
-                value={joinCode} onChangeText={t => setJoinCode(t.toUpperCase())}
-                maxLength={6} autoCapitalize="characters"
-              />
-              <TouchableOpacity style={s.joinBtn} onPress={() => joinRoom(joinCode)}>
-                <Text style={s.joinBtnText}>انضم</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {loading && <ActivityIndicator color="#8b5cf6" size="large" />}
-        </ScrollView>
-      </Animated.View>
-    </View>
-  );
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ◀ لوبي
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (phase === 'lobby') return (
-    <View style={s.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={s.header}>
-        <TouchableOpacity onPress={leaveRoom} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
-        <Text style={s.headerTitle}>🂡 انتظار اللاعبين</Text>
-        <View style={s.tokenBadge}><Text style={s.tokenText}>🪙 {tokens}</Text></View>
+  if (loading || !roomId) {
+    return (
+      <View style={[styles.container, { backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }]}>
+        <StatusBar barStyle={theme.statusBar} />
+        <Text style={{ color: theme.textPrimary, fontSize: 14 }}>جاري الاتصال...</Text>
       </View>
-      <ScrollView contentContainerStyle={s.menuScroll}>
-        <View style={s.codeBig}>
-          <Text style={s.codeLabel}>كود الغرفة</Text>
-          <Text style={s.codeValue}>{roomId}</Text>
-          <Text style={s.codeHint}>اللعبة تبدأ تلقائياً عند اكتمال اللاعبين</Text>
+    );
+  }
+
+  /* ══════════════════════════════════════════════
+     RENDER
+  ══════════════════════════════════════════════ */
+  return (
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor="transparent" translucent />
+
+      {/* ══ HEADER ══ */}
+      <View style={styles.header}>
+        {/* exit + web top-left */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity onPress={() => { leaveRoom(); onBack(); }} style={styles.exitBtn}>
+            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '700' }}>✕</Text>
+          </TouchableOpacity>
+          <GameInfoButton gameType="kout" lang={lang} />
+          <WebScreenButton
+            playerUid={myUid}
+            playerName={myName}
+            gameType="kout"
+            gameRoomId={roomId || ''}
+            getPublicData={() => ({ teamScores, round })}
+            themeName={themeId || 'dark'}
+          />
         </View>
 
-        <View style={s.roomProgress}>
-          <View style={s.roomProgressTrack}>
-            <View style={[s.roomProgressFill, {
-              width: `${((roomData?.players?.length||0)/(roomData?.maxPlayers||4))*100}%`
-            }]} />
+        {/* score track center */}
+        <View style={styles.scoreTrack}>
+          <View style={{ alignItems: 'flex-end', minWidth: 50 }}>
+            <Text style={[styles.teamPts, { color: '#3b9eff' }]}>{teamScores.a}</Text>
+            <Text style={[styles.teamName, { color: '#3b9eff' }]} numberOfLines={1}>{teamAName}</Text>
           </View>
-          <Text style={s.roomProgressText}>
-            {roomData?.players?.length||0} / {roomData?.maxPlayers||4} لاعبين
-          </Text>
+
+          <View style={{ alignItems: 'center', gap: 3, paddingHorizontal: 8 }}>
+            <LamasDots
+              bid={highBid || 0}
+              teamATricks={teamTricks.a}
+              teamBTricks={teamTricks.b}
+              maxTricks={9}
+            />
+            {hokm && (
+              <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>
+                {highBid} {SUITS[hokm]} حكم
+              </Text>
+            )}
+          </View>
+
+          <View style={{ alignItems: 'flex-start', minWidth: 50 }}>
+            <Text style={[styles.teamPts, { color: '#ff7043' }]}>{teamScores.b}</Text>
+            <Text style={[styles.teamName, { color: '#ff7043' }]} numberOfLines={1}>{teamBName}</Text>
+          </View>
         </View>
 
-        <View style={s.lobbySection}>
-          <Text style={s.lobbySTitle}>اللاعبون</Text>
-          {Array.from({length: roomData?.maxPlayers||4}).map((_,i) => {
-            const p = roomData?.players?.[i];
+        <View style={{ width: 34 }} />
+      </View>
+
+      {/* ══ GAME AREA ══ */}
+      <View style={styles.gameArea}>
+
+        {/* ── TOP PLAYER (seat 2 = across) ── */}
+        {topP && (
+          <View style={styles.playerTop}>
+            {hokm && highBidder === topP.uid && (
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 4,
+                backgroundColor: 'rgba(201,146,42,0.2)',
+                borderWidth: 1, borderColor: 'rgba(201,146,42,0.6)',
+                borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3,
+                marginBottom: 2,
+              }}>
+                <Text style={{ fontSize: 14, color: SUIT_COLOR[hokm] }}>{SUITS[hokm]}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#f5c842' }}>{highBid}</Text>
+                <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>حكم</Text>
+              </View>
+            )}
+            <PlayerLabel
+              name={topP.name}
+              isActive={currentLeader === topP.uid || currentBidder === topP.uid}
+              showTimer={currentLeader === topP.uid || currentBidder === topP.uid}
+              timerPct={timerPct}
+              isBot={topP.isBot}
+              side="top"
+            />
+            <View style={{ transform: [{ rotate: '180deg' }] }}>
+              <FaceDownStack
+                count={Math.min(topP.cardCount ?? 9, 9)}
+                direction="horizontal"
+              />
+            </View>
+          </View>
+        )}
+
+        {/* ── LEFT PLAYER (seat 1) ── */}
+        {leftP && (
+          <View style={styles.playerLeft}>
+            {hokm && highBidder === leftP.uid && (
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 4,
+                backgroundColor: 'rgba(201,146,42,0.2)',
+                borderWidth: 1, borderColor: 'rgba(201,146,42,0.6)',
+                borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3,
+                marginBottom: 2,
+              }}>
+                <Text style={{ fontSize: 14, color: SUIT_COLOR[hokm] }}>{SUITS[hokm]}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#f5c842' }}>{highBid}</Text>
+                <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>حكم</Text>
+              </View>
+            )}
+            <PlayerLabel
+              name={leftP.name}
+              isActive={currentLeader === leftP.uid || currentBidder === leftP.uid}
+              showTimer={currentLeader === leftP.uid || currentBidder === leftP.uid}
+              timerPct={timerPct}
+              isBot={leftP.isBot}
+              side="left"
+            />
+            <View style={{ transform: [{ rotate: '90deg' }] }}>
+              <FaceDownStack
+                count={Math.min(leftP.cardCount ?? 9, 9)}
+                direction="horizontal"
+              />
+            </View>
+          </View>
+        )}
+
+        {/* ── RIGHT PLAYER (seat 3) ── */}
+        {rightP && (
+          <View style={styles.playerRight}>
+            {hokm && highBidder === rightP.uid && (
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 4,
+                backgroundColor: 'rgba(201,146,42,0.2)',
+                borderWidth: 1, borderColor: 'rgba(201,146,42,0.6)',
+                borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3,
+                marginBottom: 2,
+              }}>
+                <Text style={{ fontSize: 14, color: SUIT_COLOR[hokm] }}>{SUITS[hokm]}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#f5c842' }}>{highBid}</Text>
+                <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>حكم</Text>
+              </View>
+            )}
+            <PlayerLabel
+              name={rightP.name}
+              isActive={currentLeader === rightP.uid || currentBidder === rightP.uid}
+              showTimer={currentLeader === rightP.uid || currentBidder === rightP.uid}
+              timerPct={timerPct}
+              isBot={rightP.isBot}
+              side="right"
+            />
+            <View style={{ transform: [{ rotate: '-90deg' }] }}>
+              <FaceDownStack
+                count={Math.min(rightP.cardCount ?? 9, 9)}
+                direction="horizontal"
+              />
+            </View>
+          </View>
+        )}
+
+        {/* ── TRICK AREA CENTER ── */}
+        {/* All 4 trick cards displayed horizontally (no rotation) arranged in 2x2 grid */}
+        <View style={[styles.trickArea, {
+          shadowColor: theme.accent || '#f5c518',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.25,
+          shadowRadius: 18,
+          elevation: 8,
+        }]}>
+          {/* Trick winner label — above the cards */}
+          {trickWinner && (
+            <View style={{
+              position: 'absolute',
+              top: -28,
+              left: 0, right: 0,
+              alignItems: 'center',
+              zIndex: 20,
+            }}>
+              <View style={{
+                backgroundColor: 'rgba(74,222,128,0.22)',
+                borderWidth: 1, borderColor: '#4ade80',
+                borderRadius: 10,
+                paddingHorizontal: 12, paddingVertical: 3,
+              }}>
+                <Text style={{ color: '#4ade80', fontSize: 11, fontWeight: '800' }}>
+                  ✓ {players.find(p => p.uid === trickWinner)?.name || ''} يفوز!
+                </Text>
+              </View>
+            </View>
+          )}
+          {/* We position cards in the 4 quadrants, all readable (0deg rotation) */}
+          {/* Quadrant: top-right=top player, top-left=right player, bottom-right=left player, bottom-left=me */}
+          {/* Matches screenshot: top center + left + right + center bottom */}
+          {/* Use a radial layout: top, left, right, bottom */}
+          {[
+            { seat: 2, style: styles.trickTop },    // top player
+            { seat: 1, style: styles.trickLeft },   // left player
+            { seat: 3, style: styles.trickRight },  // right player
+            { seat: 0, style: styles.trickBottom }, // me
+          ].map(({ seat, style: pos }) => {
+            const entry = currentTrick.find(t => {
+              const s = uidToSeat(t.uid);
+              return s === seat;
+            });
+            const isWinner = trickWinner && entry && entry.uid === trickWinner;
             return (
-              <View key={i} style={[s.playerSlot, p&&s.playerSlotFilled]}>
-                <Text style={s.playerSlotEmoji}>{p?(TEAM_OF[i]===0?'🟣':'🔵'):'⏳'}</Text>
-                {p
-                  ? <Text style={s.playerSlotName}>{p.name} ({SEAT_LABEL[i]})</Text>
-                  : <Text style={s.emptySlot}>في انتظار لاعب...</Text>}
-                {p?.uid===myUid && <Text style={s.meTag}>أنت</Text>}
+              <View key={seat} style={pos}>
+                {entry ? (
+                  <PlayingCard
+                    card={{ ...entry.card, isHokm: entry.card.suit === hokm }}
+                    winning={isWinner}
+                    width={TRICK_W}
+                    height={TRICK_H}
+                  />
+                ) : (
+                  <View style={styles.trickSlotEmpty} />
+                )}
               </View>
             );
           })}
         </View>
 
-        {!roomData?.isRandom && (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>ادعُ أصدقاء</Text>
-            <TextInput
-              style={s.joinInput} placeholder="ابحث باسم الصديق" placeholderTextColor="#555577"
-              value={friendSearch} onChangeText={searchFriends}
-            />
-            {searching && <ActivityIndicator color="#8b5cf6" size="small" />}
-            {friendResults.map(f => (
-              <TouchableOpacity key={f.uid} style={s.friendResult} onPress={() => inviteFriend(f)}>
-                <Text style={s.friendResultName}>{f.displayName}</Text>
-                <Text style={s.friendResultInvite}>دعوة ←</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        <View style={s.waitingBox}>
-          <ActivityIndicator color="#8b5cf6" size="small" />
-          <Text style={s.waitingText}>في انتظار اكتمال اللاعبين...</Text>
-        </View>
-      </ScrollView>
-      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
-    </View>
-  );
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ◀ المزايدة
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (phase === 'bidding') {
-    const bids     = roomData?.bids || [];
-    const bidSeat  = roomData?.currentBidSeat ?? 0;
-    const lastReal = [...bids].reverse().find(b => b.value !== 'pass');
-    const minBid   = lastReal ? (lastReal.value === 'kout' ? 999 : (lastReal.value||5) + 1) : 5;
-    const validBids= [5,6,7,8,9].filter(v => v >= minBid);
-    const curP     = roomData?.players?.find(p => p.seatIndex === bidSeat);
-
-    return (
-      <View style={s.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-        <View style={s.gameHeader}>
-          <TouchableOpacity onPress={leaveRoom} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
-          <View style={{ alignItems:'center' }}>
-            <Text style={s.gameTitle}>🂡 المزايدة</Text>
-            <Text style={s.gameSubtitle}>حد الفوز: {WIN_LIMIT} نقطة</Text>
-          </View>
-          <View style={s.scoresBadge}><Text style={s.scoresText}>⭐ {myScore}–{oppScore}</Text></View>
-        </View>
-
-        <ScrollView contentContainerStyle={{ padding:16, gap:14 }}>
-          <View style={s.bidsHistory}>
-            <Text style={s.sectionTitle}>المزايدات</Text>
-            {bids.length===0
-              ? <Text style={{color:'#555577',textAlign:'center',fontSize:13}}>لا مزايدات بعد</Text>
-              : bids.map((b,i)=>(
-                  <View key={i} style={s.bidRow}>
-                    <Text style={s.bidName}>{b.name}{b.forced?' (ملزوم)':''}</Text>
-                    <Text style={[
-                      s.bidVal,
-                      b.value==='kout'&&{color:'#f5c518'},
-                      b.value==='pass'&&{color:'#555577'},
-                      b.forced&&{color:'#ef4444'},
-                    ]}>
-                      {b.value==='pass'?'طاف':b.value==='kout'?'🏆 كوت!':BID_LABELS[b.value]||b.value}
-                    </Text>
-                  </View>
-                ))
-            }
-          </View>
-
-          {isBidTurn ? (
-            <View style={{ gap:12 }}>
-              <Text style={[s.sectionTitle,{color:'#f5c518'}]}>دورك — زايد أو طاف</Text>
-              <View style={s.bidGrid}>
-                {validBids.map(v=>(
-                  <TouchableOpacity key={v} style={s.bidOption} onPress={()=>placeBid(v)}>
-                    <Text style={s.bidOptionNum}>{v}</Text>
-                    <Text style={s.bidOptionLabel}>{BID_LABELS[v]}</Text>
-                  </TouchableOpacity>
-                ))}
-                {minBid <= 9 && (
-                  <TouchableOpacity style={[s.bidOption,s.bidKout]} onPress={()=>placeBid('kout')}>
-                    <Text style={[s.bidOptionNum,{color:'#f5c518'}]}>كوت</Text>
-                    <Text style={[s.bidOptionLabel,{color:'#f5c518'}]}>كل اللمات</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <TouchableOpacity style={s.btnOutline} onPress={()=>placeBid('pass')}>
-                <Text style={s.btnOutlineText}>طاف (تمرير)</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={s.waitingBox}>
-              <ActivityIndicator color="#8b5cf6" size="small" />
-              <Text style={s.waitingText}>في انتظار {curP?.name||'...'}</Text>
-            </View>
-          )}
-        </ScrollView>
       </View>
-    );
-  }
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ◀ اللعبة
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (phase === 'game') {
-    const myHand    = myPlayer?.hand || [];
-    const trick     = roomData?.currentTrick || [];
-    const trump     = roomData?.trumpSuit;
-    const seatOrder = [mySeat, (mySeat+1)%4, (mySeat+2)%4, (mySeat+3)%4];
-    const playerAt  = si => roomData?.players?.find(p => p.seatIndex===si);
-    const myTricks  = myTeam===0 ? (roomData?.team0Tricks||0) : (roomData?.team1Tricks||0);
-    const oppTricks = myTeam===0 ? (roomData?.team1Tricks||0) : (roomData?.team0Tricks||0);
-
-    return (
-      <View style={s.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-
-        <View style={s.gameHeader}>
-          <TouchableOpacity onPress={leaveRoom} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
-          <View style={{ alignItems:'center' }}>
-            <Text style={s.gameTitle}>🂡 كوت</Text>
-            {trump && <Text style={{color:SUIT_COLOR[trump]||'#fff',fontSize:14,fontWeight:'800'}}>حكم: {trump}</Text>}
-          </View>
-          <View style={s.scoresBadge}><Text style={s.scoresText}>⭐ {myScore}–{oppScore}</Text></View>
-        </View>
-
-        <View style={s.roundBar}>
-          <Text style={s.roundBarText}>
-            لماتك: {myTricks}
-            {bidWinTeam===myTeam ? `  🎯 مزايدة: ${bidLabel}` : ''}
-          </Text>
-          <Text style={s.roundBarText}>خصمك: {oppTricks}</Text>
-        </View>
-
-        <TimerBar
-          startedAt={roomData?.trickStartedAt} seconds={45}
-          active={isMyTurn && !roomData?.choosingTrump}
-          onTimeout={() => { if (myHand.length>0) playCard(myHand[0]); }}
-        />
-
-        {isMyTurn && !roomData?.choosingTrump
-          ? <View style={s.myTurnBanner}><Text style={s.myTurnText}>🎯 دورك!</Text></View>
-          : !roomData?.choosingTrump && (
-            <View style={s.waitBanner}>
-              <Text style={s.waitBannerText}>{playerAt(roomData?.currentSeat)?.name||'...'} يلعب...</Text>
-            </View>
-          )
-        }
-
-        {/* مودال الحكم */}
-        {isChoosing && (
-          <Modal transparent animationType="fade">
-            <View style={s.modalOverlay}>
-              <View style={s.modalBox}>
-                <Text style={s.modalTitle}>اختر الحكم 🃏</Text>
-                <Text style={s.modalSub}>
-                  {roomData?.isForcedBid ? 'ملزوم (باب=5) — ' : ''}
-                  مزايدتك: {bidLabel}
-                </Text>
-                <View style={s.suitRow}>
-                  {SUITS.map(suit=>(
-                    <TouchableOpacity key={suit} style={s.suitBtn} onPress={()=>chooseTrump(suit)}>
-                      <Text style={[s.suitBtnText,{color:SUIT_COLOR[suit]}]}>{suit}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+      {/* ══ MY HAND AREA (bottom) ══ */}
+      <View style={styles.handArea}>
+        {/* my info row */}
+        <View style={styles.myInfoRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ position: 'relative' }}>
+              <View style={[styles.avatar, {
+                borderColor: isMyTurn ? '#f5c842' : 'rgba(255,255,255,0.2)',
+                width: 34, height: 34, borderRadius: 17,
+              }]}>
+                <Text style={{ fontSize: 14 }}>👤</Text>
               </View>
+              <View style={[styles.onlineDot, { borderColor: '#0a2e18' }]} />
             </View>
-          </Modal>
-        )}
-
-        {/* الطاولة */}
-        <View style={s.table}>
-          {/* شمال (شريك) */}
-          {(()=>{
-            const p = playerAt(seatOrder[2]);
-            return (
-              <View style={s.playerNorth}>
-                <Text style={[s.playerName, TEAM_OF[seatOrder[2]]===myTeam&&s.allyName]}>
-                  {p?.name||'...'} {TEAM_OF[seatOrder[2]]===myTeam?'🤝':'⚔️'}
-                </Text>
-                <Text style={s.cardCount}>{p?.hand?.length||0} 🃏</Text>
-                <View style={s.hiddenHand}>
-                  {Array.from({length:Math.min(p?.hand?.length||0,5)}).map((_,i)=>(
-                    <View key={i} style={s.hiddenCard}/>
-                  ))}
-                </View>
+            <View>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>{myName}</Text>
+              <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
+                الفريق: <Text style={{ color: '#3b9eff' }}>أزرق</Text>
+              </Text>
+            </View>
+            {hokm && highBidder === myUid && (
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 4,
+                backgroundColor: 'rgba(201,146,42,0.2)',
+                borderWidth: 1, borderColor: 'rgba(201,146,42,0.6)',
+                borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3,
+              }}>
+                <Text style={{ fontSize: 14, color: SUIT_COLOR[hokm] }}>{SUITS[hokm]}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#f5c842' }}>{highBid}</Text>
+                <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>حكم</Text>
               </View>
-            );
-          })()}
-
-          <View style={s.tableMiddle}>
-            {/* يسار */}
-            {(()=>{
-              const p = playerAt(seatOrder[3]);
-              return (
-                <View style={s.playerSide}>
-                  <Text style={[s.playerName,{fontSize:11},TEAM_OF[seatOrder[3]]===myTeam&&s.allyName]}>
-                    {p?.name||'...'} {TEAM_OF[seatOrder[3]]===myTeam?'🤝':'⚔️'}
-                  </Text>
-                  <Text style={s.cardCount}>{p?.hand?.length||0} 🃏</Text>
-                </View>
-              );
-            })()}
-
-            {/* الصنج */}
-            <View style={s.trickArea}>
-              {trick.length===0 && !trump
-                ? <Text style={s.trickEmpty}>🂠</Text>
-                : trick.length===0
-                ? <Text style={[s.trumpDisplay,{color:SUIT_COLOR[trump]||'#fff'}]}>{trump}</Text>
-                : trick.map((t,i)=>(
-                    <View key={i} style={[s.trickCard,{borderColor:SUIT_COLOR[t.card.suit]||'#fff'}]}>
-                      <Text style={[s.trickCardRank,{color:SUIT_COLOR[t.card.suit]||'#fff'}]}>
-                        {RANK_AR[t.card.rank]}{t.card.suit}
-                      </Text>
-                      <Text style={s.trickCardName}>{t.name}</Text>
-                    </View>
-                  ))
-              }
-            </View>
-
-            {/* يمين */}
-            {(()=>{
-              const p = playerAt(seatOrder[1]);
-              return (
-                <View style={s.playerSide}>
-                  <Text style={[s.playerName,{fontSize:11},TEAM_OF[seatOrder[1]]===myTeam&&s.allyName]}>
-                    {p?.name||'...'} {TEAM_OF[seatOrder[1]]===myTeam?'🤝':'⚔️'}
-                  </Text>
-                  <Text style={s.cardCount}>{p?.hand?.length||0} 🃏</Text>
-                </View>
-              );
-            })()}
+            )}
           </View>
-
-          {roomData?.lastTrickWinner!==undefined && trick.length===0 && (
-            <Text style={s.lastTrickNote}>
-              آخر لمة: {playerAt(roomData.lastTrickWinner)?.name||'...'}
-            </Text>
+          {isMyTurn && (
+            <Text style={styles.turnInd}>▲ دورك!</Text>
+          )}
+          {isMyBidTurn && (
+            <Text style={styles.turnInd}>🤝 زايد!</Text>
           )}
         </View>
 
-        {/* يدي */}
-        <View style={s.handArea}>
-          <Text style={s.handLabel}>يدك ({myHand.length} ورقة)</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.handScroll}>
-            {myHand
-              .slice()
-              .sort((a,b) => a.suit!==b.suit?a.suit.localeCompare(b.suit):(RANK_VAL[b.rank]||0)-(RANK_VAL[a.rank]||0))
-              .map(card=>(
-                <TouchableOpacity
-                  key={card.id}
-                  style={[
-                    s.card,
-                    selectedCard?.id===card.id&&s.cardSelected,
-                    !isMyTurn&&s.cardDisabled,
-                    card.suit===trump&&s.cardTrump,
-                  ]}
-                  onPress={()=>{
-                    if (!isMyTurn||roomData?.choosingTrump) return;
-                    if (selectedCard?.id===card.id) playCard(card);
-                    else setSelectedCard(card);
-                  }}
-                  disabled={!isMyTurn||!!roomData?.choosingTrump}
-                >
-                  <Text style={[s.cardRank,{color:SUIT_COLOR[card.suit]||'#fff'}]}>
-                    {RANK_AR[card.rank]}
-                  </Text>
-                  <Text style={{fontSize:16,color:SUIT_COLOR[card.suit]||'#fff'}}>{card.suit}</Text>
-                </TouchableOpacity>
-              ))
-            }
-          </ScrollView>
-          {selectedCard && isMyTurn && (
-            <TouchableOpacity style={s.playBtn} onPress={()=>playCard(selectedCard)}>
-              <Text style={s.playBtnText}>العب {RANK_AR[selectedCard.rank]}{selectedCard.suit}</Text>
-            </TouchableOpacity>
-          )}
-          {isMyTurn && !selectedCard && !roomData?.choosingTrump && (
-            <Text style={{color:'#555577',fontSize:12,textAlign:'center',marginTop:4}}>
-              اضغط مرتين على الورقة للعبها
-            </Text>
-          )}
-        </View>
-      </View>
-    );
-  }
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ◀ النتائج
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (phase === 'result') {
-    const winner     = roomData?.winner;
-    const iWon       = winner === myTeam;
-    const lastRes    = roomData?.lastRoundResult;
-    const team0Names = roomData?.players?.filter(p=>TEAM_OF[p.seatIndex]===0).map(p=>p.name).join(' & ');
-    const team1Names = roomData?.players?.filter(p=>TEAM_OF[p.seatIndex]===1).map(p=>p.name).join(' & ');
-
-    return (
-      <View style={s.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-        <View style={s.gameHeader}>
-          <TouchableOpacity onPress={onBack} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
-          <Text style={s.gameTitle}>🏆 النهاية</Text>
-          <View/>
-        </View>
-        <View style={s.resultContent}>
-          <Text style={s.resultEmoji}>{iWon?'🏆':'😔'}</Text>
-          <Text style={[s.resultTitle,{color:iWon?'#f5c518':'#ef4444'}]}>
-            {iWon?'فريقك فاز!':'الفريق الآخر فاز'}
-          </Text>
-          {lastRes?.note && <Text style={s.resultNote}>{lastRes.note}</Text>}
-          <View style={s.teamsRow}>
-            <View style={[s.teamBox,{borderColor:'#8b5cf6'}]}>
-              <Text style={[s.teamBoxTitle,{color:'#8b5cf6'}]}>الفريق ١</Text>
-              <Text style={s.teamBoxPlayers}>{team0Names}</Text>
-              <Text style={s.teamBoxScore}>{totalScore.team0}</Text>
-              <Text style={s.teamBoxLabel}>نقطة</Text>
-            </View>
-            <Text style={s.vsText}>VS</Text>
-            <View style={[s.teamBox,{borderColor:'#06b6d4'}]}>
-              <Text style={[s.teamBoxTitle,{color:'#06b6d4'}]}>الفريق ٢</Text>
-              <Text style={s.teamBoxPlayers}>{team1Names}</Text>
-              <Text style={s.teamBoxScore}>{totalScore.team1}</Text>
-              <Text style={s.teamBoxLabel}>نقطة</Text>
-            </View>
-          </View>
-          <Text style={s.resultNote}>حد الفوز: {WIN_LIMIT} نقطة</Text>
-          <TouchableOpacity style={s.btnPrimary} onPress={leaveRoom}>
-            <Text style={s.btnIcon}>🏠</Text>
-            <Text style={s.btnPrimaryText}>الرئيسية</Text>
+        {/* play button above hand — only when a card is selected */}
+        {selectedCard && (
+          <TouchableOpacity
+            style={styles.playAboveBtn}
+            onPress={() => handlePlayCard(selectedCard)}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>▶ العب الورقة</Text>
           </TouchableOpacity>
+        )}
+
+        {/* my turn timer */}
+        {(isMyTurn || isMyBidTurn || isMyHokmTurn) && (
+          <View style={styles.myTimerWrap}>
+            <View style={[styles.myTimerFill, {
+              width: `${timerPct}%`,
+              backgroundColor: timerPct > 50 ? '#4ade80' : timerPct > 22 ? '#f59e0b' : '#ef4444',
+            }]} />
+          </View>
+        )}
+
+        {/* hand cards — overlapping fan */}
+        <View style={styles.handRow}>
+          {myHand.map((card, i) => {
+            const playable = phase === 'playing' && isMyTurn ? isPlayable(card) : true;
+            const isSel = selectedCard && selectedCard.suit === card.suit && selectedCard.rank === card.rank;
+            return (
+              <PlayingCard
+                key={`${card.suit}-${card.rank}`}
+                card={{ ...card, isHokm: card.suit === hokm }}
+                selected={isSel}
+                disabled={phase === 'playing' && isMyTurn && !playable}
+                style={{
+                  marginRight: i < myHand.length - 1 ? CARD_OVERLAP : 0,
+                  zIndex: isSel ? 50 : i,
+                }}
+                onPress={() => {
+                  if (phase !== 'playing' || !isMyTurn) return;
+                  if (!playable) return;
+                  setSelectedCard(isSel ? null : card);
+                }}
+              />
+            );
+          })}
         </View>
       </View>
-    );
-  }
 
-  return (
-    <View style={[s.container,{alignItems:'center',justifyContent:'center'}]}>
-      <ActivityIndicator color="#8b5cf6" size="large"/>
-      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
+      {/* ══ BID MODAL ══ */}
+      <BidModal
+        visible={isMyBidTurn && phase === 'bidding'}
+        currentHighBid={highBid}
+        isMalzoom={isMalzoom}
+        timerPct={timerPct}
+        onBid={handleBid}
+        onPass={() => handleBid(null, false)}
+      />
+
+      {/* ══ HOKM MODAL ══ */}
+      <HokmModal
+        visible={isMyHokmTurn && phase === 'hokmChoice'}
+        hand={myHand}
+        timerPct={timerPct}
+        onChoose={handleChooseHokm}
+      />
+
+      {/* ══ ROUND RESULT ══ */}
+      <RoundResultModal
+        visible={showRoundResult}
+        teamA={{ name: teamAName, tricks: teamTricks.a, total: teamScores.a }}
+        teamB={{ name: teamBName, tricks: teamTricks.b, total: teamScores.b }}
+        bid={highBid}
+        hokmSuit={hokm || 'spades'}
+        isMalzoom={isMalzoom}
+        onNext={handleNextRound}
+      />
+
+      {/* ══ GAME OVER ══ */}
+      <GameOverModal
+        visible={showGameOver}
+        teamA={{ name: teamAName, total: teamScores.a }}
+        teamB={{ name: teamBName, total: teamScores.b }}
+        onNewGame={() => { setShowGameOver(false); updateRoom({ phase: 'lobby', teamScores: { a: 0, b: 0 }, round: 1 }); }}
+        onExit={() => { leaveRoom(); onBack(); }}
+      />
     </View>
   );
 }
 
-// ══════════════════════════════════════════════════════════════
-// الأنماط
-// ══════════════════════════════════════════════════════════════
-const s = StyleSheet.create({
-  container:    { flex:1, backgroundColor:'#06061a' },
+/* ═══════════════════════════════════════════════
+   STYLES
+═══════════════════════════════════════════════ */
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
 
-  header:       { flexDirection:'row', alignItems:'center', justifyContent:'space-between',
-                  paddingHorizontal:16, paddingTop:52, paddingBottom:12,
-                  backgroundColor:'#0a0a20', borderBottomWidth:1, borderBottomColor:'#1a1a3e' },
-  headerCenter: { flexDirection:'row', alignItems:'center', gap:8 },
-  headerEmoji:  { fontSize:24 },
-  headerTitle:  { fontSize:20, fontWeight:'900', color:'#8b5cf6' },
-  backBtn:      { padding:8 },
-  backText:     { color:'#8b5cf6', fontSize:18, fontWeight:'700' },
-  tokenBadge:   { backgroundColor:'#8b5cf620', paddingHorizontal:10, paddingVertical:5, borderRadius:12, borderWidth:1, borderColor:'#8b5cf640' },
-  tokenText:    { color:'#8b5cf6', fontWeight:'800', fontSize:14 },
+  /* ── HEADER ── */
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 50 : 36,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    backgroundColor: 'rgba(0,0,0,0.40)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+    zIndex: 50,
+  },
+  exitBtn: {
+    width: 34, height: 34,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  scoreTrack: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  teamPts: {
+    fontSize: 20, fontWeight: '900', lineHeight: 22,
+  },
+  teamName: {
+    fontSize: 9, fontWeight: '600', maxWidth: 80,
+  },
 
-  menuScroll:   { padding:20, gap:16 },
-  infoBox:      { backgroundColor:'#1a1a3e', borderRadius:16, padding:18, borderWidth:1, borderColor:'#8b5cf630', gap:10 },
-  infoTitle:    { color:'#8b5cf6', fontSize:16, fontWeight:'800' },
-  infoText:     { color:'#c0c0e0', fontSize:13, lineHeight:22, textAlign:'right' },
-  infoMeta:     { flexDirection:'row', gap:12, flexWrap:'wrap' },
-  infoMetaText: { color:'#a09060', fontSize:12 },
+  /* ── GAME AREA ── */
+  gameArea: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+  },
 
-  section:           { gap:10 },
-  sectionTitle:      { color:'#8b5cf6', fontSize:15, fontWeight:'800', textAlign:'right' },
-  countRow:          { flexDirection:'row', gap:10 },
-  countBtn:          { flex:1, backgroundColor:'#1a1a3e', borderRadius:12, paddingVertical:14, alignItems:'center', borderWidth:1.5, borderColor:'#2a2a55' },
-  countBtnActive:    { backgroundColor:'#8b5cf622', borderColor:'#8b5cf6' },
-  countBtnText:      { color:'#a0a0c0', fontSize:18, fontWeight:'700' },
-  countBtnTextActive:{ color:'#8b5cf6' },
+  /* ── TOP PLAYER ── */
+  playerTop: {
+    position: 'absolute',
+    top: 8,
+    left: 0, right: 0,
+    alignItems: 'center',
+    gap: 6,
+    zIndex: 15,
+  },
 
-  btnGroup:        { gap:12 },
-  btnPrimary:      { backgroundColor:'#8b5cf6', borderRadius:16, paddingVertical:16, paddingHorizontal:20, flexDirection:'row', alignItems:'center', gap:14 },
-  btnIcon:         { fontSize:24 },
-  btnPrimaryText:  { color:'#fff', fontSize:17, fontWeight:'800' },
-  btnSub:          { color:'#d0c0ff', fontSize:12, marginTop:2 },
-  btnSecondary:    { backgroundColor:'#1a1a3e', borderRadius:16, paddingVertical:16, paddingHorizontal:20, flexDirection:'row', alignItems:'center', gap:14, borderWidth:1.5, borderColor:'#8b5cf640' },
-  btnSecondaryText:{ color:'#8b5cf6', fontSize:17, fontWeight:'800' },
-  btnOutline:      { borderRadius:16, paddingVertical:14, alignItems:'center', borderWidth:1.5, borderColor:'#8b5cf640' },
-  btnOutlineText:  { color:'#8b5cf6', fontSize:16, fontWeight:'700' },
+  /* ── LEFT PLAYER ── */
+  playerLeft: {
+    position: 'absolute',
+    left: 6,
+    top: '30%',
+    alignItems: 'flex-start',
+    gap: 6,
+    zIndex: 15,
+  },
 
-  joinBox:    { flexDirection:'row', gap:10, alignItems:'center' },
-  joinInput:  { flex:1, backgroundColor:'#1a1a3e', color:'#fff', borderRadius:12, paddingHorizontal:14, paddingVertical:12, borderWidth:1.5, borderColor:'#2a2a55', fontSize:15, textAlign:'center', letterSpacing:4 },
-  joinBtn:    { backgroundColor:'#8b5cf6', borderRadius:12, paddingHorizontal:18, paddingVertical:13 },
-  joinBtnText:{ color:'#fff', fontWeight:'800', fontSize:15 },
+  /* ── RIGHT PLAYER ── */
+  playerRight: {
+    position: 'absolute',
+    right: 6,
+    top: '30%',
+    alignItems: 'flex-end',
+    gap: 6,
+    zIndex: 15,
+  },
 
-  codeBig:   { backgroundColor:'#1a1a3e', borderRadius:20, padding:24, alignItems:'center', gap:6, borderWidth:1.5, borderColor:'#8b5cf640' },
-  codeLabel: { color:'#a09060', fontSize:13 },
-  codeValue: { color:'#8b5cf6', fontSize:42, fontWeight:'900', letterSpacing:8 },
-  codeHint:  { color:'#555577', fontSize:12, textAlign:'center' },
+  /* ── TRICK AREA ── */
+  trickArea: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 180,
+    height: 200,
+    marginLeft: -90,
+    marginTop: -110,
+    zIndex: 5,
+  },
+  // all cards rendered horizontally (0deg) as requested
+  trickTop: {
+    position: 'absolute',
+    top: 0,
+    left: '50%',
+    marginLeft: -(TRICK_W / 2),
+  },
+  trickLeft: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    marginTop: -(TRICK_H / 2),
+  },
+  trickRight: {
+    position: 'absolute',
+    top: '50%',
+    right: 0,
+    marginTop: -(TRICK_H / 2),
+  },
+  trickBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: '50%',
+    marginLeft: -(TRICK_W / 2),
+  },
+  trickSlotEmpty: {
+    width: TRICK_W, height: TRICK_H,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderStyle: 'dashed',
+  },
 
-  roomProgress:      { gap:6 },
-  roomProgressTrack: { height:8, backgroundColor:'#1a1a3e', borderRadius:4, overflow:'hidden' },
-  roomProgressFill:  { height:'100%', backgroundColor:'#8b5cf6', borderRadius:4 },
-  roomProgressText:  { color:'#a09060', fontSize:13, textAlign:'right' },
+  /* ── MY HAND ── */
+  handArea: {
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.07)',
+    paddingTop: 8,
+    paddingHorizontal: 8,
+    paddingBottom: Platform.OS === 'ios' ? 22 : 12,
+    zIndex: 20,
+  },
+  myInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    paddingHorizontal: 2,
+  },
+  myTimerWrap: {
+    width: '100%', height: 3,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 2, overflow: 'hidden',
+    marginBottom: 6,
+  },
+  myTimerFill: {
+    height: '100%', borderRadius: 2,
+  },
+  handRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingTop: 4,
+    paddingBottom: 2,
+    overflow: 'visible',
+  },
+  playAboveBtn: {
+    alignSelf: 'center',
+    backgroundColor: '#d97706',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 18,
+    marginBottom: 6,
+    shadowColor: '#f59e0b',
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  turnInd: {
+    fontSize: 11, fontWeight: '700', color: '#4ade80',
+  },
 
-  lobbySection:    { gap:8 },
-  lobbySTitle:     { color:'#8b5cf6', fontSize:15, fontWeight:'800', textAlign:'right' },
-  playerSlot:      { backgroundColor:'#0f0f2e', borderRadius:14, padding:14, flexDirection:'row', alignItems:'center', gap:10, borderWidth:1, borderColor:'#1a1a40' },
-  playerSlotFilled:{ borderColor:'#8b5cf640' },
-  playerSlotEmoji: { fontSize:20 },
-  playerSlotName:  { flex:1, color:'#e0e0ff', fontSize:14, fontWeight:'700', textAlign:'right' },
-  meTag:           { color:'#8b5cf6', fontSize:11, fontWeight:'800', backgroundColor:'#8b5cf620', paddingHorizontal:8, paddingVertical:3, borderRadius:8 },
-  emptySlot:       { color:'#333355', fontSize:14, flex:1, textAlign:'center' },
-  friendResult:    { backgroundColor:'#0f0f2e', borderRadius:12, padding:12, flexDirection:'row', alignItems:'center', borderWidth:1, borderColor:'#1a1a40' },
-  friendResultName:{ flex:1, color:'#e0e0ff', fontSize:14, fontWeight:'700', textAlign:'right' },
-  friendResultInvite:{ color:'#8b5cf6', fontSize:13, fontWeight:'700' },
-  waitingBox:      { flexDirection:'row', alignItems:'center', gap:12, justifyContent:'center', padding:16 },
-  waitingText:     { color:'#a09060', fontSize:13 },
+  /* ── PLAYER LABEL (shared with Domino style) ── */
+  avatar: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(30,58,90,0.9)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2,
+  },
+  onlineDot: {
+    position: 'absolute', bottom: 1, right: 1,
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: '#2ecc71',
+    borderWidth: 2, borderColor: '#091910',
+  },
+  nameTag: {
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    paddingHorizontal: 9, paddingVertical: 3,
+    borderRadius: 9,
+  },
+  nameTagActive: {
+    backgroundColor: 'rgba(245,200,66,0.18)',
+    borderWidth: 1, borderColor: 'rgba(245,200,66,0.3)',
+  },
+  nameText: {
+    fontSize: 11, fontWeight: '700',
+    color: 'rgba(255,255,255,0.9)',
+    maxWidth: 80,
+  },
+  timerBar: {
+    width: 70, height: 4,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 2, overflow: 'hidden',
+  },
+  timerFill: { height: '100%', borderRadius: 2 },
 
-  gameHeader:   { flexDirection:'row', alignItems:'center', justifyContent:'space-between',
-                  paddingHorizontal:16, paddingTop:52, paddingBottom:12,
-                  backgroundColor:'#0a0a20', borderBottomWidth:1, borderBottomColor:'#1a1a3e' },
-  gameTitle:    { color:'#8b5cf6', fontSize:18, fontWeight:'900' },
-  gameSubtitle: { color:'#555577', fontSize:11, textAlign:'center' },
-  scoresBadge:  { backgroundColor:'#f5c51820', paddingHorizontal:12, paddingVertical:6, borderRadius:12, borderWidth:1, borderColor:'#f5c51850' },
-  scoresText:   { color:'#f5c518', fontWeight:'900', fontSize:14 },
-
-  roundBar:     { flexDirection:'row', justifyContent:'space-between', paddingHorizontal:16, paddingVertical:6, backgroundColor:'#0d0d2b' },
-  roundBarText: { color:'#a09060', fontSize:12 },
-
-  myTurnBanner: { backgroundColor:'#f5c51820', paddingVertical:7, borderBottomWidth:1, borderBottomColor:'#f5c51840' },
-  myTurnText:   { color:'#f5c518', fontSize:14, fontWeight:'800', textAlign:'center' },
-  waitBanner:   { backgroundColor:'#1a1a3e', paddingVertical:7, borderBottomWidth:1, borderBottomColor:'#2a2a55' },
-  waitBannerText:{ color:'#555577', fontSize:13, textAlign:'center' },
-
-  bidsHistory:  { backgroundColor:'#1a1a3e', borderRadius:14, padding:14, gap:8, borderWidth:1, borderColor:'#8b5cf630' },
-  bidRow:       { flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingVertical:3 },
-  bidName:      { color:'#e0e0ff', fontSize:14, fontWeight:'700' },
-  bidVal:       { color:'#8b5cf6', fontSize:15, fontWeight:'900' },
-  bidGrid:      { flexDirection:'row', flexWrap:'wrap', gap:10 },
-  bidOption:    { backgroundColor:'#1a1a3e', borderRadius:12, paddingVertical:12, paddingHorizontal:16,
-                  borderWidth:1.5, borderColor:'#8b5cf640', minWidth:80, alignItems:'center', gap:3 },
-  bidOptionNum: { color:'#8b5cf6', fontSize:20, fontWeight:'900' },
-  bidOptionLabel:{ color:'#a09060', fontSize:11 },
-  bidKout:      { backgroundColor:'#f5c51810', borderColor:'#f5c51840' },
-
-  table:        { flex:1, padding:10, justifyContent:'space-between' },
-  playerNorth:  { alignItems:'center', gap:3 },
-  playerSide:   { alignItems:'center', justifyContent:'center', gap:2, minWidth:60 },
-  tableMiddle:  { flexDirection:'row', alignItems:'center', justifyContent:'space-between', flex:1 },
-  playerName:   { color:'#e0e0ff', fontSize:12, fontWeight:'700', textAlign:'center' },
-  allyName:     { color:'#22c55e' },
-  cardCount:    { color:'#555577', fontSize:11 },
-  hiddenHand:   { flexDirection:'row', gap:2 },
-  hiddenCard:   { width:18, height:28, backgroundColor:'#1a1a3e', borderRadius:4, borderWidth:1, borderColor:'#2a2a55' },
-
-  trickArea:    { flex:1, alignItems:'center', justifyContent:'center', gap:4,
-                  backgroundColor:'#0d0d2b', borderRadius:16, marginHorizontal:6, padding:8,
-                  borderWidth:1, borderColor:'#1a1a40', flexWrap:'wrap', flexDirection:'row' },
-  trickEmpty:   { fontSize:40, color:'#2a2a55' },
-  trumpDisplay: { fontSize:36, fontWeight:'900' },
-  trickCard:    { backgroundColor:'#1a1a3e', borderRadius:8, padding:6, alignItems:'center', borderWidth:1.5, margin:2 },
-  trickCardRank:{ fontSize:14, fontWeight:'900' },
-  trickCardName:{ color:'#555577', fontSize:10 },
-  lastTrickNote:{ color:'#555577', fontSize:11, textAlign:'center' },
-
-  handArea:   { backgroundColor:'#0a0a20', borderTopWidth:1, borderTopColor:'#1a1a3e', padding:10, gap:6 },
-  handLabel:  { color:'#8b5cf6', fontSize:13, fontWeight:'700', textAlign:'right' },
-  handScroll: { gap:6, paddingHorizontal:4, paddingBottom:4 },
-  card:        { backgroundColor:'#1a1a3e', borderRadius:10, padding:8, alignItems:'center', minWidth:44, borderWidth:2, borderColor:'#2a2a55', gap:1 },
-  cardSelected:{ borderColor:'#f5c518', backgroundColor:'#f5c51815', transform:[{translateY:-12}] },
-  cardDisabled:{ opacity:0.45 },
-  cardTrump:   { backgroundColor:'#8b5cf615', borderColor:'#8b5cf650' },
-  cardRank:    { fontSize:15, fontWeight:'900' },
-  playBtn:     { backgroundColor:'#8b5cf6', margin:6, borderRadius:14, paddingVertical:12, alignItems:'center' },
-  playBtnText: { color:'#fff', fontSize:15, fontWeight:'900' },
-
-  modalOverlay: { flex:1, backgroundColor:'#000000bb', alignItems:'center', justifyContent:'center' },
-  modalBox:     { backgroundColor:'#1a1a3e', borderRadius:20, padding:28, alignItems:'center', gap:16,
-                  borderWidth:2, borderColor:'#8b5cf6', minWidth:280 },
-  modalTitle:   { color:'#8b5cf6', fontSize:22, fontWeight:'900' },
-  modalSub:     { color:'#a09060', fontSize:13, textAlign:'center' },
-  suitRow:      { flexDirection:'row', gap:16 },
-  suitBtn:      { backgroundColor:'#0d0d2b', borderRadius:14, padding:16, borderWidth:2, borderColor:'#8b5cf640' },
-  suitBtnText:  { fontSize:32, fontWeight:'900' },
-
-  resultContent: { flex:1, alignItems:'center', justifyContent:'center', padding:24, gap:16 },
-  resultEmoji:   { fontSize:80 },
-  resultTitle:   { fontSize:32, fontWeight:'900' },
-  resultNote:    { color:'#a09060', fontSize:13, textAlign:'center' },
-  teamsRow:      { flexDirection:'row', alignItems:'center', gap:12, width:'100%' },
-  teamBox:       { flex:1, borderRadius:16, borderWidth:1.5, padding:14, gap:4, backgroundColor:'#1a1a3e', alignItems:'center' },
-  teamBoxTitle:  { fontSize:14, fontWeight:'800' },
-  teamBoxPlayers:{ color:'#9090b0', fontSize:11, textAlign:'center' },
-  teamBoxScore:  { fontSize:36, fontWeight:'900', color:'#f5c518' },
-  teamBoxLabel:  { color:'#555577', fontSize:12 },
-  vsText:        { color:'#555577', fontSize:18, fontWeight:'900' },
+  /* ── MODALS ── */
+  bidOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  bidModal: {
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.13)',
+    borderRadius: 22,
+    padding: 20, width: SW - 48,
+  },
+  bidTitle: {
+    fontSize: 16, fontWeight: '900', color: '#fff',
+    textAlign: 'center', marginBottom: 6,
+  },
+  bidSub: {
+    fontSize: 11, color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center', marginBottom: 12,
+  },
+  bidTimerWrap: {
+    width: '100%', height: 3,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 2, overflow: 'hidden',
+    marginBottom: 16,
+  },
+  bidTimerFill: { height: '100%', borderRadius: 2 },
+  bidGrid: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    justifyContent: 'center', gap: 9,
+    marginBottom: 16,
+  },
+  bidBtn: {
+    width: 58, height: 64,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 13,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  bidBtnDisabled: { opacity: 0.3 },
+  bidBtnNum: {
+    fontSize: 24, fontWeight: '900', color: '#fff', lineHeight: 28,
+  },
+  bidBtnLabel: {
+    fontSize: 8, color: 'rgba(255,255,255,0.5)', fontWeight: '600',
+  },
+  bidConfirm: {
+    backgroundColor: '#d97706',
+    borderRadius: 13, paddingVertical: 12,
+    alignItems: 'center',
+  },
+  hokmSuit: {
+    width: 120, height: 72,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  hokmSuitSel: {
+    borderColor: '#f59e0b',
+    backgroundColor: 'rgba(245,158,11,0.12)',
+  },
+  resultCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1, borderRadius: 14, padding: 12,
+  },
+  resLbl: { fontSize: 9, color: 'rgba(255,255,255,0.4)', fontWeight: '600', marginBottom: 3 },
+  resVal: { fontSize: 18, fontWeight: '900', color: '#fff' },
+  totalChip: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderRadius: 12,
+    paddingVertical: 10, paddingHorizontal: 18,
+    alignItems: 'center',
+  },
+  outlineBtn: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 13, paddingVertical: 12, paddingHorizontal: 18,
+    alignItems: 'center',
+  },
 });

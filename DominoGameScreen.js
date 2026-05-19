@@ -1,43 +1,55 @@
-/**
- * DominoGameScreen.js
- * دومينو – فريقين | اللعب من الجانبين فقط | فوز بـ 151
- * بعد 60 ثانية من البحث عن غرفة → بوتات تملأ المقاعد الفارغة
- */
-
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  StatusBar, Animated, Alert, ScrollView,
-  Modal, ActivityIndicator, TextInput,
+  View, Text, TouchableOpacity, StyleSheet, StatusBar,
+  Dimensions, PanResponder, Animated, Platform,
 } from 'react-native';
-import { db, auth } from './firebaseConfig';
-import {
-  doc, setDoc, onSnapshot, updateDoc, deleteDoc,
-  collection, serverTimestamp, arrayUnion, getDoc,
-  query, where, getDocs,
-} from 'firebase/firestore';
+import { useTheme } from './ThemeContext';
+import { useLanguage } from './I18n';
+import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { playSound } from './SoundService';
 
-// ══════════════════════════════════════════════════════════════
-// ثوابت
-// ══════════════════════════════════════════════════════════════
-const WIN_SCORE   = 151;
-const BOT_DELAY   = 1200; // مللي‌ثانية بين حركات البوت
-const LOBBY_WAIT  = 60;   // ثواني انتظار قبل إضافة بوتات
-const TEAM_OF     = { 0: 0, 1: 1, 2: 0, 3: 1 }; // فريق0: مقاعد 0+2 | فريق1: مقاعد 1+3
-const SEAT_LABEL  = ['جنوب', 'شرق', 'شمال', 'غرب'];
-const SEAT_LABEL_EN = ['south', 'east', 'north', 'west'];
+const { width: SW, height: SH } = Dimensions.get('window');
 
-// ══════════════════════════════════════════════════════════════
-// منطق الدومينو
-// ══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════ */
+const TILE_W = 28;   // board horizontal tile width
+const TILE_H = 16;   // board horizontal tile height
+const DTILE_W = 16;  // board double tile width  (vertical double)
+const DTILE_H = 28;  // board double tile height
+const TILE_GAP = 1;
+const BOARD_MARGIN_H = 62; // left/right reserved for side players
 
-/** بناء مجموعة كاملة 0-6 */
-function buildDominoSet() {
-  const tiles = [];
-  for (let i = 0; i <= 6; i++)
-    for (let j = i; j <= 6; j++)
-      tiles.push([i, j]);
-  return tiles; // 28 قطعة
+const HAND_TILE_W = 44;
+const HAND_TILE_H = 76;
+
+const TURN_DURATION = 25; // seconds
+
+const PLAYER_NAMES = { 0: 'أنت', 1: 'teammate', 2: 'left', 3: 'right' };
+// positions: 0=me(bottom), 1=top(teammate), 2=left(opponent), 3=right(opponent)
+// teams: red=[0,1]  blue=[2,3]
+
+/* ═══════════════════════════════════════════════
+   PIP LAYOUTS  3×3 grid indices 0..8
+   tl tc tr | ml mc mr | bl bc br
+═══════════════════════════════════════════════ */
+const PIPS = {
+  0: [],
+  1: [4],
+  2: [0, 8],
+  3: [0, 4, 8],
+  4: [0, 2, 6, 8],
+  5: [0, 2, 4, 6, 8],
+  6: [0, 2, 3, 5, 6, 8],
+};
+
+/* ═══════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════ */
+function buildDeck() {
+  const d = [];
+  for (let a = 0; a <= 6; a++) for (let b = a; b <= 6; b++) d.push([a, b]);
+  return d;
 }
 
 function shuffle(arr) {
@@ -49,741 +61,78 @@ function shuffle(arr) {
   return a;
 }
 
-/** توزيع 7 قطع لكل لاعب */
-function dealHands() {
-  const tiles = shuffle(buildDominoSet());
-  const hands = [[], [], [], []];
-  for (let i = 0; i < 28; i++) hands[i % 4].push(tiles[i]);
-  return hands;
-}
-
-/** إيجاد أثقل قطعة مزدوجة في اليد (للبداية) */
-function findHighestDouble(hand) {
-  let best = null;
-  for (const t of hand) {
-    if (t[0] === t[1]) {
-      if (!best || t[0] > best[0]) best = t;
-    }
-  }
-  return best;
-}
-
-/** إيجاد أثقل قطعة في اليد عموماً */
-function findHeaviest(hand) {
-  return hand.reduce((a, b) => (a[0] + a[1] >= b[0] + b[1] ? a : b), hand[0]);
-}
-
-/**
- * القطع القابلة للعب من اليد على الطرفين المكشوفَين
- * board: مصفوفة { tile, side } حيث side: 'L'|'R'
- * openLeft / openRight: الرقم المكشوف على اليسار/اليمين
- */
-function playable(hand, openLeft, openRight, boardEmpty) {
-  if (boardEmpty) return hand.map(t => ({ tile: t, side: 'L' }));
-  const moves = [];
-  for (const t of hand) {
-    if (t[0] === openLeft || t[1] === openLeft)
-      moves.push({ tile: t, side: 'L' });
-    if (t[0] === openRight || t[1] === openRight)
-      moves.push({ tile: t, side: 'R' });
-  }
-  // إزالة التكرار (نفس القطعة + الجانبين لو القيمتان متساويتان)
-  return moves;
-}
-
-/**
- * تطبيق حركة على حالة البورد
- * returns { newBoard, newOpenLeft, newOpenRight }
- */
-function applyMove(board, openLeft, openRight, tile, side) {
-  const newBoard = [...board];
-  let newLeft = openLeft;
-  let newRight = openRight;
-
-  if (newBoard.length === 0) {
-    newBoard.push({ tile, side: 'L' });
-    newLeft  = tile[0];
-    newRight = tile[1];
-    return { newBoard, newOpenLeft: newLeft, newOpenRight: newRight };
-  }
-
-  if (side === 'L') {
-    // الجانب الأيسر
-    const newTile = tile[1] === openLeft ? tile : [tile[1], tile[0]];
-    newBoard.unshift({ tile: newTile, side: 'L' });
-    newLeft = newTile[0];
-  } else {
-    // الجانب الأيمن
-    const newTile = tile[0] === openRight ? tile : [tile[1], tile[0]];
-    newBoard.push({ tile: newTile, side: 'R' });
-    newRight = newTile[1];
-  }
-  return { newBoard, newOpenLeft: newLeft, newOpenRight: newRight };
-}
-
-/** جمع نقاط اليد */
-function handSum(hand) {
+function sumHand(hand) {
   return hand.reduce((s, t) => s + t[0] + t[1], 0);
 }
 
-/** جمع نقاط الجولة (نقاط الخاسر تُضاف للفائز) */
-function calcRoundScore(hands, winnerSeat) {
-  const winTeam = TEAM_OF[winnerSeat];
-  const loserSum = hands.reduce((s, h, i) => {
-    if (TEAM_OF[i] !== winTeam) s += handSum(h);
-    return s;
-  }, 0);
-  // تقريب لأقرب 5
-  return Math.round(loserSum / 5) * 5;
+function boardEnds(board) {
+  if (!board.length) return { left: -1, right: -1 };
+  return { left: board[0][0], right: board[board.length - 1][1] };
 }
 
-/** حالة جديدة لجولة */
-function newRoundState(dealerSeat = 0) {
-  const hands = dealHands();
-  // من يبدأ: من عنده [6,6]، وإلا أثقل مزدوجة، وإلا الجيران
-  let starter = -1;
-  let bestDouble = -1;
-  for (let i = 0; i < 4; i++) {
-    const d = findHighestDouble(hands[i]);
-    if (d && d[0] > bestDouble) { bestDouble = d[0]; starter = i; }
-  }
-  if (starter === -1) starter = dealerSeat;
-  return {
-    hands,
-    board: [],
-    openLeft: null,
-    openRight: null,
-    currentTurn: starter,
-    passCount: 0,
-    roundOver: false,
-    roundWinner: null,
-  };
+function canPlayTile(tile, board) {
+  if (!board.length) return true;
+  const { left, right } = boardEnds(board);
+  return tile[0] === left || tile[1] === left || tile[0] === right || tile[1] === right;
 }
 
-function genCode() {
-  return Math.random().toString(36).slice(2, 7).toUpperCase();
+function placeTileOnBoard(board, tile, toRight) {
+  const newBoard = [...board];
+  const { left, right } = boardEnds(board);
+  const tp = [...tile];
+
+  if (!board.length) {
+    newBoard.push(tp);
+  } else if (toRight) {
+    if (tp[0] === right) newBoard.push(tp);
+    else if (tp[1] === right) newBoard.push([tp[1], tp[0]]);
+    else if (tp[0] === left) newBoard.unshift([tp[1], tp[0]]);
+    else newBoard.unshift(tp);
+  } else {
+    if (tp[1] === left) newBoard.unshift(tp);
+    else if (tp[0] === left) newBoard.unshift([tp[1], tp[0]]);
+    else if (tp[1] === right) newBoard.push([tp[1], tp[0]]);
+    else newBoard.push(tp);
+  }
+  return newBoard;
 }
-function getUid() {
-  return auth?.currentUser?.uid || 'guest_' + Math.random().toString(36).slice(2, 8);
+
+function bestPlayableTile(hand, board) {
+  // returns { idx, toRight } for the highest-value playable tile
+  const { left, right } = boardEnds(board);
+  let best = null, bestSum = -1;
+  hand.forEach((t, i) => {
+    if (!canPlayTile(t, board)) return;
+    const s = t[0] + t[1];
+    if (s > bestSum) {
+      bestSum = s;
+      const toRight = (t[0] === right || t[1] === right);
+      best = { idx: i, toRight };
+    }
+  });
+  return best;
 }
 
-// ══════════════════════════════════════════════════════════════
-// المكوّن الرئيسي
-// ══════════════════════════════════════════════════════════════
-export default function DominoGameScreen({ onBack, currentUser, tokens, onSpendTokens, onOpenTokenModal }) {
-  const [phase, setPhase] = useState('lobby'); // lobby | waiting | playing | gameOver
-  const [roomCode, setRoomCode]   = useState('');
-  const [joinCode, setJoinCode]   = useState('');
-  const [roomData, setRoomData]   = useState(null);
-  const [mySeat, setMySeat]       = useState(null);
-  const [waitSec, setWaitSec]     = useState(LOBBY_WAIT);
-  const [selectedTile, setSelectedTile] = useState(null);
-  const [msg, setMsg]             = useState('');
-  const [scores, setScores]       = useState([0, 0]);
-  const [gameOver, setGameOver]   = useState(null);
-  const [showHowTo, setShowHowTo] = useState(false);
-
-  const unsubRef  = useRef(null);
-  const botTimerRef = useRef(null);
-  const waitTimerRef = useRef(null);
-
-  const myUid = getUid();
-  const isHost = roomData?.hostUid === myUid;
-
-  // ── cleanup عند الخروج ──
-  useEffect(() => {
-    return () => {
-      if (unsubRef.current) unsubRef.current();
-      clearTimeout(botTimerRef.current);
-      clearInterval(waitTimerRef.current);
-    };
-  }, []);
-
-  // ══════════════════════════════════════════════════════════════
-  // إنشاء غرفة
-  // ══════════════════════════════════════════════════════════════
-  async function handleCreate() {
-    const code = genCode();
-    const round = newRoundState(0);
-    const roomRef = doc(db, 'domino_rooms', code);
-    const seat0 = {
-      uid: myUid,
-      name: currentUser?.name || 'ضيف',
-      isBot: false,
-    };
-    await setDoc(roomRef, {
-      code,
-      hostUid: myUid,
-      seats: [seat0, null, null, null],
-      scores: [0, 0],
-      round,
-      createdAt: serverTimestamp(),
-      status: 'waiting', // waiting | playing | over
-    });
-    setRoomCode(code);
-    setMySeat(0);
-    subscribeRoom(code, 0);
-    setPhase('waiting');
-    startWaitTimer(code);
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // الانضمام لغرفة
-  // ══════════════════════════════════════════════════════════════
-  async function handleJoin() {
-    const code = joinCode.trim().toUpperCase();
-    if (!code) return;
-    const roomRef = doc(db, 'domino_rooms', code);
-    const snap = await getDoc(roomRef);
-    if (!snap.exists()) { Alert.alert('خطأ', 'الغرفة غير موجودة'); return; }
-    const data = snap.data();
-    if (data.status !== 'waiting') { Alert.alert('خطأ', 'الغرفة بدأت بالفعل'); return; }
-    // إيجاد مقعد فارغ
-    const seat = data.seats.findIndex(s => s === null || s === undefined);
-    if (seat === -1) { Alert.alert('خطأ', 'الغرفة ممتلئة'); return; }
-    const updated = [...data.seats];
-    updated[seat] = { uid: myUid, name: currentUser?.name || 'ضيف', isBot: false };
-    await updateDoc(roomRef, { seats: updated });
-    setRoomCode(code);
-    setMySeat(seat);
-    subscribeRoom(code, seat);
-    setPhase('waiting');
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // الاشتراك في تحديثات الغرفة
-  // ══════════════════════════════════════════════════════════════
-  function subscribeRoom(code, seat) {
-    const roomRef = doc(db, 'domino_rooms', code);
-    if (unsubRef.current) unsubRef.current();
-    unsubRef.current = onSnapshot(roomRef, snap => {
-      if (!snap.exists()) { setPhase('lobby'); return; }
-      const d = snap.data();
-      setRoomData(d);
-      setScores(d.scores || [0, 0]);
-
-      if (d.status === 'playing' && phase !== 'playing') {
-        clearInterval(waitTimerRef.current);
-        setPhase('playing');
-      }
-      if (d.status === 'over') {
-        setGameOver({ winner: d.winner });
-        setPhase('gameOver');
-      }
-    });
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // مؤقت الانتظار → إضافة بوتات
-  // ══════════════════════════════════════════════════════════════
-  function startWaitTimer(code) {
-    let sec = LOBBY_WAIT;
-    waitTimerRef.current = setInterval(async () => {
-      sec--;
-      setWaitSec(sec);
-      if (sec <= 0) {
-        clearInterval(waitTimerRef.current);
-        await fillWithBots(code);
-      }
-    }, 1000);
-  }
-
-  async function fillWithBots(code) {
-    const roomRef = doc(db, 'domino_rooms', code);
-    const snap = await getDoc(roomRef);
-    if (!snap.exists()) return;
-    const d = snap.data();
-    if (d.status !== 'waiting') return;
-    const seats = [...d.seats];
-    const botNames = ['بوت أ', 'بوت ب', 'بوت ج'];
-    let botIdx = 0;
-    for (let i = 0; i < 4; i++) {
-      if (!seats[i]) {
-        seats[i] = { uid: `bot_${i}`, name: botNames[botIdx++] || `بوت ${i}`, isBot: true };
-      }
-    }
-    await updateDoc(roomRef, { seats, status: 'playing' });
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // بدء اللعبة (الهوست عندما يكتمل العدد)
-  // ══════════════════════════════════════════════════════════════
-  useEffect(() => {
-    if (!roomData || !isHost) return;
-    if (roomData.status === 'waiting') {
-      const full = roomData.seats.every(s => s !== null && s !== undefined);
-      if (full) {
-        clearInterval(waitTimerRef.current);
-        updateDoc(doc(db, 'domino_rooms', roomCode), { status: 'playing' });
-      }
-    }
-  }, [roomData]);
-
-  // ══════════════════════════════════════════════════════════════
-  // منطق البوت
-  // ══════════════════════════════════════════════════════════════
-  useEffect(() => {
-    if (phase !== 'playing' || !roomData || !isHost) return;
-    const round = roomData.round;
-    if (!round || round.roundOver) return;
-
-    const seat = round.currentTurn;
-    const player = roomData.seats[seat];
-    if (!player?.isBot) return;
-
-    clearTimeout(botTimerRef.current);
-    botTimerRef.current = setTimeout(() => {
-      botPlay(seat, round);
-    }, BOT_DELAY);
-  }, [roomData?.round?.currentTurn, phase]);
-
-  async function botPlay(seat, round) {
-    const hand = round.hands[seat];
-    const boardEmpty = round.board.length === 0;
-    const moves = playable(hand, round.openLeft, round.openRight, boardEmpty);
-
-    if (moves.length === 0) {
-      // البوت يمرر
-      await passTurn(seat, round);
-      return;
-    }
-    // اختيار عشوائي
-    const move = moves[Math.floor(Math.random() * moves.length)];
-    await makeMove(seat, round, move.tile, move.side);
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // حركة لاعب
-  // ══════════════════════════════════════════════════════════════
-  async function makeMove(seat, round, tile, side) {
-    const { newBoard, newOpenLeft, newOpenRight } = applyMove(
-      round.board, round.openLeft, round.openRight, tile, side
-    );
-    const newHands = round.hands.map((h, i) =>
-      i === seat ? h.filter(t => !(t[0] === tile[0] && t[1] === tile[1])) : h
-    );
-    const nextTurn = (seat + 1) % 4;
-
-    // هل انتهت الجولة؟ (يد فارغة)
-    if (newHands[seat].length === 0) {
-      await endRound(seat, newHands, round.board);
-      return;
-    }
-
-    const newRound = {
-      ...round,
-      hands: newHands,
-      board: newBoard,
-      openLeft: newOpenLeft,
-      openRight: newOpenRight,
-      currentTurn: nextTurn,
-      passCount: 0,
-    };
-    await updateDoc(doc(db, 'domino_rooms', roomCode), { round: newRound });
-  }
-
-  async function passTurn(seat, round) {
-    const nextTurn = (seat + 1) % 4;
-    const newPassCount = (round.passCount || 0) + 1;
-
-    // إذا مرّر الجميع → انتهت الجولة بالتوقف
-    if (newPassCount >= 4) {
-      await endRoundBlocked(round);
-      return;
-    }
-    const newRound = { ...round, currentTurn: nextTurn, passCount: newPassCount };
-    await updateDoc(doc(db, 'domino_rooms', roomCode), { round: newRound });
-  }
-
-  async function endRound(winnerSeat, hands, board) {
-    const pts = calcRoundScore(hands, winnerSeat);
-    const winTeam = TEAM_OF[winnerSeat];
-    const newScores = [...(roomData.scores || [0, 0])];
-    newScores[winTeam] += pts;
-
-    if (newScores[0] >= WIN_SCORE || newScores[1] >= WIN_SCORE) {
-      const winner = newScores[0] >= WIN_SCORE ? 0 : 1;
-      await updateDoc(doc(db, 'domino_rooms', roomCode), {
-        scores: newScores,
-        status: 'over',
-        winner,
-      });
-    } else {
-      // جولة جديدة
-      const nextDealer = (winnerSeat + 1) % 4;
-      const nr = newRoundState(nextDealer);
-      await updateDoc(doc(db, 'domino_rooms', roomCode), {
-        scores: newScores,
-        round: nr,
-      });
-    }
-  }
-
-  async function endRoundBlocked(round) {
-    // الفريق ذو أقل مجموع يفوز
-    const teamSum = [0, 0];
-    round.hands.forEach((h, i) => { teamSum[TEAM_OF[i]] += handSum(h); });
-    const winTeam = teamSum[0] <= teamSum[1] ? 0 : 1;
-    const pts = teamSum[1 - winTeam]; // نقاط الخاسر
-    const rounded = Math.round(pts / 5) * 5;
-    const newScores = [...(roomData.scores || [0, 0])];
-    newScores[winTeam] += rounded;
-
-    if (newScores[0] >= WIN_SCORE || newScores[1] >= WIN_SCORE) {
-      const winner = newScores[0] >= WIN_SCORE ? 0 : 1;
-      await updateDoc(doc(db, 'domino_rooms', roomCode), {
-        scores: newScores, status: 'over', winner,
-      });
-    } else {
-      const nr = newRoundState((round.currentTurn + 1) % 4);
-      await updateDoc(doc(db, 'domino_rooms', roomCode), { scores: newScores, round: nr });
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // حركة اللاعب الحقيقي
-  // ══════════════════════════════════════════════════════════════
-  function handleTilePress(tile) {
-    if (!roomData) return;
-    const round = roomData.round;
-    if (round.currentTurn !== mySeat) return;
-    const myHand = round.hands[mySeat];
-    const boardEmpty = round.board.length === 0;
-    const moves = playable(myHand, round.openLeft, round.openRight, boardEmpty);
-    const possible = moves.filter(m => m.tile[0] === tile[0] && m.tile[1] === tile[1]);
-
-    if (possible.length === 0) { setMsg('هذه القطعة لا تتناسب الآن'); return; }
-    if (possible.length === 1) {
-      setSelectedTile(null);
-      setMsg('');
-      makeMove(mySeat, round, tile, possible[0].side);
-    } else {
-      // القطعة تتناسب من الجانبين → اطلب اختيار الجانب
-      setSelectedTile(tile);
-      setMsg('اختر الجانب للوضع');
-    }
-  }
-
-  function handleSideSelect(side) {
-    if (!selectedTile || !roomData) return;
-    const round = roomData.round;
-    setSelectedTile(null);
-    setMsg('');
-    makeMove(mySeat, round, selectedTile, side);
-  }
-
-  function handlePass() {
-    if (!roomData) return;
-    const round = roomData.round;
-    if (round.currentTurn !== mySeat) return;
-    const myHand = round.hands[mySeat];
-    const boardEmpty = round.board.length === 0;
-    const moves = playable(myHand, round.openLeft, round.openRight, boardEmpty);
-    if (moves.length > 0) { setMsg('لديك قطع قابلة للعب!'); return; }
-    passTurn(mySeat, round);
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // رندر القطعة
-  // ══════════════════════════════════════════════════════════════
-  function TileView({ tile, horizontal = false, small = false, highlight = false, onPress }) {
-    const size = small ? 28 : 38;
-    const dot = small ? 5 : 7;
-    return (
-      <TouchableOpacity
-        onPress={onPress}
-        disabled={!onPress}
-        style={[
-          styles.tile,
-          horizontal ? styles.tileH : styles.tileV,
-          { width: horizontal ? size * 2 + 2 : size, minHeight: horizontal ? size : size * 2 + 2 },
-          highlight && styles.tileHighlight,
-          small && styles.tileSmall,
-        ]}
-        activeOpacity={onPress ? 0.7 : 1}
-      >
-        <DotGrid n={tile[0]} size={size} dot={dot} />
-        <View style={[styles.tileDivider, horizontal ? styles.tileDividerH : styles.tileDividerV]} />
-        <DotGrid n={tile[1]} size={size} dot={dot} />
-      </TouchableOpacity>
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // ── UI ─────────────────────────────────────────────────────
-  // ══════════════════════════════════════════════════════════════
-
-  // ── لوبي ──
-  if (phase === 'lobby') return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>🁣 دومينو</Text>
-        <View style={styles.tokenBadge}>
-          <Text style={styles.tokenBadgeText}>🪙 {tokens ?? 0}</Text>
-        </View>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.lobbyCenterScroll}>
-        {/* بطاقة المعلومات */}
-        <View style={styles.lobbyInfoCard}>
-          <Text style={styles.lobbyEmoji}>🁣</Text>
-          <Text style={styles.lobbyTitle}>دومينو الفريقين</Text>
-          <Text style={styles.lobbyDesc}>الفوز بـ 151 نقطة | 4 لاعبين</Text>
-        </View>
-
-        {/* طريقة اللعب */}
-        <TouchableOpacity style={styles.howToBtn} onPress={() => setShowHowTo(true)} activeOpacity={0.8}>
-          <Text style={styles.howToBtnText}>📖 طريقة اللعب</Text>
-        </TouchableOpacity>
-
-        {/* لعب عشوائي */}
-        <TouchableOpacity
-          style={[styles.bigBtn, { backgroundColor: '#06b6d4' }]}
-          onPress={() => {
-            if ((tokens ?? 0) < 10) {
-              Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز', [
-                { text: 'إلغاء', style: 'cancel' },
-              ]);
-              return;
-            }
-            onSpendTokens && onSpendTokens(10);
-            handleCreate();
-          }}
-        >
-          <Text style={styles.bigBtnText}>🌐 لعب عشوائي  🪙 10</Text>
-        </TouchableOpacity>
-
-        {/* إنشاء غرفة */}
-        <TouchableOpacity
-          style={styles.bigBtn}
-          onPress={() => {
-            if ((tokens ?? 0) < 10) {
-              Alert.alert('رصيد غير كافٍ 🪙', 'تحتاج 10 توكنز', [
-                { text: 'إلغاء', style: 'cancel' },
-              ]);
-              return;
-            }
-            onSpendTokens && onSpendTokens(10);
-            handleCreate();
-          }}
-        >
-          <Text style={styles.bigBtnText}>🔒 إنشاء غرفة خاصة  🪙 10</Text>
-        </TouchableOpacity>
-
-        {/* انضمام بكود */}
-        <View style={styles.joinRow}>
-          <TextInput
-            style={styles.codeInput}
-            placeholder="كود الغرفة"
-            placeholderTextColor="#3a3a60"
-            value={joinCode}
-            onChangeText={setJoinCode}
-            autoCapitalize="characters"
-            maxLength={6}
-          />
-          <TouchableOpacity style={[styles.bigBtn, { flex: 0, paddingHorizontal: 20 }]} onPress={handleJoin}>
-            <Text style={styles.bigBtnText}>انضم</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {/* Modal طريقة اللعب */}
-      {showHowTo && (
-        <View style={styles.howToOverlay}>
-          <View style={styles.howToCard}>
-            <Text style={styles.howToTitle}>📖 طريقة لعب الدومينو</Text>
-            <Text style={styles.howToText}>• فريقان: الأزرق (مقاعد 0+2) والأحمر (مقاعد 1+3)</Text>
-            <Text style={styles.howToText}>• كل لاعب يحصل على 7 قطع</Text>
-            <Text style={styles.howToText}>• يبدأ من لديه أثقل زوج مزدوج</Text>
-            <Text style={styles.howToText}>• ضع قطعة تطابق أحد الطرفين المفتوحين</Text>
-            <Text style={styles.howToText}>• إذا لم تجد قطعة تمر</Text>
-            <Text style={styles.howToText}>• الفريق الذي يفرغ يده أو يوقف اللعبة يفوز بالجولة</Text>
-            <Text style={styles.howToText}>• الفوز عند الوصول لـ 151 نقطة</Text>
-            <TouchableOpacity style={styles.bigBtn} onPress={() => setShowHowTo(false)}>
-              <Text style={styles.bigBtnText}>فهمت ✓</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-
-  // ── انتظار ──
-  if (phase === 'waiting') return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => { setPhase('lobby'); setRoomCode(''); }} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>🁣 انتظار</Text>
-        <View style={{ width: 40 }} />
-      </View>
-      <View style={styles.lobbyCenter}>
-        <Text style={styles.lobbyTitle}>كود الغرفة</Text>
-        <Text style={styles.codeDisplay}>{roomCode}</Text>
-        <Text style={styles.lobbyDesc}>أرسل الكود لأصدقائك</Text>
-
-        {/* المقاعد */}
-        <View style={styles.seatsGrid}>
-          {[0, 1, 2, 3].map(i => {
-            const s = roomData?.seats?.[i];
-            const team = TEAM_OF[i];
-            return (
-              <View key={i} style={[styles.seatCard, team === 0 ? styles.team0Card : styles.team1Card]}>
-                <Text style={styles.seatLabel}>{SEAT_LABEL[i]}</Text>
-                <Text style={styles.seatName}>{s?.name || '...'}</Text>
-                <Text style={[styles.seatTeam, team === 0 ? styles.t0 : styles.t1]}>
-                  {team === 0 ? 'فريق 🔵' : 'فريق 🔴'}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-
-        <Text style={styles.waitText}>بوتات تنضم بعد {waitSec} ث</Text>
-        <ActivityIndicator color="#06b6d4" style={{ marginTop: 12 }} />
-      </View>
-    </View>
-  );
-
-  // ── لعبة انتهت ──
-  if (phase === 'gameOver' && gameOver) {
-    const winTeamName = gameOver.winner === 0 ? 'الفريق الأزرق 🔵' : 'الفريق الأحمر 🔴';
-    return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-        <View style={styles.lobbyCenter}>
-          <Text style={{ fontSize: 60 }}>🏆</Text>
-          <Text style={styles.lobbyTitle}>فاز {winTeamName}</Text>
-          <Text style={styles.lobbyDesc}>
-            {scores[0]} – {scores[1]}
-          </Text>
-          <TouchableOpacity style={styles.bigBtn} onPress={onBack}>
-            <Text style={styles.bigBtnText}>الخروج</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  // ── اللعب ──
-  if (phase !== 'playing' || !roomData?.round) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator color="#06b6d4" style={{ marginTop: 80 }} />
-      </View>
-    );
-  }
-
-  const round   = roomData.round;
-  const myHand  = round.hands[mySeat] || [];
-  const boardEmpty = round.board.length === 0;
-  const myMoves = playable(myHand, round.openLeft, round.openRight, boardEmpty);
-  const myMovableTiles = new Set(myMoves.map(m => `${m.tile[0]}-${m.tile[1]}`));
-  const isMyTurn = round.currentTurn === mySeat;
-  const canPass  = isMyTurn && myMoves.length === 0;
+/* ═══════════════════════════════════════════════
+   PIP DOT component
+═══════════════════════════════════════════════ */
+function PipGrid({ value, isDouble, size = 'board' }) {
+  const positions = PIPS[value] || [];
+  // Percentage-based so dots always scale proportionally with tile size
+  const dotPct = size === 'hand' ? '55%' : '52%';
+  const padPct = size === 'hand' ? '8%' : '10%';
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-
-      {/* هيدر */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
-        <View style={{ alignItems: 'center' }}>
-          <Text style={styles.headerTitle}>🁣 دومينو</Text>
-          <Text style={styles.scoreText}>🔵 {scores[0]}  –  {scores[1]} 🔴</Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </View>
-
-      {/* البورد */}
-      <View style={styles.boardWrap}>
-        {round.board.length === 0 ? (
-          <Text style={styles.boardEmpty}>ابدأ بوضع قطعة</Text>
-        ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardScroll}>
-            {round.board.map((item, idx) => (
-              <TileView key={idx} tile={item.tile} horizontal />
-            ))}
-          </ScrollView>
-        )}
-        {round.board.length > 0 && (
-          <View style={styles.openEnds}>
-            <Text style={styles.openEnd}>◄ {round.openLeft}</Text>
-            <Text style={styles.openEnd}>{round.openRight} ►</Text>
-          </View>
-        )}
-      </View>
-
-      {/* اختيار الجانب */}
-      {selectedTile && (
-        <View style={styles.sideModal}>
-          <Text style={styles.sideTitle}>ضع القطعة في أي جانب؟</Text>
-          <View style={{ flexDirection: 'row', gap: 16, marginTop: 12 }}>
-            <TouchableOpacity style={styles.sideBtn} onPress={() => handleSideSelect('L')}>
-              <Text style={styles.sideBtnText}>◄ اليسار ({round.openLeft})</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.sideBtn} onPress={() => handleSideSelect('R')}>
-              <Text style={styles.sideBtnText}>اليمين ({round.openRight}) ►</Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity onPress={() => { setSelectedTile(null); setMsg(''); }}>
-            <Text style={{ color: '#666', marginTop: 10 }}>إلغاء</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* مؤشر الدور */}
-      <View style={styles.turnBar}>
-        {isMyTurn ? (
-          <Text style={styles.yourTurn}>⚡ دورك!</Text>
-        ) : (
-          <Text style={styles.theirTurn}>
-            دور {roomData.seats[round.currentTurn]?.name || '...'}
-          </Text>
-        )}
-        {msg ? <Text style={styles.msgText}>{msg}</Text> : null}
-      </View>
-
-      {/* يد اللاعب */}
-      <View style={styles.handWrap}>
-        <Text style={styles.handTitle}>يدي ({myHand.length})</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.handScroll}>
-          {myHand.map((tile, idx) => {
-            const canPlay = myMovableTiles.has(`${tile[0]}-${tile[1]}`);
-            return (
-              <TileView
-                key={idx}
-                tile={tile}
-                small
-                highlight={isMyTurn && canPlay}
-                onPress={isMyTurn ? () => handleTilePress(tile) : null}
-              />
-            );
-          })}
-        </ScrollView>
-        {canPass && (
-          <TouchableOpacity style={styles.passBtn} onPress={handlePass}>
-            <Text style={styles.passBtnText}>تمرير</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* أيدي اللاعبين الآخرين */}
-      <View style={styles.othersRow}>
-        {[0, 1, 2, 3].filter(i => i !== mySeat).map(i => (
-          <View key={i} style={styles.otherPlayer}>
-            <Text style={styles.otherName}>{roomData.seats[i]?.name || '...'}</Text>
-            <Text style={styles.otherCount}>🁣 {round.hands[i]?.length ?? 0}</Text>
-            {round.currentTurn === i && <Text style={styles.activeDot}>●</Text>}
+    <View style={{ flex: 1, padding: padPct }}>
+      <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap' }}>
+        {Array.from({ length: 9 }).map((_, i) => (
+          <View key={i} style={{ width: '33.33%', height: '33.33%', alignItems: 'center', justifyContent: 'center' }}>
+            {positions.includes(i) && (
+              <View style={{
+                width: dotPct, aspectRatio: 1, borderRadius: 999,
+                backgroundColor: isDouble ? '#a82020' : '#1c1c2e',
+              }} />
+            )}
           </View>
         ))}
       </View>
@@ -791,201 +140,984 @@ export default function DominoGameScreen({ onBack, currentUser, tokens, onSpendT
   );
 }
 
-// ══════════════════════════════════════════════════════════════
-// مكوّن نقاط الدومينو
-// ══════════════════════════════════════════════════════════════
-function DotGrid({ n, size, dot }) {
-  // مواضع النقاط لكل رقم
-  const layouts = {
-    0: [],
-    1: [[0.5, 0.5]],
-    2: [[0.25, 0.25], [0.75, 0.75]],
-    3: [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]],
-    4: [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]],
-    5: [[0.25, 0.25], [0.75, 0.25], [0.5, 0.5], [0.25, 0.75], [0.75, 0.75]],
-    6: [[0.25, 0.2], [0.75, 0.2], [0.25, 0.5], [0.75, 0.5], [0.25, 0.8], [0.75, 0.8]],
-  };
-  const positions = layouts[n] || [];
+/* ═══════════════════════════════════════════════
+   DOMINO TILE component — board version (scales proportionally)
+═══════════════════════════════════════════════ */
+function BoardTile({ a, b, style }) {
+  const isDouble = a === b;
+  // Always render vertical (column), scale to fit given dimensions
   return (
-    <View style={{ width: size, height: size, position: 'relative' }}>
-      {positions.map(([cx, cy], i) => (
-        <View
-          key={i}
-          style={{
-            position: 'absolute',
-            width: dot, height: dot,
-            borderRadius: dot / 2,
-            backgroundColor: '#1e293b',
-            left: cx * size - dot / 2,
-            top:  cy * size - dot / 2,
-          }}
-        />
+    <View style={[{
+      backgroundColor: '#f9f5ed',
+      borderRadius: 3,
+      borderWidth: 1.2,
+      borderColor: '#c4aa80',
+      overflow: 'hidden',
+      flexDirection: isDouble ? 'column' : 'row',
+      shadowColor: '#000', shadowOffset: { width: 1, height: 2 },
+      shadowOpacity: 0.32, shadowRadius: 2, elevation: 3,
+    }, style]}>
+      {/* Glare */}
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '50%',
+        backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 3 }} pointerEvents="none" />
+
+      <PipGrid value={a} isDouble={isDouble} size="board" />
+
+      {/* Divider */}
+      <View style={isDouble
+        ? { height: 1.2, backgroundColor: 'rgba(0,0,0,0.14)', marginHorizontal: '10%' }
+        : { width: 1.2, backgroundColor: 'rgba(0,0,0,0.14)', marginVertical: '10%' }
+      } />
+
+      <PipGrid value={b} isDouble={isDouble} size="board" />
+    </View>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   HAND TILE component
+═══════════════════════════════════════════════ */
+function HandTile({ a, b, selected, unplayable, style }) {
+  const isDouble = a === b;
+  return (
+    <View style={[{
+      width: HAND_TILE_W, height: HAND_TILE_H,
+      backgroundColor: '#f9f5ed',
+      borderRadius: 7,
+      borderWidth: selected ? 2 : 1.5,
+      borderColor: selected ? '#f5c842' : '#c4aa80',
+      overflow: 'hidden',
+      flexDirection: 'column',
+      opacity: unplayable ? 0.35 : 1,
+      shadowColor: selected ? '#f5c842' : '#000',
+      shadowOffset: { width: 0, height: selected ? 4 : 2 },
+      shadowOpacity: selected ? 0.5 : 0.3,
+      shadowRadius: selected ? 8 : 3,
+      elevation: selected ? 8 : 3,
+      transform: [{ translateY: selected ? -10 : 0 }],
+    }, style]}>
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '50%',
+        backgroundColor: 'rgba(255,255,255,0.28)', borderRadius: 7 }} pointerEvents="none" />
+
+      <PipGrid value={a} isDouble={isDouble} size="hand" />
+
+      <View style={{ height: 1.5, backgroundColor: 'rgba(0,0,0,0.13)', marginHorizontal: '12%' }} />
+
+      <PipGrid value={b} isDouble={isDouble} size="hand" />
+    </View>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   FACE-DOWN CARDS (stacked side-by-side)
+═══════════════════════════════════════════════ */
+function FaceDownStack({ count, direction = 'horizontal' }) {
+  // direction: 'horizontal' (top player) | 'vertical' (side players)
+  const isH = direction === 'horizontal';
+  const cW = isH ? 16 : 28;
+  const cH = isH ? 28 : 16;
+  const overlap = isH ? -5 : -6;
+
+  return (
+    <View style={{
+      flexDirection: isH ? 'row' : 'column',
+      alignItems: 'center',
+    }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <View key={i} style={{
+          width: cW, height: cH,
+          backgroundColor: '#f9f5ed',
+          borderRadius: 3,
+          borderWidth: 1,
+          borderColor: '#c4aa80',
+          marginLeft: isH && i > 0 ? overlap : 0,
+          marginTop: !isH && i > 0 ? overlap : 0,
+          shadowColor: '#000', shadowOffset: { width: 1, height: 1 },
+          shadowOpacity: 0.28, shadowRadius: 1, elevation: 2,
+          backgroundColor: '#f0ebe0',
+          // back pattern via inner border
+        }}>
+          <View style={{
+            position: 'absolute', inset: 2,
+            borderRadius: 2, borderWidth: 1,
+            borderColor: 'rgba(150,100,60,0.2)',
+          }} />
+        </View>
       ))}
     </View>
   );
 }
 
-// ══════════════════════════════════════════════════════════════
-// ستايلات
-// ══════════════════════════════════════════════════════════════
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#06061a', paddingTop: 56 },
+/* ═══════════════════════════════════════════════
+   PLAYER LABEL (avatar + name + online dot)
+═══════════════════════════════════════════════ */
+function PlayerLabel({ name, emoji, bg, isActive, timerPct, showTimer, side = 'top' }) {
+  const isLeft = side === 'left';
+  const isRight = side === 'right';
 
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20, marginBottom: 8,
+  const avatarEl = (
+    <View style={{ position: 'relative' }}>
+      <View style={[styles.avatar, {
+        backgroundColor: bg || '#555',
+        borderColor: isActive ? '#f5c842' : 'rgba(255,255,255,0.15)',
+        borderWidth: isActive ? 2.5 : 2,
+        shadowColor: isActive ? '#f5c842' : '#000',
+        shadowOpacity: isActive ? 0.5 : 0.2,
+        shadowRadius: isActive ? 8 : 3,
+        elevation: isActive ? 6 : 2,
+      }]}>
+        <Text style={{ fontSize: 16 }}>{emoji || '🎮'}</Text>
+      </View>
+      <View style={styles.onlineDot} />
+    </View>
+  );
+
+  const nameEl = (
+    <View style={[styles.nameTag, isActive && styles.nameTagActive]}>
+      <Text style={[styles.nameText, side === 'bottom' && styles.nameTextMe]}>{name}</Text>
+    </View>
+  );
+
+  return (
+    <View style={{ alignItems: isRight ? 'flex-end' : isLeft ? 'flex-start' : 'center', gap: 4 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6,
+        flexDirection: isLeft ? 'row-reverse' : 'row' }}>
+        {avatarEl}
+        {nameEl}
+      </View>
+      {showTimer && (
+        <View style={[styles.timerBar, { alignSelf: side === 'bottom' ? 'center' : undefined }]}>
+          <View style={[styles.timerFill, {
+            width: `${timerPct}%`,
+            backgroundColor: timerPct > 50 ? '#2ecc71' : timerPct > 22 ? '#f39c12' : '#e74c3c',
+          }]} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   BOARD LAYOUT COMPUTATION
+   Tiles snake: right → bend down → left → bend down → right …
+   Each tile is scaled to fit exactly (no clipping).
+═══════════════════════════════════════════════ */
+function computeBoardLayout(board, areaW, areaH) {
+  if (!board.length) return [];
+
+  const minX = BOARD_MARGIN_H;
+  const maxX = areaW - BOARD_MARGIN_H;
+  const centerY = Math.floor(areaH * 0.42);
+  const rowStep = DTILE_H + 8;
+
+  const positions = [];
+  let x = minX;
+  let y = centerY;
+  let dir = 1; // 1=right -1=left
+  let row = 0;
+
+  // Try to center the first row
+  const firstRowTiles = [];
+  let rowW = 0;
+  for (let i = 0; i < board.length; i++) {
+    const isD = board[i][0] === board[i][1];
+    const tw = isD ? DTILE_W : TILE_W;
+    if (rowW + tw + TILE_GAP > maxX - minX) break;
+    firstRowTiles.push(i);
+    rowW += tw + TILE_GAP;
+  }
+  if (firstRowTiles.length === board.length) {
+    x = minX + Math.floor((maxX - minX - rowW) / 2);
+  }
+
+  for (let i = 0; i < board.length; i++) {
+    const t = board[i];
+    const isD = t[0] === t[1];
+    const tw = isD ? DTILE_W : TILE_W;
+    const th = isD ? DTILE_H : TILE_H;
+
+    // Bend check before placing
+    if (dir === 1 && x + tw > maxX) {
+      row++;
+      y = centerY + row * rowStep;
+      dir = -1;
+      x = maxX - tw;
+    } else if (dir === -1 && x < minX) {
+      row++;
+      y = centerY + row * rowStep;
+      dir = 1;
+      x = minX;
+    }
+
+    positions.push({
+      x,
+      y: y - Math.floor(th / 2),
+      w: tw,
+      h: th,
+      a: t[0],
+      b: t[1],
+      isDouble: isD,
+    });
+
+    x += dir * (tw + TILE_GAP);
+  }
+  return positions;
+}
+
+/* ═══════════════════════════════════════════════
+   PASS BUBBLE
+═══════════════════════════════════════════════ */
+function PassBubble({ visible, style }) {
+  if (!visible) return null;
+  return (
+    <View style={[{
+      backgroundColor: 'rgba(231,76,60,0.9)',
+      paddingHorizontal: 12, paddingVertical: 4,
+      borderRadius: 10, position: 'absolute',
+    }, style]}>
+      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12, letterSpacing: 1 }}>PASS</Text>
+    </View>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   RESULT SCREEN
+═══════════════════════════════════════════════ */
+function ResultScreen({ scores, playerNames, visible, onNewGame, onExit }) {
+  if (!visible) return null;
+  const redWon = scores.red >= 151;
+  return (
+    <View style={styles.resultOverlay}>
+      <Text style={{ fontSize: 52 }}>{redWon ? '🏆' : '🏆'}</Text>
+      <Text style={styles.resultTitle}>
+        {redWon ? `فاز ${playerNames[0]} & ${playerNames[1]}!` : `فاز ${playerNames[2]} & ${playerNames[3]}!`}
+      </Text>
+      <View style={{ flexDirection: 'row', gap: 14 }}>
+        {[
+          { label: `${playerNames[0]} & ${playerNames[1]}`, pts: scores.red, won: redWon },
+          { label: `${playerNames[2]} & ${playerNames[3]}`, pts: scores.blue, won: !redWon },
+        ].map((team, i) => (
+          <View key={i} style={[styles.resultCard, team.won && styles.resultCardWin]}>
+            {team.won && (
+              <View style={styles.winBadge}>
+                <Text style={{ fontSize: 9, fontWeight: '900', color: '#1a1a1a' }}>🏆 الفائز</Text>
+              </View>
+            )}
+            <Text style={{ fontSize: 10, color: team.won ? 'rgba(245,200,66,0.85)' : 'rgba(255,255,255,0.55)', marginBottom: 3 }}>{team.label}</Text>
+            <Text style={{ fontSize: 30, fontWeight: '900', color: team.won ? '#f5c842' : '#fff' }}>
+              {team.pts}<Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontWeight: '400' }}> نقطة</Text>
+            </Text>
+          </View>
+        ))}
+      </View>
+      <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+        <TouchableOpacity onPress={onExit} style={styles.resBtnSec}>
+          <Text style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '700' }}>🚪 خروج</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onNewGame} style={styles.resBtnPri}>
+          <Text style={{ color: '#1a1a1a', fontWeight: '900' }}>▶ جولة جديدة</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   MAIN SCREEN
+═══════════════════════════════════════════════ */
+export default function DominoGameScreen({ onBack, currentUser, players: initialPlayers, onGameEnd }) {
+  const { theme, themeId } = useTheme();
+  const { lang } = useLanguage();
+
+  // ── Game state ──
+  const [hands, setHands] = useState([[], [], [], []]);
+  const [board, setBoard] = useState([]);
+  const [current, setCurrent] = useState(0);
+  const [scores, setScores] = useState({ red: 0, blue: 0 });
+  const [roundNum, setRoundNum] = useState(1);
+  const [gameOver, setGameOver] = useState(false);
+  const [roundOver, setRoundOver] = useState(false);
+  const [lastPlayed, setLastPlayed] = useState(-1);
+
+  // ── UI state ──
+  const [selectedIdx, setSelectedIdx] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
+  const [dragTileIdx, setDragTileIdx] = useState(null);
+  const [passBubble, setPassBubble] = useState([false, false, false, false]);
+  const [timerPct, setTimerPct] = useState(100);
+  const [boardArea, setBoardArea] = useState({ x: 0, y: 0, width: SW, height: 400 });
+
+  // ── Refs ──
+  const botTimeouts = useRef([]);
+  const timerRef = useRef(null);
+  const timerPctRef = useRef(100);
+  const currentRef = useRef(0);
+  const handsRef = useRef([[], [], [], []]);
+  const boardRef = useRef([]);
+  const roundOverRef = useRef(false);
+  const gameOverRef = useRef(false);
+  const boardAreaRef = useRef({ x: 0, y: 0, width: SW, height: 400 });
+  const dragTileIdxRef = useRef(null); // Fix: ref so PanResponder closure always reads latest value
+
+  // Player info (names/emojis can come from props or defaults)
+  const playerInfo = [
+    { name: currentUser?.name || 'أنت',   emoji: '😎', bg: '#fa709a', team: 'red' },
+    { name: 'ساره',   emoji: '👩',         bg: '#f093fb', team: 'red' },
+    { name: 'فيصل',  emoji: '👨',         bg: '#43e97b', team: 'blue' },
+    { name: 'علي',   emoji: '🧔',         bg: '#4facfe', team: 'blue' },
+  ];
+
+  /* ── Sync refs ── */
+  useEffect(() => { currentRef.current = current; }, [current]);
+  useEffect(() => { handsRef.current = hands; }, [hands]);
+  useEffect(() => { boardRef.current = board; }, [board]);
+  useEffect(() => { roundOverRef.current = roundOver; }, [roundOver]);
+  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
+  useEffect(() => { dragTileIdxRef.current = dragTileIdx; }, [dragTileIdx]);
+
+  /* ── Init game ── */
+  useEffect(() => { startNewRound(0, { red: 0, blue: 0 }, 1, true); }, []);
+
+  function startNewRound(startPlayer, currentScores, roundNumber, isFirst = false) {
+    const deck = shuffle(buildDeck());
+    const newHands = [deck.slice(0, 7), deck.slice(7, 14), deck.slice(14, 21), deck.slice(21, 28)];
+
+    // First round: find who has 6:6
+    let starter = startPlayer;
+    if (isFirst) {
+      for (let i = 0; i < 4; i++) {
+        if (newHands[i].some(t => t[0] === 6 && t[1] === 6)) { starter = i; break; }
+      }
+    }
+
+    setHands(newHands);
+    setBoard([]);
+    setCurrent(starter);
+    setRoundNum(roundNumber);
+    setRoundOver(false);
+    setSelectedIdx(null);
+    setDragTileIdx(null);
+    setDragging(false);
+    setPassBubble([false, false, false, false]);
+    handsRef.current = newHands;
+    boardRef.current = [];
+    roundOverRef.current = false;
+    currentRef.current = starter;
+
+    startTimer(100);
+
+    // If starter != me, trigger bot (and if first round, auto-place 6:6)
+    if (starter !== 0) {
+      scheduleBot(starter, isFirst, newHands, []);
+    } else if (isFirst) {
+      // Me has 6:6 — auto place it (first round rule)
+      const idx66 = newHands[0].findIndex(t => t[0] === 6 && t[1] === 6);
+      if (idx66 >= 0) {
+        setTimeout(() => autoPlace(0, idx66, true, newHands, []), 600);
+      }
+    }
+  }
+
+  /* ── Timer ── */
+  function startTimer(startPct) {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerPctRef.current = startPct;
+    setTimerPct(startPct);
+
+    timerRef.current = setInterval(() => {
+      if (roundOverRef.current || gameOverRef.current) { clearInterval(timerRef.current); return; }
+      if (currentRef.current !== 0) { return; } // only tick for human turn
+
+      timerPctRef.current = Math.max(0, timerPctRef.current - (100 / TURN_DURATION / 2.5));
+      setTimerPct(Math.round(timerPctRef.current));
+
+      if (timerPctRef.current <= 0) {
+        clearInterval(timerRef.current);
+        // Auto-play for human (timeout)
+        const h = handsRef.current[0];
+        const b = boardRef.current;
+        if (h.some(t => canPlayTile(t, b))) {
+          const best = bestPlayableTile(h, b);
+          if (best) autoPlace(0, best.idx, best.toRight, handsRef.current, boardRef.current);
+        } else {
+          doPass(0);
+        }
+      }
+    }, 400);
+  }
+
+  function resetTimer() {
+    startTimer(100);
+  }
+
+  /* ── Place tile (for any player) ── */
+  function autoPlace(pidx, tileIdx, toRight, currentHands, currentBoard) {
+    if (roundOverRef.current || gameOverRef.current) return;
+
+    const newBoard = placeTileOnBoard(currentBoard, currentHands[pidx][tileIdx], toRight);
+    const newHands = currentHands.map((h, i) => i === pidx ? h.filter((_, j) => j !== tileIdx) : [...h]);
+
+    setBoard(newBoard);
+    setHands(newHands);
+    boardRef.current = newBoard;
+    handsRef.current = newHands;
+    setLastPlayed(pidx);
+
+    if (newHands[pidx].length === 0) {
+      endRound(pidx, 'domino', newHands, newBoard);
+      return;
+    }
+
+    const next = (pidx + 1) % 4;
+    setCurrent(next);
+    currentRef.current = next;
+    setSelectedIdx(null);
+    setDragTileIdx(null);
+
+    if (next === 0) {
+      resetTimer();
+    } else {
+      scheduleBot(next, false, newHands, newBoard);
+    }
+  }
+
+  /* ── Pass ── */
+  function doPass(pidx) {
+    if (roundOverRef.current || gameOverRef.current) return;
+
+    setPassBubble(pb => { const n = [...pb]; n[pidx] = true; return n; });
+    setTimeout(() => setPassBubble(pb => { const n = [...pb]; n[pidx] = false; return n; }), 1800);
+
+    // Check if all blocked
+    const h = handsRef.current;
+    const b = boardRef.current;
+    const allBlocked = h.every((hand, i) => !hand.some(t => canPlayTile(t, b)));
+    if (allBlocked) { endRound(-1, 'blocked', h, b); return; }
+
+    const next = (pidx + 1) % 4;
+    setCurrent(next);
+    currentRef.current = next;
+
+    if (next === 0) {
+      resetTimer();
+    } else {
+      scheduleBot(next, false, handsRef.current, boardRef.current);
+    }
+  }
+
+  /* ── Schedule bot ── */
+  function scheduleBot(pidx, force66, currentHands, currentBoard) {
+    if (pidx === 0) return;
+    const delay = 800 + Math.random() * 1000;
+    const t = setTimeout(() => {
+      if (roundOverRef.current || gameOverRef.current) return;
+      if (currentRef.current !== pidx) return;
+
+      const h = handsRef.current[pidx];
+      const b = boardRef.current;
+
+      if (force66) {
+        const idx = h.findIndex(t => t[0] === 6 && t[1] === 6);
+        if (idx >= 0) { autoPlace(pidx, idx, true, handsRef.current, boardRef.current); return; }
+      }
+
+      if (!h.some(t => canPlayTile(t, b))) {
+        doPass(pidx);
+        return;
+      }
+      const best = bestPlayableTile(h, b);
+      if (best) autoPlace(pidx, best.idx, best.toRight, handsRef.current, boardRef.current);
+    }, delay);
+    botTimeouts.current.push(t);
+  }
+
+  /* ── End round ── */
+  function endRound(winnerId, reason, finalHands, finalBoard) {
+    if (gameOverRef.current) return;
+    roundOverRef.current = true;
+    setRoundOver(true);
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    setScores(prev => {
+      let roundPts = 0;
+      let newScores = { ...prev };
+
+      if (reason === 'domino') {
+        const isRed = [0, 1].includes(winnerId);
+        const oppSum = isRed
+          ? sumHand(finalHands[2]) + sumHand(finalHands[3])
+          : sumHand(finalHands[0]) + sumHand(finalHands[1]);
+        roundPts = oppSum;
+        if (isRed) newScores.red += roundPts;
+        else newScores.blue += roundPts;
+      } else {
+        // blocked
+        const redSum = sumHand(finalHands[0]) + sumHand(finalHands[1]);
+        const blueSum = sumHand(finalHands[2]) + sumHand(finalHands[3]);
+        if (redSum < blueSum) newScores.red += blueSum;
+        else if (blueSum < redSum) newScores.blue += redSum;
+      }
+
+      if (newScores.red >= 151 || newScores.blue >= 151) {
+        gameOverRef.current = true;
+        // اللاعب دائماً في الفريق الأحمر (index 0) في هذه اللعبة المحلية
+        if (onGameEnd) onGameEnd(newScores.red >= 151);
+        setTimeout(() => setGameOver(true), 600);
+      } else {
+        setTimeout(() => {
+          setRoundNum(r => {
+            const nextRound = r + 1;
+            const nextStarter = winnerId >= 0 ? winnerId : 0;
+            startNewRound(nextStarter, newScores, nextRound, false);
+            return nextRound;
+          });
+        }, 1400);
+      }
+      return newScores;
+    });
+  }
+
+  /* ── Human plays tile ── */
+  function humanPlay(tileIdx, toRight) {
+    if (currentRef.current !== 0 || roundOverRef.current || gameOverRef.current) return;
+    const tile = handsRef.current[0][tileIdx];
+    if (!tile || !canPlayTile(tile, boardRef.current)) return;
+    playSound('card_play');
+    if (timerRef.current) clearInterval(timerRef.current);
+    autoPlace(0, tileIdx, toRight, handsRef.current, boardRef.current);
+  }
+
+  /* ── Drag handlers ── */
+  const boardAreaRef2 = useRef(null);
+
+  function onBoardLayout(e) {
+    const { x, y, width, height } = e.nativeEvent.layout;
+    setBoardArea({ x, y, width, height });
+    boardAreaRef.current = { x, y, width, height };
+  }
+
+  function createPanResponder(tileIdx) {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 4 || Math.abs(gs.dx) > 4,
+
+      onPanResponderGrant: (e) => {
+        const tile = handsRef.current[0][tileIdx];
+        if (!tile || !canPlayTile(tile, boardRef.current)) return;
+        dragTileIdxRef.current = tileIdx;
+        setDragTileIdx(tileIdx);
+        setDragPos({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY });
+        setDragging(true);
+        setSelectedIdx(tileIdx);
+      },
+
+      onPanResponderMove: (e) => {
+        setDragPos({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY });
+      },
+
+      onPanResponderRelease: (e) => {
+        setDragging(false);
+        const px = e.nativeEvent.pageX;
+        const py = e.nativeEvent.pageY;
+        const ba = boardAreaRef.current;
+        const currentDragIdx = dragTileIdxRef.current; // read from ref — always fresh
+
+        const onBoard = px > ba.x && px < ba.x + ba.width &&
+                        py > ba.y && py < ba.y + ba.height;
+
+        if (onBoard && currentDragIdx !== null) {
+          const midX = ba.x + ba.width / 2;
+          const toRight = px > midX;
+          humanPlay(currentDragIdx, toRight);
+        }
+        dragTileIdxRef.current = null;
+        setDragTileIdx(null);
+        setDragging(false);
+      },
+
+      onPanResponderTerminate: () => {
+        setDragging(false);
+        dragTileIdxRef.current = null;
+        setDragTileIdx(null);
+      },
+    });
+  }
+
+  // Pre-create panResponders for up to 7 hand tiles
+  const panResponders = useRef(
+    Array.from({ length: 7 }, (_, i) => createPanResponder(i))
+  );
+
+  // Rebuild panResponders when hand changes (needed for correct closure)
+  useEffect(() => {
+    panResponders.current = Array.from({ length: 7 }, (_, i) => createPanResponder(i));
+  }, [hands, board, current, roundOver, gameOver, dragTileIdx]);
+
+  /* ── Board layout ── */
+  const boardPositions = computeBoardLayout(board, boardArea.width || SW - 16, boardArea.height || 400);
+
+  /* ── Render ── */
+  const isMyTurn = current === 0 && !roundOver && !gameOver;
+
+  return (
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+
+      {/* ── HEADER ── */}
+      <View style={styles.header}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity onPress={onBack} style={styles.exitBtn}>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 16, fontWeight: '700' }}>✕</Text>
+          </TouchableOpacity>
+          <GameInfoButton gameType="domino" lang={lang} />
+          <WebScreenButton
+            playerUid={currentUser?.uid || 'dom_p0'}
+            playerName={playerInfo?.[0]?.name || ''}
+            gameType="domino"
+            gameRoomId={roomId || ''}
+            getPublicData={() => ({ scores, round: roundNum })}
+            themeName={themeId || 'dark'}
+          />
+        </View>
+
+        <View style={styles.scores}>
+          <View style={[styles.scoreCard, { borderColor: 'rgba(231,76,60,0.3)' }]}>
+            <View style={[styles.teamDot, { backgroundColor: '#e74c3c' }]} />
+            <View>
+              <Text style={styles.teamNames}>{playerInfo[0].name} & {playerInfo[1].name}</Text>
+              <Text style={styles.teamPts}>{scores.red} <Text style={styles.teamPtsOf}>/ 151</Text></Text>
+            </View>
+          </View>
+          <Text style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>·</Text>
+          <View style={[styles.scoreCard, { borderColor: 'rgba(52,152,219,0.3)' }]}>
+            <View style={[styles.teamDot, { backgroundColor: '#3498db' }]} />
+            <View>
+              <Text style={styles.teamNames}>{playerInfo[2].name} & {playerInfo[3].name}</Text>
+              <Text style={styles.teamPts}>{scores.blue} <Text style={styles.teamPtsOf}>/ 151</Text></Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={{ width: 34 }} />
+      </View>
+
+      {/* ── ROUND BADGE ── */}
+      <View style={styles.roundBadge}>
+        <Text style={styles.roundText}>الجولة {roundNum} · دور: {playerInfo[current].name}</Text>
+      </View>
+
+      {/* ══════════════════════════════
+          GAME AREA
+      ══════════════════════════════ */}
+      <View style={styles.gameArea} onLayout={onBoardLayout}>
+
+        {/* ── TOP PLAYER (teammate) ── */}
+        <View style={styles.playerTop}>
+          <PlayerLabel
+            name={playerInfo[1].name}
+            emoji={playerInfo[1].emoji}
+            bg={playerInfo[1].bg}
+            isActive={current === 1}
+            side="top"
+          />
+          <FaceDownStack count={hands[1].length} direction="horizontal" />
+          <PassBubble visible={passBubble[1]} style={{ top: -28, alignSelf: 'center' }} />
+        </View>
+
+        {/* ── LEFT PLAYER (opponent) ── */}
+        <View style={styles.playerLeft}>
+          <PlayerLabel
+            name={playerInfo[2].name}
+            emoji={playerInfo[2].emoji}
+            bg={playerInfo[2].bg}
+            isActive={current === 2}
+            side="left"
+          />
+          <FaceDownStack count={hands[2].length} direction="vertical" />
+          <PassBubble visible={passBubble[2]} style={{ bottom: -28, alignSelf: 'center' }} />
+        </View>
+
+        {/* ── RIGHT PLAYER (opponent) ── */}
+        <View style={styles.playerRight}>
+          <PlayerLabel
+            name={playerInfo[3].name}
+            emoji={playerInfo[3].emoji}
+            bg={playerInfo[3].bg}
+            isActive={current === 3}
+            side="right"
+          />
+          <FaceDownStack count={hands[3].length} direction="vertical" />
+          <PassBubble visible={passBubble[3]} style={{ bottom: -28, alignSelf: 'center' }} />
+        </View>
+
+        {/* ── BOARD TILES ── */}
+        {boardPositions.map((pos, i) => (
+          <BoardTile
+            key={i}
+            a={pos.a}
+            b={pos.b}
+            style={{
+              position: 'absolute',
+              left: pos.x,
+              top: pos.y,
+              width: pos.w,
+              height: pos.h,
+            }}
+          />
+        ))}
+
+        {/* ── BOTTOM PLAYER (me) ── */}
+        <View style={styles.playerBottom}>
+          {isMyTurn && (
+            <Text style={styles.turnArrow}>▲ دورك</Text>
+          )}
+          <PlayerLabel
+            name={playerInfo[0].name}
+            emoji={playerInfo[0].emoji}
+            bg={playerInfo[0].bg}
+            isActive={current === 0}
+            timerPct={timerPct}
+            showTimer={current === 0}
+            side="bottom"
+          />
+          <PassBubble visible={passBubble[0]} style={{ top: -28, alignSelf: 'center' }} />
+        </View>
+
+      </View>{/* /gameArea */}
+
+      {/* ══════════════════════════════
+          MY HAND
+      ══════════════════════════════ */}
+      <View style={styles.handSection}>
+        <Text style={styles.handLabel}>بطاقاتي</Text>
+        <View style={styles.handRow}>
+          {hands[0].map((tile, idx) => {
+            const playable = canPlayTile(tile, board);
+            const pr = panResponders.current[idx];
+            return (
+              <View
+                key={idx}
+                {...(pr ? pr.panHandlers : {})}
+              >
+                <HandTile
+                  a={tile[0]}
+                  b={tile[1]}
+                  selected={selectedIdx === idx}
+                  unplayable={!playable || !isMyTurn}
+                />
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* ── DRAG GHOST ── */}
+      {dragging && dragTileIdx !== null && hands[0][dragTileIdx] && (
+        <View
+          pointerEvents="none"
+          style={[styles.dragGhost, { left: dragPos.x - HAND_TILE_W / 2, top: dragPos.y - HAND_TILE_H / 2 }]}
+        >
+          <HandTile
+            a={hands[0][dragTileIdx][0]}
+            b={hands[0][dragTileIdx][1]}
+            selected={false}
+            unplayable={false}
+          />
+        </View>
+      )}
+
+      {/* ── RESULT SCREEN ── */}
+      <ResultScreen
+        scores={scores}
+        playerNames={playerInfo.map(p => p.name)}
+        visible={gameOver}
+        onNewGame={() => {
+          setGameOver(false);
+          gameOverRef.current = false;
+          const newScores = { red: 0, blue: 0 };
+          setScores(newScores);
+          startNewRound(0, newScores, 1, true);
+        }}
+        onExit={onBack}
+      />
+    </View>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   STYLES
+═══════════════════════════════════════════════ */
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
   },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: '#0f0f2e', borderWidth: 1, borderColor: '#06b6d440',
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 52 : 36,
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+    gap: 8,
+    zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.38)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  exitBtn: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center',
   },
-  backText: { color: '#06b6d4', fontSize: 20, fontWeight: '700' },
-  headerTitle: { color: '#06b6d4', fontSize: 18, fontWeight: '900' },
-  scoreText: { color: '#a0a0c0', fontSize: 13, marginTop: 2 },
-
-  // لوبي
-  lobbyCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 14 },
-  lobbyCenterScroll: { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 40, paddingTop: 16, gap: 14 },
-  lobbyInfoCard: {
-    alignItems: 'center', backgroundColor: '#0f0f2e',
-    borderRadius: 20, borderWidth: 1.5, borderColor: '#06b6d430',
-    padding: 24, width: '100%', gap: 8,
-  },
-  lobbyEmoji: { fontSize: 56 },
-  lobbyTitle: { color: '#fff', fontSize: 24, fontWeight: '900' },
-  lobbyDesc: { color: '#5a5a80', fontSize: 14 },
-  tokenBadge: {
-    backgroundColor: '#f59e0b22', borderWidth: 1,
-    borderColor: '#f59e0b50', borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 5,
-  },
-  tokenBadgeText: { color: '#f59e0b', fontSize: 13, fontWeight: '700' },
-  howToBtn: {
-    backgroundColor: '#0f0f2e', borderRadius: 14,
-    borderWidth: 1.5, borderColor: '#06b6d430',
-    paddingVertical: 12, paddingHorizontal: 24,
-    alignSelf: 'stretch', alignItems: 'center',
-  },
-  howToBtnText: { color: '#06b6d4', fontSize: 15, fontWeight: '700' },
-  howToOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: '#000000bb', alignItems: 'center', justifyContent: 'center',
-    padding: 24,
-  },
-  howToCard: {
-    backgroundColor: '#0f0f2e', borderRadius: 20,
-    borderWidth: 1.5, borderColor: '#06b6d440',
-    padding: 24, width: '100%', gap: 10,
-  },
-  howToTitle: { color: '#06b6d4', fontSize: 18, fontWeight: '900', marginBottom: 4 },
-  howToText: { color: '#a0a0c0', fontSize: 14, lineHeight: 22 },
-  bigBtn: {
-    backgroundColor: '#06b6d4', borderRadius: 14,
-    paddingVertical: 14, paddingHorizontal: 40, alignSelf: 'stretch', alignItems: 'center',
-  },
-  bigBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  joinRow: { flexDirection: 'row', gap: 10, alignSelf: 'stretch' },
-  codeInput: {
-    flex: 1, backgroundColor: '#0f0f2e', borderRadius: 14,
-    borderWidth: 1, borderColor: '#06b6d440', color: '#fff',
-    fontSize: 18, paddingHorizontal: 16, paddingVertical: 12,
-    textAlign: 'center', letterSpacing: 4,
-  },
-  codeDisplay: { color: '#06b6d4', fontSize: 40, fontWeight: '900', letterSpacing: 8 },
-  waitText: { color: '#5a5a80', fontSize: 13 },
-  seatsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
-  seatCard: {
-    width: 140, borderRadius: 14, padding: 12,
-    borderWidth: 1.5, alignItems: 'center', gap: 4,
-  },
-  team0Card: { backgroundColor: '#0a1a2e', borderColor: '#3b82f640' },
-  team1Card: { backgroundColor: '#2e0a0a', borderColor: '#ef444440' },
-  seatLabel: { color: '#5a5a80', fontSize: 11 },
-  seatName: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  seatTeam: { fontSize: 12, fontWeight: '700' },
-  t0: { color: '#3b82f6' },
-  t1: { color: '#ef4444' },
-
-  // بورد
-  boardWrap: {
-    height: 130, backgroundColor: '#080820',
-    borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#06b6d420',
+  scores: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 6, alignItems: 'center' },
+  scoreCard: {
+    flex: 1,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    borderWidth: 1,
+    borderRadius: 18, paddingVertical: 5, paddingHorizontal: 10,
     justifyContent: 'center',
   },
-  boardScroll: { alignItems: 'center', paddingHorizontal: 12, gap: 2 },
-  boardEmpty: { color: '#3a3a60', textAlign: 'center', fontSize: 14 },
-  openEnds: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: 16, marginTop: 4,
-  },
-  openEnd: { color: '#06b6d4', fontSize: 12, fontWeight: '700' },
+  teamDot: { width: 7, height: 7, borderRadius: 4 },
+  teamNames: { fontSize: 9, color: 'rgba(255,255,255,0.6)' },
+  teamPts: { fontSize: 16, fontWeight: '900', color: '#fff', lineHeight: 18 },
+  teamPtsOf: { fontSize: 8, color: 'rgba(255,255,255,0.35)', fontWeight: '400' },
 
-  // قطعة
-  tile: {
-    backgroundColor: '#f0ede0',
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: '#c8b89040',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 3,
-    margin: 2,
+  // Round badge
+  roundBadge: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.38)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 10, paddingVertical: 3, paddingHorizontal: 12,
+    marginBottom: 2, zIndex: 10,
   },
-  tileV: { flexDirection: 'column' },
-  tileH: { flexDirection: 'row' },
-  tileSmall: { borderRadius: 4 },
-  tileHighlight: { borderColor: '#06b6d4', borderWidth: 2.5, backgroundColor: '#e8f8ff' },
-  tileDivider: { backgroundColor: '#5a4a20', borderRadius: 1 },
-  tileDividerV: { width: '80%', height: 1.5 },
-  tileDividerH: { height: '80%', width: 1.5 },
+  roundText: { fontSize: 10, color: 'rgba(255,255,255,0.5)' },
 
-  // اختيار الجانب
-  sideModal: {
-    backgroundColor: '#0f0f2e', borderWidth: 1, borderColor: '#06b6d440',
-    borderRadius: 16, padding: 16, marginHorizontal: 20,
-    alignItems: 'center', marginBottom: 8,
+  // Game area
+  gameArea: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
   },
-  sideTitle: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  sideBtn: {
-    backgroundColor: '#06b6d420', borderWidth: 1, borderColor: '#06b6d4',
-    borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10,
-  },
-  sideBtnText: { color: '#06b6d4', fontWeight: '700', fontSize: 13 },
 
-  // شريط الدور
-  turnBar: {
-    paddingHorizontal: 20, paddingVertical: 6,
-    flexDirection: 'row', alignItems: 'center', gap: 12,
+  // Player positions
+  playerTop: {
+    position: 'absolute', top: 8, left: 0, right: 0,
+    alignItems: 'center', gap: 5, zIndex: 15,
   },
-  yourTurn: { color: '#06b6d4', fontWeight: '900', fontSize: 15 },
-  theirTurn: { color: '#5a5a80', fontSize: 13 },
-  msgText: { color: '#fbbf24', fontSize: 12 },
+  playerLeft: {
+    position: 'absolute', left: 8, top: '35%',
+    alignItems: 'flex-start', gap: 6, zIndex: 15,
+  },
+  playerRight: {
+    position: 'absolute', right: 8, top: '35%',
+    alignItems: 'flex-end', gap: 6, zIndex: 15,
+  },
+  playerBottom: {
+    position: 'absolute', bottom: 8, left: 0, right: 0,
+    alignItems: 'center', gap: 4, zIndex: 15,
+  },
 
-  // يد اللاعب
-  handWrap: {
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderTopWidth: 1, borderColor: '#06b6d420',
+  // Avatar
+  avatar: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2,
   },
-  handTitle: { color: '#5a5a80', fontSize: 11, marginBottom: 6 },
-  handScroll: { alignItems: 'center', gap: 4 },
-  passBtn: {
-    alignSelf: 'center', marginTop: 8,
-    backgroundColor: '#1e293b', borderRadius: 10,
-    paddingHorizontal: 24, paddingVertical: 8,
-    borderWidth: 1, borderColor: '#3b82f640',
+  onlineDot: {
+    position: 'absolute', bottom: 1, right: 1,
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: '#2ecc71',
+    borderWidth: 2, borderColor: '#0a2e18',
   },
-  passBtnText: { color: '#3b82f6', fontWeight: '700', fontSize: 14 },
+  nameTag: {
+    backgroundColor: 'rgba(0,0,0,0.38)',
+    paddingHorizontal: 9, paddingVertical: 3,
+    borderRadius: 9,
+  },
+  nameTagActive: {
+    backgroundColor: 'rgba(245,200,66,0.18)',
+    borderWidth: 1, borderColor: 'rgba(245,200,66,0.3)',
+  },
+  nameText: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.9)' },
+  nameTextMe: { color: '#fff' },
 
-  // لاعبون آخرون
-  othersRow: {
-    flexDirection: 'row', justifyContent: 'space-around',
-    paddingHorizontal: 16, paddingVertical: 8,
-    borderTopWidth: 1, borderColor: '#ffffff10',
+  // Timer
+  timerBar: {
+    width: 70, height: 4,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 2, overflow: 'hidden',
   },
-  otherPlayer: { alignItems: 'center', gap: 3 },
-  otherName: { color: '#5a5a80', fontSize: 11 },
-  otherCount: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  activeDot: { color: '#06b6d4', fontSize: 12 },
+  timerFill: { height: '100%', borderRadius: 2 },
+
+  turnArrow: {
+    color: '#f5c842', fontSize: 11, fontWeight: '700',
+    marginBottom: 2,
+  },
+
+  // Hand
+  handSection: {
+    paddingHorizontal: 10, paddingTop: 5, paddingBottom: Platform.OS === 'ios' ? 22 : 14,
+    zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.50)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  handLabel: {
+    fontSize: 10, color: 'rgba(255,255,255,0.38)',
+    textAlign: 'center', letterSpacing: 1, marginBottom: 7,
+  },
+  handRow: {
+    flexDirection: 'row', justifyContent: 'center',
+    gap: 6, flexWrap: 'nowrap',
+  },
+
+  // Drag ghost
+  dragGhost: {
+    position: 'absolute', zIndex: 999,
+    opacity: 0.88,
+    transform: [{ rotate: '5deg' }, { scale: 1.06 }],
+  },
+
+  // Result
+  resultOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.84)',
+    alignItems: 'center', justifyContent: 'center',
+    gap: 16, zIndex: 100, borderRadius: 0,
+  },
+  resultTitle: {
+    fontSize: 24, fontWeight: '900', color: '#f5c842', letterSpacing: 1,
+  },
+  resultCard: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 14, padding: 16,
+    alignItems: 'center', minWidth: 90, position: 'relative',
+  },
+  resultCardWin: {
+    borderColor: '#f5c842',
+    backgroundColor: 'rgba(245,200,66,0.09)',
+    shadowColor: '#f5c842', shadowOpacity: 0.2, shadowRadius: 12, elevation: 6,
+  },
+  winBadge: {
+    position: 'absolute', top: -10, alignSelf: 'center',
+    backgroundColor: '#f5c842',
+    paddingHorizontal: 9, paddingVertical: 2, borderRadius: 8,
+  },
+  resBtnPri: {
+    backgroundColor: '#f5c842',
+    paddingVertical: 12, paddingHorizontal: 22,
+    borderRadius: 14,
+  },
+  resBtnSec: {
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)',
+    paddingVertical: 12, paddingHorizontal: 22,
+    borderRadius: 14,
+  },
 });

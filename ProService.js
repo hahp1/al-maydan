@@ -24,7 +24,7 @@ import {
   collection, getDocs, query, orderBy,
   serverTimestamp, onSnapshot,
 } from 'firebase/firestore';
-import { db } from './firebaseConfig';
+import { db } from './FirebaseConfig';
 
 const PRO_CACHE_KEY = 'arena_is_pro_v2';
 const PRO_UID_KEY   = 'arena_pro_uid';
@@ -154,6 +154,97 @@ export async function revokePro(uid) {
     return { success: true };
   } catch (e) {
     return { success: false, error: e?.message };
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  Theme Purchases — شراء الثيمات بالتوكن
+// ════════════════════════════════════════════════════════════
+
+const PURCHASED_CACHE_KEY = 'arena_purchased_themes_v1';
+
+/**
+ * hook — يجلب Set من IDs الثيمات المشتراة للمستخدم
+ * يقرأ من AsyncStorage أولاً ثم يتحقق من Firestore
+ */
+export function usePurchasedThemes(user) {
+  const [purchased, setPurchased] = useState(new Set());
+  const uid = user?.uid;
+
+  useEffect(() => {
+    if (!uid) { setPurchased(new Set()); return; }
+
+    // 1. اقرأ الـ cache فوراً
+    AsyncStorage.getItem(PURCHASED_CACHE_KEY + '_' + uid).then(cached => {
+      if (cached) {
+        try { setPurchased(new Set(JSON.parse(cached))); } catch (_) {}
+      }
+    });
+
+    // 2. اشترك بـ Firestore
+    const ref = doc(db, 'userThemes', uid);
+    const unsub = onSnapshot(ref, (snap) => {
+      if (!snap.exists()) { setPurchased(new Set()); return; }
+      const ids = snap.data().purchased || [];
+      setPurchased(new Set(ids));
+      AsyncStorage.setItem(PURCHASED_CACHE_KEY + '_' + uid, JSON.stringify(ids));
+    }, () => {});
+
+    return () => unsub();
+  }, [uid]);
+
+  return { purchased };
+}
+
+/**
+ * يتحقق إذا الثيم متاح للمستخدم
+ * @param {{ price: number }} themeItem - عنصر الثيم من ALL_THEMES
+ * @param {boolean} isPro
+ * @param {Set<string>} purchased
+ */
+export function isThemeUnlocked(themeItem, isPro, purchased) {
+  if (!themeItem) return false;
+  if (themeItem.price === 0) return true;   // مجاني دائماً
+  if (isPro) return true;                    // Pro يفتح كل شيء
+  return purchased instanceof Set
+    ? purchased.has(themeItem.id)
+    : false;
+}
+
+/**
+ * شراء ثيم بالتوكن
+ * @param {string} uid
+ * @param {string} themeId
+ * @param {number} price       - سعر الثيم بالتوكن
+ * @param {number} currentTokens
+ * @returns {Promise<{ success, newTokens?, error? }>}
+ */
+export async function purchaseTheme(uid, themeId, price, currentTokens) {
+  if (!uid || !themeId) return { success: false, error: 'بيانات ناقصة' };
+  if (currentTokens < price) {
+    return { success: false, error: 'رصيد التوكن غير كافٍ' };
+  }
+  try {
+    const ref     = doc(db, 'userThemes', uid);
+    const snap    = await getDoc(ref);
+    const existing = snap.exists() ? (snap.data().purchased || []) : [];
+
+    if (existing.includes(themeId)) {
+      return { success: true, newTokens: currentTokens }; // مشتراة مسبقاً
+    }
+
+    const newList     = [...existing, themeId];
+    const newTokens   = currentTokens - price;
+
+    // احفظ الثيمات المشتراة
+    await setDoc(ref, { purchased: newList }, { merge: true });
+
+    // احفظ التوكن الجديد في Firestore
+    await setDoc(doc(db, 'users', uid), { tokens: newTokens }, { merge: true });
+
+    return { success: true, newTokens };
+  } catch (e) {
+    return { success: false, error: e?.message || 'حدث خطأ' };
   }
 }
 

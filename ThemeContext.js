@@ -1,10 +1,25 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// ── ثيمات المدن — مصدر الحقيقة الوحيد هو CityThemes.js ──────
+import {
+  CITY_JERUSALEM,
+  CITY_TOKYO,
+  CITY_AMSTERDAM,
+  CITY_BAGHDAD,
+  CITY_ISTANBUL,
+  CITY_ALEXANDRIA,
+  CITY_PARIS,
+  CITY_NEWYORK,
+  CITY_LONDON,
+  CITY_RIYADH,
+  CITY_DUBAI,
+} from './CityThemes';
+
 const THEME_KEY = 'arena_theme_id';
 
 // ══════════════════════════════════════════════════════════════
-//  🌑🌕 Standard — الثيمان الأساسيان
+//  🌑🌕 Standard
 // ══════════════════════════════════════════════════════════════
 
 export const DARK = {
@@ -36,6 +51,7 @@ export const DARK = {
 
 export const LIGHT = {
   id: 'light',
+  isLight: true,
   bg:          '#f0f0fa',
   bgCard:      '#ffffff',
   bgElevated:  '#e8e8f8',
@@ -62,7 +78,7 @@ export const LIGHT = {
 };
 
 // ══════════════════════════════════════════════════════════════
-//  🌫️ Mist — الثيمات الخمسة
+//  🌫️ Mist
 // ══════════════════════════════════════════════════════════════
 
 export const TRUE_MIST = {
@@ -81,7 +97,7 @@ export const TRUE_MIST = {
   accent:        '#8898a8',
   accentSoft:    'rgba(136,152,168,0.15)',
   accentBorder:  'rgba(136,152,168,0.30)',
-  purple:        '#6878900',
+  purple:        '#687890',   // 🔧 كان '#6878900' (رقم زائد) — مُصلح
   purpleSoft:    'rgba(104,120,144,0.12)',
   purpleBorder:  'rgba(104,120,144,0.30)',
   border:        'rgba(140,155,170,0.22)',
@@ -226,12 +242,7 @@ export const BLACK_MIST = {
 };
 
 // ══════════════════════════════════════════════════════════════
-//  💎 Crystal — الثيمات الستة
-//  كل ثيم يحتوي على:
-//  - نفس مفاتيح DARK/LIGHT للتوافق الكامل مع كل الشاشات
-//  - isCrystal: true — للتمييز
-//  - crystalColor / crystalSoft / crystalBorder — للبطاقات
-//  - orbColors — للكرات خلف البطاقات في HomeScreen
+//  💎 Crystal
 // ══════════════════════════════════════════════════════════════
 
 export const CRYSTAL_RUBY = {
@@ -408,36 +419,29 @@ export const CRYSTAL_DIAMOND = {
   id: 'crystal_diamond',
   isCrystal: true,
   isLight: false,
-
   bg:          '#05070f',
   bgCard:      'rgba(71,85,105,0.12)',
   bgElevated:  'rgba(71,85,105,0.18)',
   bgInput:     'rgba(30,41,59,0.25)',
   bgOverlay:   'rgba(0,0,0,0.75)',
-
   textPrimary:   'rgba(240,245,255,0.96)',
   textSecondary: 'rgba(170,185,210,0.75)',
   textMuted:     'rgba(100,120,155,0.55)',
   textOnAccent:  '#05070f',
-
   accent:        '#94a3b8',
   accentSoft:    'rgba(148,163,184,0.15)',
   accentBorder:  'rgba(148,163,184,0.25)',
   purple:        '#cbd5e1',
   purpleSoft:    'rgba(203,213,225,0.12)',
   purpleBorder:  'rgba(203,213,225,0.28)',
-
   border:        'rgba(71,85,105,0.25)',
   divider:       'rgba(71,85,105,0.15)',
   borderCard:    'rgba(148,163,184,0.18)',
-
   success:       '#34d399',
   error:         '#f87171',
   warning:       '#fbbf24',
-
   statusBar:     'light-content',
   statusBg:      '#05070f',
-
   crystalColor:  '#475569',
   crystalLight:  '#94a3b8',
   crystalSoft:   'rgba(148,163,184,0.12)',
@@ -445,202 +449,8 @@ export const CRYSTAL_DIAMOND = {
   orbColors:     ['#334155', '#1e293b', '#94a3b8', '#475569'],
 };
 
-
 // ══════════════════════════════════════════════════════════════
-//  🌍 City Themes — مجموعة ثيمات المدن (11 مدينة)
-//  أوقات: 🌅 فجر (3) | 🌇 غروب (3) | 🌕 ليل (5)
-// ══════════════════════════════════════════════════════════════
-
-export const CITY_JERUSALEM = {
-  id: 'city_jerusalem', isCityTheme: true, timeOfDay: 'dawn',
-  skyGradient: ['#100820','#180e30','#281440','#3c1c48','#5c3040','#7a5030'],
-  skyBottom: '#7a5030',
-  skylineAsset: require('./assets/skylines/jerusalem.webp'),
-  starCount: 12,
-  accent: '#c8a855', accentSoft: 'rgba(200,168,85,0.15)', accentBorder: 'rgba(200,168,85,0.28)',
-  purple: '#d4906a', purpleSoft: 'rgba(212,144,106,0.12)', purpleBorder: 'rgba(212,144,106,0.28)',
-  bg: '#100820', bgCard: 'rgba(200,168,85,0.08)', bgElevated: 'rgba(200,168,85,0.12)',
-  bgInput: 'rgba(122,80,48,0.30)', bgOverlay: 'rgba(0,0,0,0.70)',
-  textPrimary: 'rgba(240,220,170,0.96)', textSecondary: 'rgba(185,158,100,0.75)',
-  textMuted: 'rgba(200,168,85,0.50)', textOnAccent: '#100820',
-  border: 'rgba(200,168,85,0.20)', divider: 'rgba(200,168,85,0.12)', borderCard: 'rgba(200,168,85,0.22)',
-  success: '#34d399', error: '#f87171', warning: '#fbbf24',
-  statusBar: 'light-content', statusBg: '#100820',
-};
-
-export const CITY_TOKYO = {
-  id: 'city_tokyo', isCityTheme: true, timeOfDay: 'dawn',
-  skyGradient: ['#180e28','#301840','#502458','#703060','#a04868','#c87060'],
-  skyBottom: '#c87060',
-  skylineAsset: require('./assets/skylines/tokyo.webp'),
-  starCount: 10,
-  accent: '#f0a0b5', accentSoft: 'rgba(240,160,181,0.15)', accentBorder: 'rgba(240,160,181,0.28)',
-  purple: '#7855a8', purpleSoft: 'rgba(120,85,168,0.12)', purpleBorder: 'rgba(120,85,168,0.28)',
-  bg: '#180e28', bgCard: 'rgba(240,160,181,0.08)', bgElevated: 'rgba(240,160,181,0.12)',
-  bgInput: 'rgba(80,36,88,0.30)', bgOverlay: 'rgba(0,0,0,0.70)',
-  textPrimary: 'rgba(255,220,230,0.96)', textSecondary: 'rgba(220,160,180,0.75)',
-  textMuted: 'rgba(240,160,181,0.50)', textOnAccent: '#180e28',
-  border: 'rgba(240,160,181,0.20)', divider: 'rgba(240,160,181,0.12)', borderCard: 'rgba(240,160,181,0.22)',
-  success: '#34d399', error: '#f87171', warning: '#fbbf24',
-  statusBar: 'light-content', statusBg: '#180e28',
-};
-
-export const CITY_AMSTERDAM = {
-  id: 'city_amsterdam', isCityTheme: true, timeOfDay: 'dawn',
-  skyGradient: ['#080f1c','#0f1c2e','#1a2a40','#263850','#3a5265','#587280'],
-  skyBottom: '#587280',
-  skylineAsset: require('./assets/skylines/amsterdam.webp'),
-  starCount: 8,
-  accent: '#5a96c8', accentSoft: 'rgba(90,150,200,0.14)', accentBorder: 'rgba(90,150,200,0.28)',
-  purple: '#98c0de', purpleSoft: 'rgba(152,192,222,0.10)', purpleBorder: 'rgba(152,192,222,0.26)',
-  bg: '#080f1c', bgCard: 'rgba(90,150,200,0.10)', bgElevated: 'rgba(90,150,200,0.14)',
-  bgInput: 'rgba(18,30,52,0.40)', bgOverlay: 'rgba(0,0,0,0.70)',
-  textPrimary: 'rgba(195,222,242,0.96)', textSecondary: 'rgba(120,165,200,0.75)',
-  textMuted: 'rgba(90,150,200,0.48)', textOnAccent: '#080f1c',
-  border: 'rgba(90,150,200,0.18)', divider: 'rgba(90,150,200,0.10)', borderCard: 'rgba(90,150,200,0.20)',
-  success: '#34d399', error: '#f87171', warning: '#fbbf24',
-  statusBar: 'light-content', statusBg: '#080f1c',
-};
-
-export const CITY_BAGHDAD = {
-  id: 'city_baghdad', isCityTheme: true, timeOfDay: 'dusk',
-  skyGradient: ['#0a0418','#180830','#300e50','#501838','#783020','#a06020','#c89030'],
-  skyBottom: '#8a6020',
-  skylineAsset: require('./assets/skylines/baghdad.webp'),
-  starCount: 5,
-  accent: '#d4a028', accentSoft: 'rgba(212,160,40,0.15)', accentBorder: 'rgba(212,160,40,0.28)',
-  purple: '#a04830', purpleSoft: 'rgba(160,72,48,0.12)', purpleBorder: 'rgba(160,72,48,0.28)',
-  bg: '#0a0418', bgCard: 'rgba(212,160,40,0.08)', bgElevated: 'rgba(212,160,40,0.12)',
-  bgInput: 'rgba(80,24,56,0.35)', bgOverlay: 'rgba(0,0,0,0.72)',
-  textPrimary: 'rgba(245,220,160,0.96)', textSecondary: 'rgba(200,165,95,0.75)',
-  textMuted: 'rgba(212,160,40,0.50)', textOnAccent: '#0a0418',
-  border: 'rgba(212,160,40,0.20)', divider: 'rgba(212,160,40,0.12)', borderCard: 'rgba(212,160,40,0.22)',
-  success: '#34d399', error: '#f87171', warning: '#fbbf24',
-  statusBar: 'light-content', statusBg: '#0a0418',
-};
-
-export const CITY_ISTANBUL = {
-  id: 'city_istanbul', isCityTheme: true, timeOfDay: 'dusk',
-  skyGradient: ['#080418','#180830','#301060','#501848','#783040','#a04028','#b85828'],
-  skyBottom: '#7a4018',
-  skylineAsset: require('./assets/skylines/istanbul.webp'),
-  starCount: 4,
-  accent: '#d06030', accentSoft: 'rgba(208,96,48,0.15)', accentBorder: 'rgba(208,96,48,0.28)',
-  purple: '#8040a0', purpleSoft: 'rgba(128,64,160,0.12)', purpleBorder: 'rgba(128,64,160,0.28)',
-  bg: '#080418', bgCard: 'rgba(208,96,48,0.08)', bgElevated: 'rgba(208,96,48,0.12)',
-  bgInput: 'rgba(80,24,72,0.35)', bgOverlay: 'rgba(0,0,0,0.72)',
-  textPrimary: 'rgba(245,210,185,0.96)', textSecondary: 'rgba(205,155,115,0.75)',
-  textMuted: 'rgba(208,96,48,0.50)', textOnAccent: '#080418',
-  border: 'rgba(208,96,48,0.20)', divider: 'rgba(208,96,48,0.12)', borderCard: 'rgba(208,96,48,0.22)',
-  success: '#34d399', error: '#f87171', warning: '#fbbf24',
-  statusBar: 'light-content', statusBg: '#080418',
-};
-
-export const CITY_ALEXANDRIA = {
-  id: 'city_alexandria', isCityTheme: true, timeOfDay: 'dusk',
-  skyGradient: ['#080818','#100c30','#201848','#3c2860','#604050','#885030','#a86828'],
-  skyBottom: '#724818',
-  skylineAsset: require('./assets/skylines/alexandria.webp'),
-  starCount: 3,
-  accent: '#e89830', accentSoft: 'rgba(232,152,48,0.15)', accentBorder: 'rgba(232,152,48,0.28)',
-  purple: '#4878b8', purpleSoft: 'rgba(72,120,184,0.12)', purpleBorder: 'rgba(72,120,184,0.28)',
-  bg: '#080818', bgCard: 'rgba(232,152,48,0.08)', bgElevated: 'rgba(232,152,48,0.12)',
-  bgInput: 'rgba(60,40,96,0.35)', bgOverlay: 'rgba(0,0,0,0.72)',
-  textPrimary: 'rgba(248,220,165,0.96)', textSecondary: 'rgba(205,165,100,0.75)',
-  textMuted: 'rgba(232,152,48,0.50)', textOnAccent: '#080818',
-  border: 'rgba(232,152,48,0.20)', divider: 'rgba(232,152,48,0.12)', borderCard: 'rgba(232,152,48,0.22)',
-  success: '#34d399', error: '#f87171', warning: '#fbbf24',
-  statusBar: 'light-content', statusBg: '#080818',
-};
-
-export const CITY_PARIS = {
-  id: 'city_paris', isCityTheme: true, timeOfDay: 'night',
-  skyGradient: ['#050818','#0a1028','#121838','#0a0e22','#07091a'],
-  skyBottom: '#07091a',
-  skylineAsset: require('./assets/skylines/paris.webp'),
-  starCount: 38,
-  accent: '#f0d837', accentSoft: 'rgba(240,216,55,0.13)', accentBorder: 'rgba(240,216,55,0.28)',
-  purple: '#8868c0', purpleSoft: 'rgba(136,104,192,0.10)', purpleBorder: 'rgba(136,104,192,0.26)',
-  bg: '#07091a', bgCard: 'rgba(240,216,55,0.09)', bgElevated: 'rgba(240,216,55,0.13)',
-  bgInput: 'rgba(14,18,50,0.40)', bgOverlay: 'rgba(0,0,0,0.72)',
-  textPrimary: 'rgba(255,248,200,0.96)', textSecondary: 'rgba(200,175,60,0.75)',
-  textMuted: 'rgba(240,216,55,0.48)', textOnAccent: '#07091a',
-  border: 'rgba(240,216,55,0.18)', divider: 'rgba(240,216,55,0.10)', borderCard: 'rgba(240,216,55,0.20)',
-  success: '#34d399', error: '#f87171', warning: '#fbbf24',
-  statusBar: 'light-content', statusBg: '#07091a',
-};
-
-export const CITY_NEWYORK = {
-  id: 'city_newyork', isCityTheme: true, timeOfDay: 'night',
-  skyGradient: ['#0e0820','#160c30','#1c0e3a','#140828','#0c0418'],
-  skyBottom: '#0c0418',
-  skylineAsset: require('./assets/skylines/newyork.webp'),
-  starCount: 15,
-  accent: '#e83848', accentSoft: 'rgba(232,56,72,0.15)', accentBorder: 'rgba(232,56,72,0.28)',
-  purple: '#4888f0', purpleSoft: 'rgba(72,136,240,0.12)', purpleBorder: 'rgba(72,136,240,0.28)',
-  bg: '#0c0418', bgCard: 'rgba(232,56,72,0.08)', bgElevated: 'rgba(232,56,72,0.12)',
-  bgInput: 'rgba(20,8,40,0.40)', bgOverlay: 'rgba(0,0,0,0.72)',
-  textPrimary: 'rgba(255,220,224,0.96)', textSecondary: 'rgba(220,150,158,0.75)',
-  textMuted: 'rgba(232,56,72,0.50)', textOnAccent: '#0c0418',
-  border: 'rgba(232,56,72,0.20)', divider: 'rgba(232,56,72,0.12)', borderCard: 'rgba(232,56,72,0.22)',
-  success: '#34d399', error: '#f87171', warning: '#fbbf24',
-  statusBar: 'light-content', statusBg: '#0c0418',
-};
-
-export const CITY_LONDON = {
-  id: 'city_london', isCityTheme: true, timeOfDay: 'night',
-  skyGradient: ['#0e0e18','#161620','#1c1c2c','#141420','#0c0c14'],
-  skyBottom: '#0c0c14',
-  skylineAsset: require('./assets/skylines/london.webp'),
-  starCount: 8,
-  accent: '#f0a028', accentSoft: 'rgba(240,160,40,0.15)', accentBorder: 'rgba(240,160,40,0.28)',
-  purple: '#5870a0', purpleSoft: 'rgba(88,112,160,0.12)', purpleBorder: 'rgba(88,112,160,0.28)',
-  bg: '#0c0c14', bgCard: 'rgba(240,160,40,0.08)', bgElevated: 'rgba(240,160,40,0.12)',
-  bgInput: 'rgba(20,20,36,0.40)', bgOverlay: 'rgba(0,0,0,0.72)',
-  textPrimary: 'rgba(245,225,190,0.96)', textSecondary: 'rgba(200,165,110,0.75)',
-  textMuted: 'rgba(240,160,40,0.50)', textOnAccent: '#0c0c14',
-  border: 'rgba(240,160,40,0.20)', divider: 'rgba(240,160,40,0.12)', borderCard: 'rgba(240,160,40,0.22)',
-  success: '#34d399', error: '#f87171', warning: '#fbbf24',
-  statusBar: 'light-content', statusBg: '#0c0c14',
-};
-
-export const CITY_RIYADH = {
-  id: 'city_riyadh', isCityTheme: true, timeOfDay: 'night',
-  skyGradient: ['#050e20','#081830','#0a1c38','#071428','#040c18'],
-  skyBottom: '#040c18',
-  skylineAsset: require('./assets/skylines/riyadh.webp'),
-  starCount: 40,
-  accent: '#e8f0ff', accentSoft: 'rgba(232,240,255,0.12)', accentBorder: 'rgba(232,240,255,0.22)',
-  purple: '#6090d0', purpleSoft: 'rgba(96,144,208,0.12)', purpleBorder: 'rgba(96,144,208,0.28)',
-  bg: '#040c18', bgCard: 'rgba(232,240,255,0.06)', bgElevated: 'rgba(232,240,255,0.10)',
-  bgInput: 'rgba(7,20,40,0.40)', bgOverlay: 'rgba(0,0,0,0.72)',
-  textPrimary: 'rgba(220,232,255,0.96)', textSecondary: 'rgba(160,192,235,0.75)',
-  textMuted: 'rgba(232,240,255,0.45)', textOnAccent: '#040c18',
-  border: 'rgba(232,240,255,0.15)', divider: 'rgba(232,240,255,0.08)', borderCard: 'rgba(232,240,255,0.18)',
-  success: '#34d399', error: '#f87171', warning: '#fbbf24',
-  statusBar: 'light-content', statusBg: '#040c18',
-};
-
-export const CITY_DUBAI = {
-  id: 'city_dubai', isCityTheme: true, timeOfDay: 'night',
-  skyGradient: ['#080616','#0e0c20','#14102a','#0c0a1c','#06040e'],
-  skyBottom: '#06040e',
-  skylineAsset: require('./assets/skylines/dubai.webp'),
-  starCount: 28,
-  accent: '#f0c818', accentSoft: 'rgba(240,200,24,0.15)', accentBorder: 'rgba(240,200,24,0.28)',
-  purple: '#8090e0', purpleSoft: 'rgba(128,144,224,0.12)', purpleBorder: 'rgba(128,144,224,0.28)',
-  bg: '#06040e', bgCard: 'rgba(240,200,24,0.08)', bgElevated: 'rgba(240,200,24,0.12)',
-  bgInput: 'rgba(12,10,28,0.40)', bgOverlay: 'rgba(0,0,0,0.72)',
-  textPrimary: 'rgba(255,245,195,0.96)', textSecondary: 'rgba(220,192,110,0.75)',
-  textMuted: 'rgba(240,200,24,0.50)', textOnAccent: '#06040e',
-  border: 'rgba(240,200,24,0.20)', divider: 'rgba(240,200,24,0.12)', borderCard: 'rgba(240,200,24,0.22)',
-  success: '#34d399', error: '#f87171', warning: '#fbbf24',
-  statusBar: 'light-content', statusBg: '#06040e',
-};
-
-
-// ══════════════════════════════════════════════════════════════
-//  📋 ALL_THEMES — مقسّمة بأربع مجموعات
+//  📋 THEME_GROUPS + ALL_THEMES
 // ══════════════════════════════════════════════════════════════
 
 export const THEME_GROUPS = [
@@ -660,11 +470,11 @@ export const THEME_GROUPS = [
     groupLabelAr: 'بين الوضوح والضباب',
     groupEmoji: '🌫️',
     themes: [
-      { theme: TRUE_MIST,    id: 'truemist',    label: 'True Mist',    labelAr: 'الضباب الثلجي', emoji: '❄️', previewBg: '#daeefa', previewAccent: '#3a8fd0', isMist: true, price: 0   },
-      { theme: BLUE_MIST,   id: 'bluemist',    label: 'Blue Mist',    labelAr: 'الضباب الأزرق', emoji: '🔵', previewBg: '#0e1228', previewAccent: '#aab8f0', isMist: true, price: 200 },
-      { theme: GREEN_MIST,  id: 'greenmist',   label: 'Green Mist',   labelAr: 'الضباب الأخضر', emoji: '🟢', previewBg: '#060e07', previewAccent: '#88d098', isMist: true, price: 350 },
-      { theme: ORANGE_MIST, id: 'orangemist',  label: 'Orange Mist',  labelAr: 'الضباب الذهبي', emoji: '🟠', previewBg: '#0c0802', previewAccent: '#d0a038', isMist: true, price: 500 },
-      { theme: BLACK_MIST,  id: 'blackmist',   label: 'Black Mist',   labelAr: 'الضباب الأسود', emoji: '🤎', previewBg: '#080504', previewAccent: '#c0a090', isMist: true, price: 800 },
+      { theme: TRUE_MIST,    id: 'truemist',   label: 'True Mist',   labelAr: 'الضباب الثلجي', emoji: '❄️', previewBg: '#daeefa', previewAccent: '#3a8fd0', isMist: true, price: 0   },
+      { theme: BLUE_MIST,   id: 'bluemist',   label: 'Blue Mist',   labelAr: 'الضباب الأزرق', emoji: '🔵', previewBg: '#0e1228', previewAccent: '#aab8f0', isMist: true, price: 200 },
+      { theme: GREEN_MIST,  id: 'greenmist',  label: 'Green Mist',  labelAr: 'الضباب الأخضر', emoji: '🟢', previewBg: '#060e07', previewAccent: '#88d098', isMist: true, price: 350 },
+      { theme: ORANGE_MIST, id: 'orangemist', label: 'Orange Mist', labelAr: 'الضباب الذهبي', emoji: '🟠', previewBg: '#0c0802', previewAccent: '#d0a038', isMist: true, price: 500 },
+      { theme: BLACK_MIST,  id: 'blackmist',  label: 'Black Mist',  labelAr: 'الضباب الأسود', emoji: '🤎', previewBg: '#080504', previewAccent: '#c0a090', isMist: true, price: 800 },
     ],
   },
   {
@@ -673,12 +483,12 @@ export const THEME_GROUPS = [
     groupLabelAr: 'حين يتحرر الضوء',
     groupEmoji: '💎',
     themes: [
-      { theme: CRYSTAL_DIAMOND,  id: 'crystal_diamond',  label: 'Diamond',  labelAr: 'الماس',            emoji: '⬜', previewBg: '#05070f', previewAccent: '#94a3b8', isCrystal: true, price: 0    },
-      { theme: CRYSTAL_RUBY,     id: 'crystal_ruby',     label: 'Ruby',     labelAr: 'الياقوت',          emoji: '🔴', previewBg: '#07020a', previewAccent: '#ff4d6d', isCrystal: true, price: 300  },
-      { theme: CRYSTAL_EMERALD,  id: 'crystal_emerald',  label: 'Emerald',  labelAr: 'الزمرد',           emoji: '🟢', previewBg: '#010a05', previewAccent: '#10b981', isCrystal: true, price: 500  },
-      { theme: CRYSTAL_SAPPHIRE, id: 'crystal_sapphire', label: 'Sapphire', labelAr: 'الياقوت الأزرق',  emoji: '🔵', previewBg: '#01030f', previewAccent: '#3b82f6', isCrystal: true, price: 750  },
-      { theme: CRYSTAL_AMETHYST, id: 'crystal_amethyst', label: 'Amethyst', labelAr: 'الجمشت',           emoji: '🟣', previewBg: '#040108', previewAccent: '#8b5cf6', isCrystal: true, price: 1000 },
-      { theme: CRYSTAL_TOPAZ,    id: 'crystal_topaz',    label: 'Topaz',    labelAr: 'التوباز',          emoji: '🟡', previewBg: '#060300', previewAccent: '#f59e0b', isCrystal: true, price: 1500 },
+      { theme: CRYSTAL_DIAMOND,  id: 'crystal_diamond',  label: 'Diamond',  labelAr: 'الماس',           emoji: '⬜', previewBg: '#05070f', previewAccent: '#94a3b8', isCrystal: true, price: 0    },
+      { theme: CRYSTAL_RUBY,     id: 'crystal_ruby',     label: 'Ruby',     labelAr: 'الياقوت',         emoji: '🔴', previewBg: '#07020a', previewAccent: '#ff4d6d', isCrystal: true, price: 300  },
+      { theme: CRYSTAL_EMERALD,  id: 'crystal_emerald',  label: 'Emerald',  labelAr: 'الزمرد',          emoji: '🟢', previewBg: '#010a05', previewAccent: '#10b981', isCrystal: true, price: 500  },
+      { theme: CRYSTAL_SAPPHIRE, id: 'crystal_sapphire', label: 'Sapphire', labelAr: 'الياقوت الأزرق', emoji: '🔵', previewBg: '#01030f', previewAccent: '#3b82f6', isCrystal: true, price: 750  },
+      { theme: CRYSTAL_AMETHYST, id: 'crystal_amethyst', label: 'Amethyst', labelAr: 'الجمشت',          emoji: '🟣', previewBg: '#040108', previewAccent: '#8b5cf6', isCrystal: true, price: 1000 },
+      { theme: CRYSTAL_TOPAZ,    id: 'crystal_topaz',    label: 'Topaz',    labelAr: 'التوباز',         emoji: '🟡', previewBg: '#060300', previewAccent: '#f59e0b', isCrystal: true, price: 1500 },
     ],
   },
   {
@@ -688,19 +498,19 @@ export const THEME_GROUPS = [
     groupEmoji: '🌆',
     themes: [
       // 🌕 ليل — الأرخص
-      { theme: CITY_PARIS,      id: 'city_paris',      label: 'Paris Night',      labelAr: 'ليل باريس',        emoji: '🗼', timeOfDay: 'night', previewBg: '#1e1a48', previewAccent: '#e8d040', isCityTheme: true, price: 0   },
-      { theme: CITY_NEWYORK,    id: 'city_newyork',    label: 'New York Night',   labelAr: 'ليل نيويورك',      emoji: '🗽', timeOfDay: 'night', previewBg: '#1c0e3a', previewAccent: '#e83848', isCityTheme: true, price: 400 },
-      { theme: CITY_LONDON,     id: 'city_london',     label: 'London Night',     labelAr: 'ليل لندن',         emoji: '🌁', timeOfDay: 'night', previewBg: '#1c1c2c', previewAccent: '#f0a028', isCityTheme: true, price: 500 },
-      { theme: CITY_RIYADH,     id: 'city_riyadh',     label: 'Riyadh Night',     labelAr: 'ليل الرياض',       emoji: '🏙️', timeOfDay: 'night', previewBg: '#0a1c38', previewAccent: '#e8f0ff', isCityTheme: true, price: 600 },
-      { theme: CITY_DUBAI,      id: 'city_dubai',      label: 'Dubai Night',      labelAr: 'ليل دبي',          emoji: '✨', timeOfDay: 'night', previewBg: '#14102a', previewAccent: '#f0c818', isCityTheme: true, price: 800 },
+      { theme: CITY_PARIS,      id: 'city_paris',      label: 'Paris Night',     labelAr: 'ليل باريس',        emoji: '🗼', timeOfDay: 'night', previewBg: '#1e1a48', previewAccent: '#e8d040', isCityTheme: true, price: 0    },
+      { theme: CITY_NEWYORK,    id: 'city_newyork',    label: 'New York Night',  labelAr: 'ليل نيويورك',      emoji: '🗽', timeOfDay: 'night', previewBg: '#1c0e3a', previewAccent: '#e83848', isCityTheme: true, price: 400  },
+      { theme: CITY_LONDON,     id: 'city_london',     label: 'London Night',    labelAr: 'ليل لندن',         emoji: '🌁', timeOfDay: 'night', previewBg: '#1c1c2c', previewAccent: '#f0a028', isCityTheme: true, price: 500  },
+      { theme: CITY_RIYADH,     id: 'city_riyadh',     label: 'Riyadh Night',    labelAr: 'ليل الرياض',       emoji: '🏙️', timeOfDay: 'night', previewBg: '#0a1c38', previewAccent: '#e8f0ff', isCityTheme: true, price: 600  },
+      { theme: CITY_DUBAI,      id: 'city_dubai',      label: 'Dubai Night',     labelAr: 'ليل دبي',          emoji: '✨', timeOfDay: 'night', previewBg: '#14102a', previewAccent: '#f0c818', isCityTheme: true, price: 800  },
       // 🌇 غروب
-      { theme: CITY_ALEXANDRIA, id: 'city_alexandria', label: 'Alexandria Dusk',  labelAr: 'غروب الإسكندرية', emoji: '🌊', timeOfDay: 'dusk',  previewBg: '#3c2860', previewAccent: '#e89830', isCityTheme: true, price: 400  },
-      { theme: CITY_BAGHDAD,    id: 'city_baghdad',    label: 'Baghdad Dusk',     labelAr: 'غروب بغداد',       emoji: '🌴', timeOfDay: 'dusk',  previewBg: '#501838', previewAccent: '#d4a028', isCityTheme: true, price: 800  },
-      { theme: CITY_ISTANBUL,   id: 'city_istanbul',   label: 'Istanbul Dusk',    labelAr: 'غروب إسطنبول',    emoji: '🌉', timeOfDay: 'dusk',  previewBg: '#501848', previewAccent: '#d06030', isCityTheme: true, price: 1200 },
+      { theme: CITY_ALEXANDRIA, id: 'city_alexandria', label: 'Alexandria Dusk', labelAr: 'غروب الإسكندرية', emoji: '🌊', timeOfDay: 'dusk',  previewBg: '#3c2860', previewAccent: '#e89830', isCityTheme: true, price: 400  },
+      { theme: CITY_BAGHDAD,    id: 'city_baghdad',    label: 'Baghdad Dusk',    labelAr: 'غروب بغداد',       emoji: '🌴', timeOfDay: 'dusk',  previewBg: '#501838', previewAccent: '#d4a028', isCityTheme: true, price: 800  },
+      { theme: CITY_ISTANBUL,   id: 'city_istanbul',   label: 'Istanbul Dusk',   labelAr: 'غروب إسطنبول',    emoji: '🌉', timeOfDay: 'dusk',  previewBg: '#501848', previewAccent: '#d06030', isCityTheme: true, price: 1200 },
       // 🌅 فجر — الأغلى
-      { theme: CITY_AMSTERDAM,  id: 'city_amsterdam',  label: 'Amsterdam Dawn',   labelAr: 'فجر أمستردام',    emoji: '🌫️', timeOfDay: 'dawn',  previewBg: '#1e2c3c', previewAccent: '#8ab5d5', isCityTheme: true, price: 600  },
-      { theme: CITY_JERUSALEM,  id: 'city_jerusalem',  label: 'Jerusalem Dawn',   labelAr: 'فجر القدس',        emoji: '🕌', timeOfDay: 'dawn',  previewBg: '#281440', previewAccent: '#c8a855', isCityTheme: true, price: 1200 },
-      { theme: CITY_TOKYO,      id: 'city_tokyo',      label: 'Tokyo Dawn',       labelAr: 'فجر طوكيو',       emoji: '🌸', timeOfDay: 'dawn',  previewBg: '#502458', previewAccent: '#f0a0b5', isCityTheme: true, price: 1800 },
+      { theme: CITY_AMSTERDAM,  id: 'city_amsterdam',  label: 'Amsterdam Dawn',  labelAr: 'فجر أمستردام',    emoji: '🌫️', timeOfDay: 'dawn',  previewBg: '#1e2c3c', previewAccent: '#8ab5d5', isCityTheme: true, price: 600  },
+      { theme: CITY_JERUSALEM,  id: 'city_jerusalem',  label: 'Jerusalem Dawn',  labelAr: 'فجر القدس',        emoji: '🕌', timeOfDay: 'dawn',  previewBg: '#281440', previewAccent: '#c8a855', isCityTheme: true, price: 1200 },
+      { theme: CITY_TOKYO,      id: 'city_tokyo',      label: 'Tokyo Dawn',      labelAr: 'فجر طوكيو',       emoji: '🌸', timeOfDay: 'dawn',  previewBg: '#502458', previewAccent: '#f0a0b5', isCityTheme: true, price: 1800 },
     ],
   },
 ];

@@ -1,1100 +1,891 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  StatusBar, Animated, Alert, ActivityIndicator,
-  ScrollView, TextInput,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
+  StatusBar, ScrollView, Alert, Animated, Dimensions, Modal
 } from 'react-native';
-import { db, auth } from './firebaseConfig';
-import {
-  doc, setDoc, onSnapshot, updateDoc, deleteDoc,
-  collection, query, where, getDocs, serverTimestamp,
-  arrayUnion, getDoc,
-} from 'firebase/firestore';
+import { useOnlineGame } from './useOnlineGame';
+import { useTheme } from './ThemeContext';
+import { useLanguage } from './I18n';
 import LeaveModal from './LeaveModal';
+import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { playSound } from './SoundService';
 
-// ══════════════════════════════════════
-// ثوابت
-// ══════════════════════════════════════
-const SUITS  = ['♠', '♥', '♦', '♣'];
-const RANKS  = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
-const RANK_AR = { A:'آس','2':'٢','3':'٣','4':'٤','5':'٥','6':'٦','7':'٧','8':'٨','9':'٩','10':'١٠',J:'جاك',Q:'ملكة',K:'ملك' };
-const SUIT_COLOR = { '♠':'#e0e0ff','♣':'#e0e0ff','♥':'#ff6b6b','♦':'#ff6b6b' };
-const MIN_PLAYERS = 3;
-const MAX_PLAYERS = 6;
-const COST = 10;
-const TURN_SECONDS = 30;
+const { width: SW, height: SH } = Dimensions.get('window');
+
+// ─────────────────────────────────────────────
+//  بيانات الكروت
+// ─────────────────────────────────────────────
+const SUITS = ['♠', '♥', '♦', '♣'];
+const VALUES = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const RED_SUITS = ['♥', '♦'];
 
 function buildDeck() {
-  const d = [];
-  for (const s of SUITS) for (const r of RANKS) d.push({ suit:s, rank:r, id:`${r}${s}` });
+  const deck = [];
+  for (const suit of SUITS) {
+    for (const val of VALUES) {
+      deck.push({ suit, val, id: `${val}${suit}` });
+    }
+  }
+  return deck;
+}
+
+function shuffleDeck(deck) {
+  const d = [...deck];
+  for (let i = d.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [d[i], d[j]] = [d[j], d[i]];
+  }
   return d;
 }
-function shuffle(a) {
-  const b = [...a];
-  for (let i = b.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [b[i],b[j]]=[b[j],b[i]]; }
-  return b;
-}
-function dealCards(n) {
-  const deck = shuffle(buildDeck());
-  const hands = Array.from({length:n},()=>[]);
-  deck.forEach((c,i) => hands[i%n].push(c));
+
+function dealHands(players, deck) {
+  const hands = {};
+  players.forEach((p) => (hands[p.uid] = []));
+  deck.forEach((card, i) => {
+    hands[players[i % players.length].uid].push(card);
+  });
   return hands;
 }
-function genCode() { return Math.random().toString(36).slice(2,8).toUpperCase(); }
-function getUid() {
-  const u = auth.currentUser?.uid;
-  if (u) return u;
-  if (!global._gUid) global._gUid = 'guest_'+Math.random().toString(36).slice(2,10);
-  return global._gUid;
-}
 
-// ══════════════════════════════════════
-// شريط الوقت
-// ══════════════════════════════════════
-function TimerBar({ isMyTurn, turnStartedAt, seconds, onTimeout }) {
-  const [remaining, setRemaining] = useState(seconds);
-  const anim = useRef(new Animated.Value(1)).current;
-  const animRef = useRef(null);
+// ─────────────────────────────────────────────
+//  مكوّن الكرت الواحد
+// ─────────────────────────────────────────────
+function PlayingCard({ card, selected, onPress, theme, disabled, size = 'normal' }) {
+  const isRed = RED_SUITS.includes(card.suit);
+  const scale = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
-    if (!turnStartedAt) return;
-    const elapsed = Math.floor((Date.now() - turnStartedAt) / 1000);
-    const left = Math.max(0, seconds - elapsed);
-    setRemaining(left);
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.timing(scale, { toValue: 0.92, duration: 80, useNativeDriver: true }),
+      Animated.timing(scale, { toValue: 1, duration: 80, useNativeDriver: true }),
+    ]).start();
+    onPress && onPress(card);
+  };
 
-    // أنيميشن شريط
-    if (animRef.current) animRef.current.stop();
-    anim.setValue(left / seconds);
-    animRef.current = Animated.timing(anim, {
-      toValue: 0,
-      duration: left * 1000,
-      useNativeDriver: false,
-    });
-    animRef.current.start();
+  const cardW = size === 'small' ? 44 : 58;
+  const cardH = size === 'small' ? 64 : 84;
+  const valSize = size === 'small' ? 13 : 17;
+  const suitSize = size === 'small' ? 16 : 22;
 
-    // عداد
-    const iv = setInterval(() => {
-      setRemaining(r => {
-        if (r <= 1) {
-          clearInterval(iv);
-          if (isMyTurn) onTimeout();
-          return 0;
-        }
-        return r - 1;
-      });
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [turnStartedAt]);
+  // لون الكرت يتأثر بالثيم
+  const cardBg = theme.isCrystal
+    ? selected
+      ? theme.accentBorder
+      : theme.bgElevated
+    : theme.isMist
+    ? selected
+      ? 'rgba(255,255,255,0.75)'
+      : 'rgba(255,255,255,0.55)'
+    : selected
+    ? theme.accentBorder
+    : theme.bgElevated;
 
-  const barColor = remaining > 15 ? '#22c55e' : remaining > 8 ? '#f59e0b' : '#ef4444';
+  const cardBorder = selected
+    ? theme.accent
+    : theme.borderCard;
+
+  const shadowStyle = theme.isCrystal && selected
+    ? {
+        shadowColor: theme.accent,
+        shadowOpacity: 0.7,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 10,
+      }
+    : { elevation: 2 };
 
   return (
-    <View style={timerStyles.wrap}>
-      <View style={timerStyles.track}>
-        <Animated.View style={[timerStyles.fill, {
-          width: anim.interpolate({ inputRange:[0,1], outputRange:['0%','100%'] }),
-          backgroundColor: barColor,
-        }]} />
-      </View>
-      <Text style={[timerStyles.count, { color: barColor }]}>{remaining}s</Text>
+    <TouchableOpacity onPress={handlePress} disabled={disabled} activeOpacity={0.85}>
+      <Animated.View
+        style={[
+          {
+            width: cardW,
+            height: cardH,
+            borderRadius: 8,
+            backgroundColor: cardBg,
+            borderWidth: selected ? 2 : 1,
+            borderColor: cardBorder,
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingVertical: 4,
+            paddingHorizontal: 3,
+            marginRight: size === 'small' ? 4 : 6,
+          },
+          shadowStyle,
+          { transform: [{ scale }, { translateY: selected ? -8 : 0 }] },
+        ]}
+      >
+        {/* أعلى الكرت */}
+        <View style={{ alignSelf: 'flex-start' }}>
+          <Text style={{ fontSize: valSize, fontWeight: '800', color: isRed ? '#e53e3e' : '#1a1a2e', lineHeight: valSize + 2 }}>
+            {card.val}
+          </Text>
+          <Text style={{ fontSize: valSize - 3, color: isRed ? '#e53e3e' : '#1a1a2e', lineHeight: valSize }}>
+            {card.suit}
+          </Text>
+        </View>
+
+        {/* وسط الكرت */}
+        <Text style={{ fontSize: suitSize, color: isRed ? '#e53e3e' : '#1a1a2e' }}>
+          {card.suit}
+        </Text>
+
+        {/* أسفل الكرت - مقلوب */}
+        <View style={{ alignSelf: 'flex-end', transform: [{ rotate: '180deg' }] }}>
+          <Text style={{ fontSize: valSize, fontWeight: '800', color: isRed ? '#e53e3e' : '#1a1a2e', lineHeight: valSize + 2 }}>
+            {card.val}
+          </Text>
+          <Text style={{ fontSize: valSize - 3, color: isRed ? '#e53e3e' : '#1a1a2e', lineHeight: valSize }}>
+            {card.suit}
+          </Text>
+        </View>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
+// ─────────────────────────────────────────────
+//  كرت مقلوب (على الطاولة) بـ rotation عشوائي
+// ─────────────────────────────────────────────
+function FaceDownCard({ index, theme }) {
+  const rot = ((index * 7) % 21) - 10; // -10 to +10 deg
+  const shift = ((index * 3) % 9) - 4;
+
+  const cardBg = theme.isCrystal
+    ? theme.crystalColor || theme.bgElevated
+    : theme.isMist
+    ? 'rgba(80,100,180,0.55)'
+    : '#1a2a6c';
+
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        width: 52,
+        height: 74,
+        borderRadius: 8,
+        backgroundColor: cardBg,
+        borderWidth: 2,
+        borderColor: theme.accent,
+        transform: [{ rotate: `${rot}deg` }, { translateX: shift }, { translateY: shift / 2 }],
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOpacity: 0.4,
+        shadowRadius: 4,
+        elevation: 4 + index,
+      }}
+    >
+      {/* نقش الكرت */}
+      <Text style={{ color: theme.accent, fontSize: 22, opacity: 0.6 }}>🂠</Text>
     </View>
   );
 }
-const timerStyles = StyleSheet.create({
-  wrap:  { flexDirection:'row', alignItems:'center', gap:8, paddingHorizontal:16, paddingVertical:6 },
-  track: { flex:1, height:6, backgroundColor:'#1a1a3e', borderRadius:3, overflow:'hidden' },
-  fill:  { height:'100%', borderRadius:3 },
-  count: { fontSize:14, fontWeight:'900', minWidth:30, textAlign:'right' },
-});
 
-// ══════════════════════════════════════
-// المكوّن الرئيسي
-// ══════════════════════════════════════
-export default function BullshitGameScreen({ onBack, currentUser, tokens, onSpendTokens }) {
-  const [phase,          setPhase]          = useState('menu');
-  const [roomId,         setRoomId]         = useState(null);
-  const [roomData,       setRoomData]       = useState(null);
-  const [myUid,          setMyUid]          = useState(null);
-  const [myName,         setMyName]         = useState('');
-  const [loading,        setLoading]        = useState(false);
-  const [friendSearch,   setFriendSearch]   = useState('');
-  const [friendResults,  setFriendResults]  = useState([]);
-  const [searching,      setSearching]      = useState(false);
-  const [selectedCards,  setSelectedCards]  = useState([]);
-  const [desiredCount,   setDesiredCount]   = useState(4);
-  const [botWaitSecs,    setBotWaitSecs]    = useState(60);
-  const [showLeave,      setShowLeave]      = useState(false);
-  const animPile   = useRef(new Animated.Value(1)).current;
-  const unsubRef   = useRef(null);
-  const fadeAnim   = useRef(new Animated.Value(0)).current;
-  const botTimerRef = useRef(null);
-  const roomIdRef  = useRef(null);
+// ─────────────────────────────────────────────
+//  زر إعلان الرقم
+// ─────────────────────────────────────────────
+function DeclareButton({ label, selected, onPress, theme }) {
+  const glowStyle = theme.isCrystal && selected
+    ? {
+        shadowColor: theme.accent,
+        shadowOpacity: 0.9,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 12,
+      }
+    : {};
+
+  return (
+    <TouchableOpacity
+      onPress={() => onPress(label)}
+      style={[
+        {
+          paddingHorizontal: 10,
+          paddingVertical: 7,
+          borderRadius: 8,
+          backgroundColor: selected ? theme.accent : theme.bgElevated,
+          borderWidth: 1,
+          borderColor: selected ? theme.accent : theme.borderCard,
+          alignItems: 'center',
+          minWidth: 38,
+          margin: 3,
+        },
+        glowStyle,
+      ]}
+    >
+      <Text style={{ color: selected ? theme.bg : theme.textPrimary, fontWeight: '700', fontSize: 13 }}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+// ─────────────────────────────────────────────
+//  Modal نتيجة التشكيك
+// ─────────────────────────────────────────────
+function AccusationModal({ accusation, players, myUid, theme, onClose }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.7)).current;
 
   useEffect(() => {
-    const uid = getUid();
-    setMyUid(uid);
-    setMyName(currentUser?.name || auth.currentUser?.displayName || 'لاعب');
-    Animated.timing(fadeAnim, { toValue:1, duration:400, useNativeDriver:true }).start();
-    return () => {
-      if (unsubRef.current) unsubRef.current();
-      if (botTimerRef.current) clearTimeout(botTimerRef.current);
-    };
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, friction: 5, useNativeDriver: true }),
+    ]).start();
   }, []);
 
-  // ─── مراقبة الغرفة + تشغيل تلقائي ───
-  function subscribeRoom(id) {
-    if (unsubRef.current) unsubRef.current();
-    unsubRef.current = onSnapshot(doc(db,'bullshit_rooms',id), async (snap) => {
-      if (!snap.exists()) { setPhase('menu'); setRoomId(null); setRoomData(null); return; }
-      const data = snap.data();
-      setRoomData(data);
+  const { isBluff, accusedUid, accuserUid, declaredVal, actualCard, penaltyCards } = accusation;
 
-      if (data.phase === 'lobby') {
-        setPhase('lobby');
-        const uid = getUid();
-        if (data.hostUid === uid && data.players.length >= data.maxPlayers) {
-          await doStartGame(data, id);
-        }
-      } else if (data.phase === 'game') {
-        setPhase('game');
+  const accusedName = players.find(p => p.uid === accusedUid)?.name || '؟';
+  const accuserName = players.find(p => p.uid === accuserUid)?.name || '؟';
+  const loserName = isBluff ? accusedName : accuserName;
+  const loserUid = isBluff ? accusedUid : accuserUid;
 
-        // ── حركة البوت التلقائية ──────────────────────────
-        const currentPlayer = data.players.find(p => p.uid === data.currentTurnUid);
-        if (currentPlayer?.isBot && data.phase === 'game') {
-          setTimeout(async () => {
-            // أعد قراءة الغرفة للتأكد من أن الدور لم يتغير
-            const freshSnap = await getDoc(doc(db,'bullshit_rooms',id));
-            if (!freshSnap.exists()) return;
-            const fresh = freshSnap.data();
-            if (fresh.currentTurnUid !== currentPlayer.uid || fresh.phase !== 'game') return;
+  const isLoser = loserUid === myUid;
 
-            const bot = fresh.players.find(p => p.uid === currentPlayer.uid);
-            if (!bot || !bot.hand || bot.hand.length === 0) return;
-
-            const currentRank = fresh.currentRank;
-
-            // البوت يلعب الورق المطلوب إذا كان عنده، وإلا يكذب بورقة عشوائية
-            const matchingCards = bot.hand.filter(c => c.rank === currentRank);
-            const cardsToPlay = matchingCards.length > 0
-              ? matchingCards.slice(0, Math.min(matchingCards.length, 2)) // يلعب 1-2 ورقة مطابقة
-              : [bot.hand[Math.floor(Math.random() * bot.hand.length)]];  // كذب بورقة عشوائية
-
-            const playedIds = cardsToPlay.map(c => c.id);
-            const newHand = bot.hand.filter(c => !playedIds.includes(c.id));
-            const newPile = [...(fresh.pile||[]), ...cardsToPlay.map(c => ({
-              ...c, playedBy: bot.uid, claimedRank: currentRank,
-            }))];
-            const nextIdx = (fresh.players.findIndex(p => p.uid === bot.uid) + 1) % fresh.players.length;
-            const nextRankIdx = (fresh.rankIndex + 1) % RANKS.length;
-            const updatedPlayers = fresh.players.map(p =>
-              p.uid === bot.uid ? {...p, hand: newHand, cardCount: newHand.length} : p
-            );
-            const winner = newHand.length === 0 ? bot.uid : null;
-
-            await updateDoc(doc(db,'bullshit_rooms',id), {
-              pile: newPile,
-              players: updatedPlayers,
-              currentTurnUid: fresh.players[nextIdx].uid,
-              rankIndex: nextRankIdx,
-              currentRank: RANKS[nextRankIdx],
-              lastPlay: {
-                playerUid: bot.uid, playerName: bot.name,
-                count: cardsToPlay.length, claimedRank: currentRank, cards: cardsToPlay,
-              },
-              winner,
-              phase: winner ? 'result' : 'game',
-              turnStartedAt: Date.now(),
-            });
-          }, 1500); // تأخير 1.5 ث ليبدو طبيعياً
-        }
-        // ─────────────────────────────────────────────────
-
-      } else if (data.phase === 'result') setPhase('result');
-    });
-  }
-
-  // ─── بدء اللعبة تلقائياً ───
-  async function doStartGame(data, id) {
-    const n = data.players.length;
-    const hands = dealCards(n);
-    const updatedPlayers = data.players.map((p,i) => ({
-      ...p, hand: hands[i], cardCount: hands[i].length,
-    }));
-    await updateDoc(doc(db,'bullshit_rooms',id), {
-      phase: 'game',
-      players: updatedPlayers,
-      pile: [],
-      currentTurnUid: updatedPlayers[0].uid,
-      rankIndex: 0,
-      currentRank: RANKS[0],
-      lastPlay: null,
-      winner: null,
-      turnStartedAt: Date.now(),
-    });
-  }
-
-  // ─── إنشاء غرفة ───
-  async function createRoom(isRandom = false) {
-    if (tokens < COST) { Alert.alert('رصيد غير كافٍ',`تحتاج ${COST} رصيد`); return; }
-    setLoading(true);
-    try {
-      const uid = getUid();
-      const code = genCode();
-      await setDoc(doc(collection(db,'bullshit_rooms'), code), {
-        code, phase:'lobby', isRandom,
-        maxPlayers: desiredCount, minPlayers: MIN_PLAYERS,
-        createdAt: serverTimestamp(), hostUid: uid,
-        players: [{ uid, name:myName, isHost:true, isReady:false, hand:[], cardCount:0 }],
-        pile:[], currentTurnUid:null, currentRank:null, rankIndex:0,
-        lastPlay:null, winner:null, turnStartedAt:null,
-      });
-      onSpendTokens(COST);
-      setRoomId(code);
-      roomIdRef.current = code;
-      subscribeRoom(code);
-      startBotTimer(code);
-    } catch(e) { Alert.alert('خطأ',e.message); }
-    setLoading(false);
-  }
-
-  // ─── بدء عداد البوت ───
-  function startBotTimer(code) {
-    setBotWaitSecs(60);
-    const iv = setInterval(() => {
-      setBotWaitSecs(s => { if (s <= 1) { clearInterval(iv); return 0; } return s - 1; });
-    }, 1000);
-    botTimerRef.current = setTimeout(async () => {
-      clearInterval(iv);
-      const rSnap = await getDoc(doc(db,'bullshit_rooms',code));
-      if (!rSnap.exists()) return;
-      const rd = rSnap.data();
-      if (rd.phase !== 'lobby') return;
-      const needed = rd.maxPlayers - rd.players.length;
-      if (needed <= 0) return;
-      const bots = Array.from({length: needed}, (_,i) => ({
-        uid: `bot_bs_${i}`, name: `🤖 بوت ${i+1}`,
-        isHost: false, isReady: true, hand: [], cardCount: 0, isBot: true,
-      }));
-      const allPlayers = [...rd.players, ...bots];
-      // إذا اكتملت الغرفة ابدأ اللعبة
-      if (allPlayers.length >= rd.minPlayers) {
-        const hands = dealCards(allPlayers.length);
-        const withHands = allPlayers.map((p,i) => ({...p, hand:hands[i], cardCount:hands[i].length}));
-        await updateDoc(doc(db,'bullshit_rooms',code), {
-          players: withHands, phase:'game', pile:[],
-          currentTurnUid: withHands[0].uid, rankIndex:0, currentRank:RANKS[0],
-          lastPlay:null, winner:null, turnStartedAt:Date.now(),
-        });
-      } else {
-        await updateDoc(doc(db,'bullshit_rooms',code), { players: allPlayers });
-      }
-    }, 60000);
-  }
-
-  // ─── انضمام بكود ───
-  async function joinRoom(code) {
-    if (!code) return;
-    if (tokens < COST) { Alert.alert('رصيد غير كافٍ'); return; }
-    setLoading(true);
-    try {
-      const uid = getUid();
-      const roomRef = doc(db,'bullshit_rooms',code.toUpperCase());
-      const snap = await getDoc(roomRef);
-      if (!snap.exists()) { Alert.alert('الغرفة غير موجودة'); setLoading(false); return; }
-      const data = snap.data();
-      if (data.phase !== 'lobby') { Alert.alert('اللعبة بدأت بالفعل'); setLoading(false); return; }
-      if (data.players.length >= data.maxPlayers) { Alert.alert('الغرفة ممتلئة'); setLoading(false); return; }
-      if (!data.players.some(p => p.uid === uid)) {
-        await updateDoc(roomRef, {
-          players: arrayUnion({ uid, name:myName, isHost:false, isReady:false, hand:[], cardCount:0 }),
-        });
-      }
-      onSpendTokens(COST);
-      setRoomId(code.toUpperCase());
-      subscribeRoom(code.toUpperCase());
-    } catch(e) { Alert.alert('خطأ',e.message); }
-    setLoading(false);
-  }
-
-  // ─── لعب عشوائي ───
-  async function findRandomRoom() {
-    if (tokens < COST) { Alert.alert('رصيد غير كافٍ'); return; }
-    setLoading(true);
-    try {
-      const uid = getUid();
-      const q = query(collection(db,'bullshit_rooms'), where('phase','==','lobby'), where('isRandom','==',true));
-      const snap = await getDocs(q);
-      let joined = false;
-      for (const d of snap.docs) {
-        const data = d.data();
-        if (data.players.length < data.maxPlayers && !data.players.some(p=>p.uid===uid)) {
-          await updateDoc(d.ref, {
-            players: arrayUnion({ uid, name:myName, isHost:false, isReady:false, hand:[], cardCount:0 }),
-          });
-          onSpendTokens(COST);
-          setRoomId(d.id);
-          subscribeRoom(d.id);
-          joined = true;
-          break;
-        }
-      }
-      if (!joined) await createRoom(true);
-    } catch(e) { Alert.alert('خطأ',e.message); }
-    setLoading(false);
-  }
-
-  // ─── بحث صديق ───
-  async function searchFriend(text) {
-    setFriendSearch(text);
-    if (text.length < 2) { setFriendResults([]); return; }
-    setSearching(true);
-    try {
-      const q = query(collection(db,'users'), where('nameLower','>=',text.toLowerCase()), where('nameLower','<=',text.toLowerCase()+'\uf8ff'));
-      const snap = await getDocs(q);
-      setFriendResults(snap.docs.map(d=>({uid:d.id,...d.data()})).filter(u=>u.uid!==myUid).slice(0,5));
-    } catch { setFriendResults([]); }
-    setSearching(false);
-  }
-
-  async function inviteFriend(friend) {
-    if (!roomId||!roomData) return;
-    if (roomData.players.some(p=>p.uid===friend.uid)) { Alert.alert('موجود بالفعل'); return; }
-    if (roomData.players.length >= roomData.maxPlayers) { Alert.alert('الغرفة ممتلئة'); return; }
-    await setDoc(doc(db,'invites',`${roomId}_${friend.uid}`), {
-      roomId, fromName:myName, fromUid:myUid, toUid:friend.uid,
-      code:roomId, game:'bullshit', createdAt:serverTimestamp(),
-    });
-    Alert.alert('✅ تم إرسال الدعوة',`دُعي ${friend.name||friend.uid}`);
-  }
-
-  // ─── إلعب ورق ───
-  async function playCards() {
-    if (!roomData || selectedCards.length === 0) return;
-    const uid = getUid();
-    if (roomData.currentTurnUid !== uid) { Alert.alert('ليس دورك!'); return; }
-    const roomRef = doc(db,'bullshit_rooms',roomId);
-    const me = roomData.players.find(p=>p.uid===uid);
-    const played = me.hand.filter(c=>selectedCards.includes(c.id));
-    const newHand = me.hand.filter(c=>!selectedCards.includes(c.id));
-    const newPile = [...(roomData.pile||[]), ...played.map(c=>({...c, playedBy:uid, claimedRank:roomData.currentRank}))];
-    const nextIdx = (roomData.players.findIndex(p=>p.uid===uid)+1) % roomData.players.length;
-    const nextRankIdx = (roomData.rankIndex+1) % RANKS.length;
-    const updatedPlayers = roomData.players.map(p=> p.uid===uid ? {...p, hand:newHand, cardCount:newHand.length} : p);
-    const winner = newHand.length===0 ? uid : null;
-    await updateDoc(roomRef, {
-      pile: newPile,
-      players: updatedPlayers,
-      currentTurnUid: roomData.players[nextIdx].uid,
-      rankIndex: nextRankIdx,
-      currentRank: RANKS[nextRankIdx],
-      lastPlay: { playerUid:uid, playerName:me.name, count:played.length, claimedRank:roomData.currentRank, cards:played },
-      winner,
-      phase: winner ? 'result' : 'game',
-      turnStartedAt: Date.now(),
-    });
-    setSelectedCards([]);
-    Animated.sequence([
-      Animated.timing(animPile,{toValue:1.15,duration:150,useNativeDriver:true}),
-      Animated.timing(animPile,{toValue:1,duration:150,useNativeDriver:true}),
-    ]).start();
-  }
-
-  // ─── انتهى الوقت ───
-  async function handleTimeout() {
-    if (!roomData) return;
-    const uid = getUid();
-    if (roomData.currentTurnUid !== uid) return;
-    // يضع ورقة عشوائية تلقائياً
-    const me = roomData.players.find(p=>p.uid===uid);
-    if (!me || me.hand.length === 0) return;
-    const randomCard = me.hand[0];
-    setSelectedCards([randomCard.id]);
-    // تأخير قصير ثم يلعب
-    setTimeout(() => playCards(), 300);
-  }
-
-  // ─── بوليشيت! ───
-  async function callBullshit() {
-    if (!roomData?.lastPlay) return;
-    const uid = getUid();
-    if (roomData.lastPlay.playerUid === uid) { Alert.alert('لا تستطيع اتهام نفسك!'); return; }
-    const roomRef = doc(db,'bullshit_rooms',roomId);
-    const lastPlay = roomData.lastPlay;
-    const liar = lastPlay.cards.some(c=>c.rank !== lastPlay.claimedRank);
-    const loserUid = liar ? lastPlay.playerUid : uid;
-    const loser = roomData.players.find(p=>p.uid===loserUid);
-    const newHand = [...(loser.hand||[]), ...(roomData.pile||[])];
-    const updatedPlayers = roomData.players.map(p=> p.uid===loserUid ? {...p, hand:newHand, cardCount:newHand.length} : p);
-    await updateDoc(roomRef, {
-      pile:[], players:updatedPlayers,
-      currentTurnUid: loserUid,
-      lastPlay:null,
-      turnStartedAt: Date.now(),
-      lastBullshit: {
-        callerUid:uid, callerName:roomData.players.find(p=>p.uid===uid)?.name,
-        liar, loserName:loser.name, loserUid,
-      },
-    });
-    Alert.alert(liar ? '😂 كاذب!' : '😅 غلطت!',
-      liar ? `${lastPlay.playerName} كان يكذب! يأخذ كل الكومة`
-           : `${roomData.players.find(p=>p.uid===uid)?.name} غلط! يأخذ كل الكومة`);
-  }
-
-  // ─── مغادرة ───
-  function leaveRoom() {
-    setShowLeave(true);
-  }
-
-  async function confirmLeave() {
-    setShowLeave(false);
-    const uid = getUid();
-    if (roomId) {
-      const snap = await getDoc(doc(db,'bullshit_rooms',roomId));
-      if (snap.exists()) {
-        const d = snap.data();
-        if (d.phase === 'lobby') onSpendTokens && onSpendTokens(-COST);
-        if (d.hostUid===uid && d.players.length<=1) await deleteDoc(doc(db,'bullshit_rooms',roomId));
-        else await updateDoc(doc(db,'bullshit_rooms',roomId), { players: d.players.filter(p=>p.uid!==uid) });
-      }
-    }
-    if (unsubRef.current) unsubRef.current();
-    setRoomId(null); setRoomData(null); setPhase('menu');
-  }
-
-  // ─── حسابات ───
-  const myPlayer = roomData?.players?.find(p=>p.uid===myUid);
-  const isHost   = roomData?.hostUid === myUid;
-  const isMyTurn = roomData?.currentTurnUid === myUid;
-
-  // ─── الشاشات ───
-  if (loading) return (
-    <View style={s.center}>
-      <ActivityIndicator size="large" color="#ef4444" />
-      <Text style={s.loadingText}>جاري الاتصال...</Text>
-    </View>
-  );
-
-  if (phase==='result') return (
-    <>
-      <ResultScreen roomData={roomData} myUid={myUid}
-        onBack={()=>{confirmLeave(); onBack();}} onPlayAgain={confirmLeave} />
-      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
-    </>
-  );
-
-  if (phase==='game') return (
-    <>
-      <GameScreen
-        roomData={roomData} myUid={myUid} myPlayer={myPlayer}
-        isMyTurn={isMyTurn} selectedCards={selectedCards} setSelectedCards={setSelectedCards}
-        currentRank={roomData?.currentRank} turnStartedAt={roomData?.turnStartedAt}
-        onPlay={playCards} onBullshit={callBullshit} onLeave={leaveRoom}
-        onTimeout={handleTimeout} animPile={animPile}
-        roomId={roomId} myName={myName}
-        messages={roomData?.messages || []}
-      />
-      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
-    </>
-  );
-
-  if (phase==='lobby') return (
-    <>
-      <LobbyScreen
-        roomData={roomData} roomId={roomId} myUid={myUid} isHost={isHost}
-        friendSearch={friendSearch} friendResults={friendResults} searching={searching}
-        onSearch={searchFriend} onInvite={inviteFriend} onLeave={leaveRoom}
-        desiredCount={desiredCount} botWaitSecs={botWaitSecs}
-      />
-      <LeaveModal visible={showLeave} onCancel={()=>setShowLeave(false)} onConfirm={confirmLeave} />
-    </>
-  );
+  const resultColor = isBluff ? theme.error : theme.success;
+  const bgColor = theme.isMist
+    ? 'rgba(10,10,40,0.92)'
+    : theme.bgOverlay;
 
   return (
-    <MenuScreen
-      fadeAnim={fadeAnim} desiredCount={desiredCount} setDesiredCount={setDesiredCount}
-      onCreatePrivate={()=>createRoom(false)} onCreateRandom={findRandomRoom}
-      onJoin={joinRoom} onBack={onBack} tokens={tokens} cost={COST}
-    />
-  );
-}
-
-// ══════════════════════════════════════
-// شاشة القائمة
-// ══════════════════════════════════════
-function MenuScreen({ fadeAnim, desiredCount, setDesiredCount, onCreatePrivate, onCreateRandom, onJoin, onBack, tokens, cost }) {
-  const [joinCode, setJoinCode] = useState('');
-  const [showJoin, setShowJoin] = useState(false);
-  return (
-    <View style={s.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <Animated.View style={[s.header,{opacity:fadeAnim}]}>
-        <TouchableOpacity onPress={onBack} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
-        <View style={s.headerCenter}>
-          <Text style={s.headerEmoji}>🃏</Text>
-          <Text style={s.headerTitle}>بوليشيت</Text>
-        </View>
-        <View style={s.tokenBadge}><Text style={s.tokenText}>🪙 {tokens}</Text></View>
-      </Animated.View>
-
-      <ScrollView contentContainerStyle={s.menuScroll} showsVerticalScrollIndicator={false}>
-        <Animated.View style={[s.infoBox,{opacity:fadeAnim}]}>
-          <Text style={s.infoTitle}>📖 كيفية اللعب</Text>
-          <Text style={s.infoText}>{'• يضع كل لاعب ورقة أو أكثر ويدّعي أنها الرتبة المطلوبة\n• قل "بوليشيت!" إذا شككت في الكذب\n• الكاذب يأخذ كل الكومة — والمشكك الخاطئ أيضاً!\n• لكل دور 30 ثانية فقط ⏱\n• أول من ينهي ورقه يفوز 🏆'}</Text>
-          <View style={s.infoMeta}>
-            <Text style={s.infoMetaText}>👤 {MIN_PLAYERS}–{MAX_PLAYERS}</Text>
-            <Text style={s.infoMetaText}>🪙 {cost} رصيد</Text>
-            <Text style={s.infoMetaText}>⏱ 30 ث/دور</Text>
-          </View>
-        </Animated.View>
-
-        <Animated.View style={[s.section,{opacity:fadeAnim}]}>
-          <Text style={s.sectionTitle}>عدد اللاعبين</Text>
-          <View style={s.countRow}>
-            {[3,4,5,6].map(n=>(
-              <TouchableOpacity key={n} style={[s.countBtn, desiredCount===n && s.countBtnActive]} onPress={()=>setDesiredCount(n)}>
-                <Text style={[s.countBtnText, desiredCount===n && s.countBtnTextActive]}>{n}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </Animated.View>
-
-        <Animated.View style={[s.btnGroup,{opacity:fadeAnim}]}>
-          <TouchableOpacity style={s.btnPrimary} onPress={onCreatePrivate}>
-            <Text style={s.btnIcon}>🔒</Text>
-            <View>
-              <Text style={s.btnPrimaryText}>إنشاء غرفة خاصة</Text>
-              <Text style={s.btnSub}>تبدأ تلقائياً عند اكتمال اللاعبين</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={s.btnSecondary} onPress={onCreateRandom}>
-            <Text style={s.btnIcon}>🌍</Text>
-            <View>
-              <Text style={s.btnSecondaryText}>لعب عشوائي</Text>
-              <Text style={s.btnSub}>انضم أو ابدأ غرفة عشوائية</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={s.btnOutline} onPress={()=>setShowJoin(v=>!v)}>
-            <Text style={s.btnOutlineText}>🔑 انضم بكود</Text>
-          </TouchableOpacity>
-
-          {showJoin && (
-            <View style={s.joinBox}>
-              <TextInput style={s.joinInput} placeholder="كود الغرفة" placeholderTextColor="#555577"
-                value={joinCode} onChangeText={t=>setJoinCode(t.toUpperCase())} maxLength={6} autoCapitalize="characters" />
-              <TouchableOpacity style={s.joinBtn} onPress={()=>onJoin(joinCode)}>
-                <Text style={s.joinBtnText}>انضم</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </Animated.View>
-      </ScrollView>
-    </View>
-  );
-}
-
-// ══════════════════════════════════════
-// شاشة اللوبي
-// ══════════════════════════════════════
-function LobbyScreen({ roomData, roomId, myUid, isHost, friendSearch, friendResults, searching, onSearch, onInvite, onLeave, desiredCount, botWaitSecs }) {
-  const players   = roomData?.players || [];
-  const maxPlayers = roomData?.maxPlayers || desiredCount;
-  const filled    = players.length;
-  const pct       = filled / maxPlayers;
-
-  return (
-    <View style={s.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a" />
-      <View style={s.header}>
-        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
-        <View style={s.headerCenter}>
-          <Text style={s.headerEmoji}>🃏</Text>
-          <Text style={s.headerTitle}>انتظار اللاعبين</Text>
-        </View>
-        <View style={{width:40}}/>
-      </View>
-
-      <ScrollView contentContainerStyle={{padding:20,gap:16}} showsVerticalScrollIndicator={false}>
-        {/* كود الغرفة */}
-        <View style={s.codeBig}>
-          <Text style={s.codeLabel}>كود الغرفة</Text>
-          <Text style={s.codeValue}>{roomId}</Text>
-          <Text style={s.codeHint}>شارك الكود — تبدأ اللعبة تلقائياً عند الاكتمال</Text>
-        </View>
-
-        {/* شريط تقدم الغرفة */}
-        <View style={s.roomProgress}>
-          <View style={s.roomProgressTrack}>
-            <View style={[s.roomProgressFill,{width:`${pct*100}%`}]} />
-          </View>
-          <Text style={s.roomProgressText}>{filled}/{maxPlayers} لاعبين</Text>
-        </View>
-
-        {/* اللاعبون */}
-        <View style={s.lobbySection}>
-          <Text style={s.lobbySTitle}>اللاعبون</Text>
-          {Array.from({length:maxPlayers}).map((_,i)=>{
-            const p = players[i];
-            return (
-              <View key={i} style={[s.playerSlot, p && s.playerSlotFilled]}>
-                {p ? (
-                  <>
-                    <Text style={s.playerSlotEmoji}>{p.isHost ? '👑' : '🎮'}</Text>
-                    <Text style={s.playerSlotName}>{p.name||p.uid}</Text>
-                    {p.uid===myUid && <Text style={s.meTag}>أنت</Text>}
-                  </>
-                ) : (
-                  <Text style={s.emptySlot}>⏳ ينتظر...</Text>
-                )}
-              </View>
-            );
-          })}
-        </View>
-
-        {/* دعوة صديق */}
-        {isHost && filled < maxPlayers && (
-          <View style={s.lobbySection}>
-            <Text style={s.lobbySTitle}>دعوة صديق</Text>
-            <TextInput style={s.joinInput} placeholder="ابحث عن اسم صديق..." placeholderTextColor="#555577"
-              value={friendSearch} onChangeText={onSearch} />
-            {searching && <ActivityIndicator color="#ef4444" style={{marginTop:8}}/>}
-            {friendResults.map(f=>(
-              <TouchableOpacity key={f.uid} style={s.friendResult} onPress={()=>onInvite(f)}>
-                <Text style={s.friendResultName}>{f.name||f.uid}</Text>
-                <Text style={s.friendResultInvite}>دعوة ✉️</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* رسالة انتظار */}
-        <View style={s.waitingBox}>
-          <ActivityIndicator color="#ef4444"/>
-          <Text style={s.waitingText}>
-            {filled >= maxPlayers ? '🚀 تبدأ اللعبة الآن...' : `انتظار ${maxPlayers - filled} لاعبين إضافيين`}
+    <Modal transparent animationType="none">
+      <View style={{ flex: 1, backgroundColor: bgColor, alignItems: 'center', justifyContent: 'center' }}>
+        <Animated.View
+          style={[
+            {
+              backgroundColor: theme.bgCard,
+              borderRadius: 20,
+              padding: 28,
+              width: SW * 0.85,
+              alignItems: 'center',
+              borderWidth: 2,
+              borderColor: resultColor,
+            },
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+            theme.isCrystal
+              ? { shadowColor: resultColor, shadowOpacity: 0.6, shadowRadius: 20, elevation: 20 }
+              : {},
+          ]}
+        >
+          <Text style={{ fontSize: 48 }}>{isBluff ? '🤥' : '😇'}</Text>
+          <Text style={{ fontSize: 22, fontWeight: '800', color: resultColor, marginTop: 8, textAlign: 'center' }}>
+            {isBluff ? 'كان كاذب! 🎯' : 'كان صادق! 😤'}
           </Text>
-          {botWaitSecs != null && botWaitSecs <= 30 && filled < maxPlayers && (
-            <Text style={{color:'#ef444499',fontSize:12,marginTop:4,textAlign:'center'}}>
-              🤖 سيُضاف بوت خلال {botWaitSecs} ثانية
+
+          <View style={{ marginTop: 16, padding: 12, backgroundColor: theme.bgElevated, borderRadius: 12, width: '100%' }}>
+            <Text style={{ color: theme.textSecondary, textAlign: 'center', marginBottom: 8, fontSize: 13 }}>
+              أعلن <Text style={{ color: theme.accent, fontWeight: '700' }}>{accusedName}</Text> عن وضع{' '}
+              <Text style={{ color: theme.accent, fontWeight: '700' }}>{declaredVal}</Text>
+            </Text>
+            {actualCard && (
+              <Text style={{ color: theme.textPrimary, textAlign: 'center', fontSize: 13 }}>
+                الكرت الفعلي:{' '}
+                <Text style={{ color: RED_SUITS.includes(actualCard.suit) ? '#fc8181' : theme.textPrimary, fontWeight: '800' }}>
+                  {actualCard.val}{actualCard.suit}
+                </Text>
+              </Text>
+            )}
+          </View>
+
+          <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 20 }}>📦</Text>
+            <Text style={{ color: theme.textPrimary, fontSize: 14 }}>
+              <Text style={{ color: resultColor, fontWeight: '700' }}>{loserName}</Text>
+              {' '}يأخذ{' '}
+              <Text style={{ color: theme.accent, fontWeight: '700' }}>{penaltyCards}</Text>
+              {' '}كرت{penaltyCards > 1 ? 'اً' : ''}
+            </Text>
+          </View>
+
+          {isLoser && (
+            <Text style={{ color: theme.warning, marginTop: 8, fontSize: 13, textAlign: 'center' }}>
+              أنت الخاسر هذه الجولة 😬
             </Text>
           )}
-        </View>
-      </ScrollView>
-    </View>
+
+          <TouchableOpacity
+            onPress={onClose}
+            style={{
+              marginTop: 20,
+              backgroundColor: theme.accent,
+              borderRadius: 12,
+              paddingVertical: 12,
+              paddingHorizontal: 32,
+            }}
+          >
+            <Text style={{ color: theme.bg, fontWeight: '800', fontSize: 15 }}>استمرار</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
-// ══════════════════════════════════════
-// مكوّن الجات
-// ══════════════════════════════════════
-function ChatOverlay({ messages, myUid, myName, roomId, onClose }) {
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  const scrollRef = useRef(null);
+// ─────────────────────────────────────────────
+//  الشاشة الرئيسية
+// ─────────────────────────────────────────────
+export default function BullshitGameScreen({ onBack, currentUser, onGameEnd }) {
+  const { theme, themeId } = useTheme();
+  const { lang } = useLanguage();
+  const {
+    roomId,
+    isPlayer1,
+    roomData,
+    loading,
+    error,
+    updateRoom,
+    endGame,
+    leaveRoom,
+  } = useOnlineGame('bullshit', currentUser);
 
+  const [leaveModalVisible, setLeaveModalVisible] = useState(false);
+
+  // ── حالة اللعبة ──
+  const [players, setPlayers] = useState([]);
+  const [hands, setHands] = useState({}); // { uid: [cards] }
+  const [pile, setPile] = useState([]); // كل الكروت على الطاولة
+  const [playHistory, setPlayHistory] = useState([]); // [{ uid, declaredVal, actualCards }]
+  const [currentPlayerIdx, setCurrentPlayerIdx] = useState(0);
+  const [gameStatus, setGameStatus] = useState('waiting');
+  const [selectedCards, setSelectedCards] = useState([]);
+  const [declaredVal, setDeclaredVal] = useState(null);
+  const [accusationResult, setAccusationResult] = useState(null);
+
+  const myUid = currentUser?.uid;
+  const myHand = hands[myUid] || [];
+  const myPlayerIdx = players.findIndex(p => p.uid === myUid);
+  const isMyTurn = currentPlayerIdx === myPlayerIdx;
+  const currentPlayerName = players[currentPlayerIdx]?.name || '...';
+
+  // ── تهيئة اللعبة (Player1 فقط) ──
   useEffect(() => {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [messages]);
-
-  async function sendMessage() {
-    const trimmed = text.trim();
-    if (!trimmed || sending) return;
-    setSending(true);
-    try {
-      await updateDoc(doc(db, 'bullshit_rooms', roomId), {
-        messages: arrayUnion({
-          uid: myUid,
-          name: myName,
-          text: trimmed,
-          time: Date.now(),
-        }),
+    if (roomData?.players && roomData.players.length >= 2 && isPlayer1 && roomData.gameStatus === 'waiting') {
+      const deck = shuffleDeck(buildDeck());
+      const dealtHands = dealHands(roomData.players, deck);
+      updateRoom({
+        gameStatus: 'playing',
+        hands: dealtHands,
+        pile: [],
+        playHistory: [],
+        currentPlayerIdx: 0,
       });
-      setText('');
-    } catch (e) { Alert.alert('خطأ', e.message); }
-    setSending(false);
+    }
+  }, [roomData?.players?.length, isPlayer1]);
+
+  // ── مزامنة من Firestore ──
+  useEffect(() => {
+    if (!roomData) return;
+    if (roomData.players) setPlayers(roomData.players);
+    if (roomData.hands) setHands(roomData.hands);
+    if (roomData.pile !== undefined) setPile(roomData.pile);
+    if (roomData.playHistory) setPlayHistory(roomData.playHistory);
+    if (roomData.currentPlayerIdx !== undefined) setCurrentPlayerIdx(roomData.currentPlayerIdx);
+    if (roomData.gameStatus) setGameStatus(roomData.gameStatus);
+    if (roomData.accusationResult && !accusationResult) {
+      setAccusationResult(roomData.accusationResult);
+    }
+  }, [roomData]);
+
+  // ── toggle اختيار كرت ──
+  const toggleCard = (card) => {
+    if (!isMyTurn) return;
+    setSelectedCards(prev => {
+      const exists = prev.find(c => c.id === card.id);
+      return exists ? prev.filter(c => c.id !== card.id) : [...prev, card];
+    });
+  };
+
+  // ── لعب الكروت ──
+  const handlePlay = async () => {
+    if (!isMyTurn) { Alert.alert('ليس دورك'); return; }
+    if (selectedCards.length === 0) { Alert.alert('اختر كرت واحد على الأقل'); return; }
+    if (!declaredVal) { Alert.alert('أعلن الرقم أولاً'); return; }
+    playSound('card_play');
+
+    const newHand = myHand.filter(c => !selectedCards.find(s => s.id === c.id));
+    const newHands = { ...hands, [myUid]: newHand };
+    const newPile = [...pile, ...selectedCards];
+    const newHistory = [...playHistory, {
+      uid: myUid,
+      declaredVal,
+      actualCards: selectedCards,
+      pileCountBefore: pile.length,
+    }];
+
+    setSelectedCards([]);
+    setDeclaredVal(null);
+
+    const nextIdx = (currentPlayerIdx + 1) % players.length;
+
+    // هل الفائز (يدخالية)؟
+    if (newHand.length === 0) {
+      await updateRoom({
+        hands: newHands,
+        pile: newPile,
+        playHistory: newHistory,
+        currentPlayerIdx: nextIdx,
+        winner: myUid,
+        gameStatus: 'finished',
+      });
+      return;
+    }
+
+    await updateRoom({
+      hands: newHands,
+      pile: newPile,
+      playHistory: newHistory,
+      currentPlayerIdx: nextIdx,
+    });
+  };
+
+  // ── منطق التشكيك الحقيقي ──
+  const handleAccuse = async () => {
+    if (playHistory.length === 0) { Alert.alert('لا أحد لعب بعد'); return; }
+
+    const lastPlay = playHistory[playHistory.length - 1];
+    const { uid: accusedUid, declaredVal: lastDeclaredVal, actualCards } = lastPlay;
+
+    // هل كان كاذباً؟ = أي كرت من كروته الفعلية لا يطابق القيمة المُعلنة
+    const isBluff = actualCards.some(c => c.val !== lastDeclaredVal);
+
+    // الخاسر يأخذ كل كروت الطاولة
+    const penaltyCards = pile.length;
+    const loserUid = isBluff ? accusedUid : myUid;
+
+    // أعطِ كروت الطاولة للخاسر
+    const loserCurrentHand = hands[loserUid] || [];
+    const newLoserHand = [...loserCurrentHand, ...pile];
+    const newHands = { ...hands, [loserUid]: newLoserHand };
+
+    const result = {
+      isBluff,
+      accusedUid,
+      accuserUid: myUid,
+      declaredVal: lastDeclaredVal,
+      actualCard: actualCards[0],
+      penaltyCards,
+    };
+
+    await updateRoom({
+      accusationResult: result,
+      hands: newHands,
+      pile: [],
+      playHistory: [],
+      currentPlayerIdx: players.findIndex(p => p.uid === loserUid),
+    });
+  };
+
+  // ── إغلاق modal التشكيك ──
+  const handleCloseAccusation = async () => {
+    setAccusationResult(null);
+    await updateRoom({ accusationResult: null });
+  };
+
+  // ── خروج ──
+  const handleQuit = () => setLeaveModalVisible(true);
+  const handleConfirmQuit = async () => {
+    setLeaveModalVisible(false);
+    await leaveRoom();
+    onBack();
+  };
+
+  // ─── شاشات Loading/Error ───
+  if (error) {
+    return (
+      <View style={[s.container, { backgroundColor: 'transparent' }]}>
+        <StatusBar barStyle={theme.statusBar} />
+        <View style={s.center}>
+          <Text style={{ color: theme.error, fontSize: 16 }}>❌ {error}</Text>
+          <TouchableOpacity onPress={onBack} style={[s.btn, { backgroundColor: theme.bgCard, marginTop: 16 }]}>
+            <Text style={{ color: theme.accent }}>رجوع</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   }
 
+  if (loading || gameStatus === 'waiting') {
+    return (
+      <View style={[s.container, { backgroundColor: 'transparent' }]}>
+        <StatusBar barStyle={theme.statusBar} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, margin: 16 }}>
+          <TouchableOpacity
+            onPress={() => setLeaveModalVisible(true)}
+            style={[s.backBtn, { borderColor: theme.borderCard }]}
+          >
+            <Text style={{ color: theme.textMuted, fontSize: 18 }}>✕</Text>
+          </TouchableOpacity>
+          <GameInfoButton gameType="bullshit" lang={lang} />
+          <WebScreenButton
+            playerUid={myUid}
+            playerName={currentUser?.name || ''}
+            gameType="bullshit"
+            gameRoomId={roomId || ''}
+            getPublicData={() => ({ status: 'lobby' })}
+            themeName={themeId || 'dark'}
+          />
+        </View>
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={theme.accent} />
+          <Text style={{ color: theme.textPrimary, marginTop: 12, fontSize: 14 }}>
+            {loading ? 'جاري الاتصال...' : 'في انتظار اللاعبين...'}
+          </Text>
+        </View>
+        <LeaveModal
+          visible={leaveModalVisible}
+          onCancel={() => setLeaveModalVisible(false)}
+          onConfirm={handleConfirmQuit}
+        />
+      </View>
+    );
+  }
+
+  if (gameStatus === 'finished') {
+    const winner = players.find(p => p.uid === roomData?.winner);
+    const iWon   = roomData?.winner === myUid;
+    // تسجيل XP مرة واحدة
+    if (onGameEnd) onGameEnd(iWon);
+    return (
+      <View style={[s.container, { backgroundColor: 'transparent' }]}>
+        <StatusBar barStyle={theme.statusBar} />
+        <View style={s.center}>
+          <Text style={{ fontSize: 60 }}>🏆</Text>
+          <Text style={{ color: theme.accent, fontSize: 24, fontWeight: '800', marginTop: 12 }}>
+            {winner?.name || 'فائز'}
+          </Text>
+          <Text style={{ color: theme.textSecondary, marginTop: 4 }}>أنهى كروته أولاً!</Text>
+          <TouchableOpacity onPress={onBack} style={[s.btn, { backgroundColor: theme.accent, marginTop: 24 }]}>
+            <Text style={{ color: theme.bg, fontWeight: '700' }}>العودة</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ─── تحضير Pile Visualization ───
+  const pileVisible = Math.min(pile.length, 5);
+
+  // ─── الخلفية حسب الثيم ───
+  const tableBg = theme.isCrystal
+    ? theme.bgCard
+    : theme.isMist
+    ? theme.bgCard
+    : theme.bgCard;
+
+  const accuseColor = theme.isCrystal
+    ? theme.error
+    : theme.isMist && !theme.isLight
+    ? '#f87171'
+    : '#ef4444';
+
   return (
-    <View style={chat.overlay}>
-      {/* هيدر الجات */}
-      <View style={chat.header}>
-        <TouchableOpacity onPress={onClose} style={chat.closeBtn}>
-          <Text style={chat.closeText}>✕</Text>
-        </TouchableOpacity>
-        <Text style={chat.headerTitle}>💬 جات الغرفة</Text>
-        <View style={{ width: 36 }} />
+    <View style={[s.container, { backgroundColor: 'transparent' }]}>
+      <StatusBar barStyle={theme.statusBar} />
+
+      {/* ── Header ── */}
+      <View style={s.topRow}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity onPress={handleQuit} style={[s.backBtn, { borderColor: theme.borderCard }]}>
+            <Text style={{ color: theme.textMuted, fontSize: 18 }}>✕</Text>
+          </TouchableOpacity>
+          <GameInfoButton gameType="bullshit" lang={lang} />
+          <WebScreenButton
+            playerUid={myUid}
+            playerName={currentUser?.name || ''}
+            gameType="bullshit"
+            gameRoomId={roomId || ''}
+            getPublicData={() => ({ currentPlayerIdx, playersCount: players.length, pileCount: pile?.length || 0 })}
+            themeName={themeId || 'dark'}
+          />
+        </View>
+        <View style={s.titleBlock}>
+          <Text style={{ color: theme.accent, fontWeight: '800', fontSize: 16 }}>BS / كذبة</Text>
+          <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
+            دور: <Text style={{ color: theme.textPrimary, fontWeight: '700' }}>{currentPlayerName}</Text>
+            {isMyTurn ? ' (أنت)' : ''}
+          </Text>
+        </View>
+        <View style={[s.pileBadge, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}>
+          <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700' }}>🂠 {pile.length}</Text>
+        </View>
       </View>
 
-      {/* الرسائل */}
-      <ScrollView
-        ref={scrollRef}
-        style={chat.msgList}
-        contentContainerStyle={chat.msgListContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {messages.length === 0 && (
-          <Text style={chat.emptyText}>لا رسائل بعد — قل شيئاً! 👋</Text>
-        )}
-        {messages.map((m, i) => {
-          const isMe = m.uid === myUid;
+      {/* ── صف اللاعبين ── */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.playersRow}>
+        {players.map((p, idx) => {
+          const pHand = hands[p.uid] || [];
+          const isTurn = idx === currentPlayerIdx;
+          const isMe = p.uid === myUid;
           return (
-            <View key={i} style={[chat.msgRow, isMe && chat.msgRowMe]}>
-              {!isMe && <Text style={chat.msgName}>{m.name}</Text>}
-              <View style={[chat.bubble, isMe ? chat.bubbleMe : chat.bubbleOther]}>
-                <Text style={[chat.bubbleText, isMe && chat.bubbleTextMe]}>{m.text}</Text>
-              </View>
+            <View
+              key={p.uid}
+              style={[
+                s.playerChip,
+                {
+                  backgroundColor: isTurn ? theme.accentBorder : theme.bgElevated,
+                  borderColor: isTurn ? theme.accent : theme.borderCard,
+                },
+              ]}
+            >
+              <Text style={{ fontSize: 18 }}>{isMe ? '🙋' : '👤'}</Text>
+              <Text style={{ color: theme.textPrimary, fontSize: 11, fontWeight: isTurn ? '700' : '400' }}>
+                {p.name}
+              </Text>
+              <Text style={{ color: theme.textMuted, fontSize: 10 }}>{pHand.length} 🂠</Text>
             </View>
           );
         })}
       </ScrollView>
 
-      {/* حقل الإدخال */}
-      <View style={chat.inputRow}>
-        <TextInput
-          style={chat.input}
-          placeholder="اكتب رسالة..."
-          placeholderTextColor="#555577"
-          value={text}
-          onChangeText={setText}
-          maxLength={120}
-          textAlign="right"
-          onSubmitEditing={sendMessage}
-          returnKeyType="send"
-        />
-        <TouchableOpacity
-          style={[chat.sendBtn, (!text.trim() || sending) && chat.sendBtnDisabled]}
-          onPress={sendMessage}
-          disabled={!text.trim() || sending}
-        >
-          <Text style={chat.sendIcon}>➤</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-const chat = StyleSheet.create({
-  overlay:      { position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'#06061af5', zIndex:100, flexDirection:'column' },
-  header:       { flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingHorizontal:16, paddingTop:52, paddingBottom:12, borderBottomWidth:1, borderBottomColor:'#1a1a3e' },
-  headerTitle:  { color:'#ef4444', fontSize:17, fontWeight:'900' },
-  closeBtn:     { width:36, height:36, borderRadius:10, backgroundColor:'#1a1a3e', alignItems:'center', justifyContent:'center' },
-  closeText:    { color:'#ef4444', fontSize:16, fontWeight:'900' },
-  msgList:      { flex:1 },
-  msgListContent:{ padding:16, gap:10 },
-  emptyText:    { color:'#555577', fontSize:14, textAlign:'center', marginTop:40 },
-  msgRow:       { alignItems:'flex-start', gap:2 },
-  msgRowMe:     { alignItems:'flex-end' },
-  msgName:      { color:'#a09060', fontSize:11, fontWeight:'700', paddingHorizontal:4 },
-  bubble:       { maxWidth:'78%', borderRadius:14, paddingHorizontal:14, paddingVertical:8 },
-  bubbleOther:  { backgroundColor:'#1a1a3e', borderBottomLeftRadius:4 },
-  bubbleMe:     { backgroundColor:'#ef4444', borderBottomRightRadius:4 },
-  bubbleText:   { color:'#e0e0ff', fontSize:14, lineHeight:20 },
-  bubbleTextMe: { color:'#fff' },
-  inputRow:     { flexDirection:'row', gap:10, padding:12, borderTopWidth:1, borderTopColor:'#1a1a3e', alignItems:'center' },
-  input:        { flex:1, backgroundColor:'#1a1a3e', color:'#fff', borderRadius:12, paddingHorizontal:14, paddingVertical:11, fontSize:14, borderWidth:1, borderColor:'#2a2a55' },
-  sendBtn:      { width:44, height:44, borderRadius:12, backgroundColor:'#ef4444', alignItems:'center', justifyContent:'center' },
-  sendBtnDisabled:{ opacity:0.4 },
-  sendIcon:     { color:'#fff', fontSize:18, fontWeight:'900' },
-});
-
-// ══════════════════════════════════════
-// شاشة اللعبة
-// ══════════════════════════════════════
-function GameScreen({ roomData, myUid, myPlayer, isMyTurn, selectedCards, setSelectedCards, currentRank, turnStartedAt, onPlay, onBullshit, onLeave, onTimeout, animPile, roomId, myName, messages }) {
-  const pile     = roomData?.pile || [];
-  const lastPlay = roomData?.lastPlay;
-  const players  = roomData?.players || [];
-  const myHand   = myPlayer?.hand || [];
-  const [chatOpen, setChatOpen] = useState(false);
-  const [lastSeenCount, setLastSeenCount] = useState(0);
-  const unread = chatOpen ? 0 : Math.max(0, messages.length - lastSeenCount);
-
-  function toggleCard(id) {
-    if (!isMyTurn) return;
-    setSelectedCards(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
-  }
-
-  function openChat() { setLastSeenCount(messages.length); setChatOpen(true); }
-
-  return (
-    <View style={s.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a"/>
-
-      {/* هيدر */}
-      <View style={s.gameHeader}>
-        <TouchableOpacity onPress={onLeave} style={s.backBtn}><Text style={s.backText}>←</Text></TouchableOpacity>
-        <Text style={s.gameTitle}>🃏 بوليشيت</Text>
-        <View style={s.rankBadge}>
-          <Text style={s.rankBadgeText}>{RANK_AR[currentRank]||currentRank}</Text>
-        </View>
-      </View>
-
-      {/* شريط الوقت */}
-      <TimerBar
-        isMyTurn={isMyTurn}
-        turnStartedAt={turnStartedAt}
-        seconds={TURN_SECONDS}
-        onTimeout={onTimeout}
-      />
-
-      {/* اسم اللاعب الحالي */}
-      {roomData?.currentTurnUid && (
-        <View style={s.currentTurnBanner}>
-          {isMyTurn
-            ? <Text style={s.currentTurnMe}>✨ دورك — العب {RANK_AR[currentRank]||currentRank}</Text>
-            : <Text style={s.currentTurnOther}>
-                دور {players.find(p=>p.uid===roomData.currentTurnUid)?.name||'اللاعب'}
-              </Text>
-          }
-        </View>
-      )}
-
-      {/* اللاعبون الآخرون */}
-      <View style={s.othersRow}>
-        {players.filter(p=>p.uid!==myUid).map(p=>(
-          <View key={p.uid} style={[s.otherPlayer, roomData.currentTurnUid===p.uid && s.otherPlayerActive]}>
-            <Text style={s.otherEmoji}>{roomData.currentTurnUid===p.uid ? '⭐' : '👤'}</Text>
-            <Text style={s.otherName}>{p.name?.split(' ')[0]||'لاعب'}</Text>
-            <Text style={s.otherCards}>🃏 {p.cardCount}</Text>
+      {/* ── منطقة الطاولة ── */}
+      <View style={[s.tableArea, { backgroundColor: 'rgba(0,0,0,0.30)', borderColor: theme.borderCard }]}>
+        {pile.length === 0 ? (
+          <Text style={{ color: theme.textMuted, fontSize: 13 }}>الطاولة فارغة</Text>
+        ) : (
+          <View style={s.pileContainer}>
+            {Array.from({ length: pileVisible }).map((_, i) => (
+              <FaceDownCard key={i} index={i} theme={theme} />
+            ))}
           </View>
-        ))}
-      </View>
+        )}
 
-      {/* الكومة */}
-      <View style={s.pileArea}>
-        <Animated.View style={[s.pileBox,{transform:[{scale:animPile}]}]}>
-          <Text style={s.pileEmoji}>🎴</Text>
-          <Text style={s.pileCount}>{pile.length} ورقة</Text>
-        </Animated.View>
-
-        {lastPlay && (
-          <View style={s.lastPlayBox}>
-            <Text style={s.lastPlayText}>
-              {lastPlay.playerName} ← {lastPlay.count} × {RANK_AR[lastPlay.claimedRank]||lastPlay.claimedRank}
+        {/* إعلان آخر لعب */}
+        {playHistory.length > 0 && (
+          <View style={[s.lastDeclareTag, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}>
+            <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
+              {players.find(p => p.uid === playHistory[playHistory.length - 1].uid)?.name}:
+            </Text>
+            <Text style={{ color: theme.accent, fontWeight: '800', fontSize: 13, marginLeft: 4 }}>
+              {playHistory[playHistory.length - 1].actualCards.length}×{' '}
+              {playHistory[playHistory.length - 1].declaredVal}
             </Text>
           </View>
         )}
-
-        {lastPlay && lastPlay.playerUid !== myUid && (
-          <TouchableOpacity style={s.bullshitBtn} onPress={onBullshit}>
-            <Text style={s.bullshitBtnText}>💥 بوليشيت!</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
-      {/* ورق اللاعب */}
+      {/* ── زر التشكيك ── */}
+      {!isMyTurn && playHistory.length > 0 && (
+        <TouchableOpacity
+          onPress={handleAccuse}
+          style={[
+            s.accuseBtn,
+            { backgroundColor: accuseColor },
+            theme.isCrystal
+              ? { shadowColor: accuseColor, shadowOpacity: 0.8, shadowRadius: 14, elevation: 14 }
+              : {},
+          ]}
+        >
+          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>🤨 تشكيك!</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* ── إعلان الرقم ── */}
+      {isMyTurn && (
+        <View style={[s.declareArea, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+          <Text style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 6, textAlign: 'center' }}>
+            اختر الرقم الذي ستعلنه ({selectedCards.length} {selectedCards.length === 1 ? 'كرت' : 'كروت'}):
+          </Text>
+          <View style={s.declareGrid}>
+            {VALUES.map(val => (
+              <DeclareButton
+                key={val}
+                label={val}
+                selected={declaredVal === val}
+                onPress={setDeclaredVal}
+                theme={theme}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* ── يدي ── */}
       <View style={s.handArea}>
-        <Text style={s.handTitle}>ورقك ({myHand.length})</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.handScroll}>
-          {myHand.map(card=>(
-            <TouchableOpacity key={card.id}
-              style={[s.card, selectedCards.includes(card.id) && s.cardSelected]}
-              onPress={()=>toggleCard(card.id)} activeOpacity={isMyTurn?0.7:1}>
-              <Text style={[s.cardRank,{color:SUIT_COLOR[card.suit]}]}>{card.rank}</Text>
-              <Text style={[s.cardSuit,{color:SUIT_COLOR[card.suit]}]}>{card.suit}</Text>
-            </TouchableOpacity>
+        <Text style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
+          يدك — {myHand.length} كرت
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 4 }}>
+          {myHand.map(card => (
+            <PlayingCard
+              key={card.id}
+              card={card}
+              selected={!!selectedCards.find(c => c.id === card.id)}
+              onPress={isMyTurn ? toggleCard : undefined}
+              theme={theme}
+              disabled={!isMyTurn}
+            />
           ))}
         </ScrollView>
       </View>
 
-      {/* زر اللعب */}
+      {/* ── زر اللعب ── */}
       {isMyTurn && (
         <TouchableOpacity
-          style={[s.playBtn, selectedCards.length===0 && {opacity:0.4}]}
-          onPress={()=>selectedCards.length>0 && onPlay()}
-          disabled={selectedCards.length===0}>
-          <Text style={s.playBtnText}>
-            🃏 العب {selectedCards.length>0?`${selectedCards.length} × `:''}{RANK_AR[currentRank]||currentRank}
+          onPress={handlePlay}
+          disabled={selectedCards.length === 0 || !declaredVal}
+          style={[
+            s.playBtn,
+            {
+              backgroundColor:
+                selectedCards.length > 0 && declaredVal ? theme.accent : theme.bgElevated,
+              borderColor:
+                selectedCards.length > 0 && declaredVal ? theme.accent : theme.borderCard,
+            },
+            theme.isCrystal && selectedCards.length > 0 && declaredVal
+              ? { shadowColor: theme.accent, shadowOpacity: 0.7, shadowRadius: 14, elevation: 14 }
+              : {},
+          ]}
+        >
+          <Text
+            style={{
+              color: selectedCards.length > 0 && declaredVal ? theme.bg : theme.textMuted,
+              fontWeight: '800',
+              fontSize: 16,
+            }}
+          >
+            {selectedCards.length > 0 && declaredVal
+              ? `لعب ${selectedCards.length}× ${declaredVal} 🃏`
+              : 'اختر كرت ورقم'}
           </Text>
         </TouchableOpacity>
       )}
 
-      {/* زر الجات العائم */}
-      <TouchableOpacity style={s.chatFab} onPress={openChat} activeOpacity={0.85}>
-        <Text style={s.chatFabIcon}>💬</Text>
-        {unread > 0 && (
-          <View style={s.chatBadge}>
-            <Text style={s.chatBadgeText}>{unread > 9 ? '9+' : unread}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-
-      {/* overlay الجات */}
-      {chatOpen && (
-        <ChatOverlay
-          messages={messages}
+      {/* ── Modal التشكيك ── */}
+      {accusationResult && (
+        <AccusationModal
+          accusation={accusationResult}
+          players={players}
           myUid={myUid}
-          myName={myName}
-          roomId={roomId}
-          onClose={() => { setLastSeenCount(messages.length); setChatOpen(false); }}
+          theme={theme}
+          onClose={handleCloseAccusation}
         />
       )}
+
+      {/* ── Modal الخروج ── */}
+      <LeaveModal
+        visible={leaveModalVisible}
+        onCancel={() => setLeaveModalVisible(false)}
+        onConfirm={handleConfirmQuit}
+      />
     </View>
   );
 }
 
-// ══════════════════════════════════════
-// شاشة النتيجة
-// ══════════════════════════════════════
-function ResultScreen({ roomData, myUid, onBack, onPlayAgain }) {
-  const winner   = roomData?.players?.find(p=>p.uid===roomData?.winner);
-  const isWinner = roomData?.winner === myUid;
-  return (
-    <View style={s.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#06061a"/>
-      <View style={s.resultContent}>
-        <Text style={s.resultEmoji}>{isWinner?'🏆':'😅'}</Text>
-        <Text style={s.resultTitle}>{isWinner?'فزت!':'انتهت اللعبة'}</Text>
-        {winner && <Text style={s.resultWinner}>الفائز: {winner.name}</Text>}
-        <View style={s.finalPlayers}>
-          {(roomData?.players||[]).sort((a,b)=>a.cardCount-b.cardCount).map((p,i)=>(
-            <View key={p.uid} style={[s.finalPlayer, p.uid===roomData?.winner && s.finalPlayerWinner]}>
-              <Text style={s.finalRank}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`}</Text>
-              <Text style={s.finalName}>{p.name}</Text>
-              <Text style={s.finalCards}>{p.cardCount} ورقة</Text>
-            </View>
-          ))}
-        </View>
-        <TouchableOpacity style={s.btnPrimary} onPress={onPlayAgain}>
-          <Text style={s.btnIcon}>🔄</Text>
-          <Text style={s.btnPrimaryText}>العب مجدداً</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.btnOutline} onPress={onBack}>
-          <Text style={s.btnOutlineText}>🏠 الرئيسية</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-// ══════════════════════════════════════
-// الأنماط
-// ══════════════════════════════════════
+// ─────────────────────────────────────────────
+//  الستايلات
+// ─────────────────────────────────────────────
 const s = StyleSheet.create({
-  container:   { flex:1, backgroundColor:'#06061a' },
-  center:      { flex:1, backgroundColor:'#06061a', alignItems:'center', justifyContent:'center', gap:16 },
-  loadingText: { color:'#ef4444', fontSize:16 },
+  container: { flex: 1, paddingTop: 48 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
 
-  header: { flexDirection:'row', alignItems:'center', justifyContent:'space-between',
-            paddingHorizontal:16, paddingTop:52, paddingBottom:12,
-            backgroundColor:'#0a0a20', borderBottomWidth:1, borderBottomColor:'#1a1a3e' },
-  headerCenter: { flexDirection:'row', alignItems:'center', gap:8 },
-  headerEmoji:  { fontSize:24 },
-  headerTitle:  { fontSize:20, fontWeight:'900', color:'#ef4444' },
-  backBtn:      { padding:8 },
-  backText:     { color:'#ef4444', fontSize:18, fontWeight:'700' },
-  tokenBadge:   { backgroundColor:'#ef444420', paddingHorizontal:10, paddingVertical:5, borderRadius:12, borderWidth:1, borderColor:'#ef444440' },
-  tokenText:    { color:'#ef4444', fontWeight:'800', fontSize:14 },
-
-  menuScroll: { padding:20, gap:20 },
-  infoBox:    { backgroundColor:'#1a1a3e', borderRadius:16, padding:18, borderWidth:1, borderColor:'#ef444430', gap:10 },
-  infoTitle:  { color:'#ef4444', fontSize:16, fontWeight:'800' },
-  infoText:   { color:'#c0c0e0', fontSize:14, lineHeight:22, textAlign:'right' },
-  infoMeta:   { flexDirection:'row', gap:12 },
-  infoMetaText:{ color:'#a09060', fontSize:13 },
-
-  section:          { gap:10 },
-  sectionTitle:     { color:'#ef4444', fontSize:15, fontWeight:'800', textAlign:'right' },
-  countRow:         { flexDirection:'row', gap:10 },
-  countBtn:         { flex:1, backgroundColor:'#1a1a3e', borderRadius:12, paddingVertical:14, alignItems:'center', borderWidth:1.5, borderColor:'#2a2a55' },
-  countBtnActive:   { backgroundColor:'#ef444422', borderColor:'#ef4444' },
-  countBtnText:     { color:'#a0a0c0', fontSize:18, fontWeight:'700' },
-  countBtnTextActive:{ color:'#ef4444' },
-
-  btnGroup:       { gap:12 },
-  btnPrimary:     { backgroundColor:'#ef4444', borderRadius:16, paddingVertical:16, paddingHorizontal:20, flexDirection:'row', alignItems:'center', gap:14 },
-  btnIcon:        { fontSize:24 },
-  btnPrimaryText: { color:'#fff', fontSize:17, fontWeight:'800' },
-  btnSub:         { color:'#ffcccc', fontSize:12, marginTop:2 },
-  btnSecondary:   { backgroundColor:'#1a1a3e', borderRadius:16, paddingVertical:16, paddingHorizontal:20, flexDirection:'row', alignItems:'center', gap:14, borderWidth:1.5, borderColor:'#ef444440' },
-  btnSecondaryText:{ color:'#ef4444', fontSize:17, fontWeight:'800' },
-  btnOutline:     { borderRadius:16, paddingVertical:14, alignItems:'center', borderWidth:1.5, borderColor:'#ef444440' },
-  btnOutlineText: { color:'#ef4444', fontSize:16, fontWeight:'700' },
-  joinBox:        { flexDirection:'row', gap:10, alignItems:'center' },
-  joinInput:      { flex:1, backgroundColor:'#1a1a3e', color:'#fff', borderRadius:12, paddingHorizontal:14, paddingVertical:12, borderWidth:1.5, borderColor:'#2a2a55', fontSize:15, textAlign:'center', letterSpacing:4 },
-  joinBtn:        { backgroundColor:'#ef4444', borderRadius:12, paddingHorizontal:18, paddingVertical:13 },
-  joinBtnText:    { color:'#fff', fontWeight:'800', fontSize:15 },
-
-  codeBig:     { backgroundColor:'#1a1a3e', borderRadius:20, padding:24, alignItems:'center', gap:6, borderWidth:1.5, borderColor:'#ef444440' },
-  codeLabel:   { color:'#a09060', fontSize:13 },
-  codeValue:   { color:'#ef4444', fontSize:42, fontWeight:'900', letterSpacing:8 },
-  codeHint:    { color:'#555577', fontSize:12, textAlign:'center' },
-
-  roomProgress:      { gap:6 },
-  roomProgressTrack: { height:8, backgroundColor:'#1a1a3e', borderRadius:4, overflow:'hidden' },
-  roomProgressFill:  { height:'100%', backgroundColor:'#ef4444', borderRadius:4 },
-  roomProgressText:  { color:'#a09060', fontSize:13, textAlign:'right' },
-
-  lobbySection:  { gap:8 },
-  lobbySTitle:   { color:'#ef4444', fontSize:15, fontWeight:'800', textAlign:'right' },
-  playerSlot:    { backgroundColor:'#0f0f2e', borderRadius:14, padding:14, flexDirection:'row', alignItems:'center', gap:12, borderWidth:1, borderColor:'#1a1a40' },
-  playerSlotFilled:{ borderColor:'#ef444440' },
-  playerSlotEmoji: { fontSize:22 },
-  playerSlotName:  { flex:1, color:'#e0e0ff', fontSize:15, fontWeight:'700', textAlign:'right' },
-  meTag:         { color:'#ef4444', fontSize:11, fontWeight:'800', backgroundColor:'#ef444420', paddingHorizontal:8, paddingVertical:3, borderRadius:8 },
-  emptySlot:     { color:'#333355', fontSize:14, flex:1, textAlign:'center' },
-  friendResult:  { backgroundColor:'#0f0f2e', borderRadius:12, padding:12, flexDirection:'row', alignItems:'center', borderWidth:1, borderColor:'#1a1a40' },
-  friendResultName:   { flex:1, color:'#e0e0ff', fontSize:14, fontWeight:'700', textAlign:'right' },
-  friendResultInvite: { color:'#ef4444', fontSize:13, fontWeight:'700' },
-  waitingBox:    { flexDirection:'row', alignItems:'center', gap:12, justifyContent:'center', padding:16 },
-  waitingText:   { color:'#a09060', fontSize:14 },
-
-  gameHeader: { flexDirection:'row', alignItems:'center', justifyContent:'space-between',
-                paddingHorizontal:16, paddingTop:52, paddingBottom:12,
-                backgroundColor:'#0a0a20', borderBottomWidth:1, borderBottomColor:'#1a1a3e' },
-  gameTitle:  { color:'#ef4444', fontSize:18, fontWeight:'900' },
-  rankBadge:  { backgroundColor:'#f5c51820', paddingHorizontal:12, paddingVertical:6, borderRadius:12, borderWidth:1, borderColor:'#f5c51850' },
-  rankBadgeText:{ color:'#f5c518', fontWeight:'900', fontSize:15 },
-
-  currentTurnBanner: { backgroundColor:'#1a1a3e', paddingVertical:8, paddingHorizontal:16, borderBottomWidth:1, borderBottomColor:'#2a2a55' },
-  currentTurnMe:    { color:'#f5c518', fontSize:14, fontWeight:'800', textAlign:'center' },
-  currentTurnOther: { color:'#a09060', fontSize:13, textAlign:'center' },
-
-  othersRow:       { flexDirection:'row', flexWrap:'wrap', gap:8, padding:10, justifyContent:'center' },
-  otherPlayer:     { backgroundColor:'#1a1a3e', borderRadius:12, padding:8, alignItems:'center', gap:3, minWidth:65, borderWidth:1.5, borderColor:'#2a2a55' },
-  otherPlayerActive:{ borderColor:'#ef4444', backgroundColor:'#ef444415' },
-  otherEmoji:      { fontSize:20 },
-  otherName:       { color:'#e0e0ff', fontSize:11, fontWeight:'700' },
-  otherCards:      { color:'#a09060', fontSize:11 },
-
-  pileArea:    { flex:1, alignItems:'center', justifyContent:'center', gap:10, padding:12 },
-  pileBox:     { backgroundColor:'#1a1a3e', borderRadius:20, padding:24, alignItems:'center', gap:6, borderWidth:2, borderColor:'#ef444440' },
-  pileEmoji:   { fontSize:48 },
-  pileCount:   { color:'#ef4444', fontSize:16, fontWeight:'700' },
-  lastPlayBox: { backgroundColor:'#0f0f2e', borderRadius:12, padding:10, borderWidth:1, borderColor:'#ef444430' },
-  lastPlayText:{ color:'#e0e0ff', fontSize:14, fontWeight:'700', textAlign:'center' },
-  bullshitBtn: { backgroundColor:'#ef4444', borderRadius:16, paddingVertical:12, paddingHorizontal:24 },
-  bullshitBtnText:{ color:'#fff', fontSize:18, fontWeight:'900' },
-
-  handArea:   { backgroundColor:'#0a0a20', borderTopWidth:1, borderTopColor:'#1a1a3e', padding:10, gap:6 },
-  handTitle:  { color:'#f5c518', fontSize:13, fontWeight:'700', textAlign:'right' },
-  handScroll: { gap:6, paddingHorizontal:4, paddingBottom:4 },
-  card:        { backgroundColor:'#1a1a3e', borderRadius:10, padding:8, alignItems:'center', minWidth:48, borderWidth:2, borderColor:'#2a2a55', gap:1 },
-  cardSelected:{ borderColor:'#ef4444', backgroundColor:'#ef444422', transform:[{translateY:-10}] },
-  cardRank:    { fontSize:16, fontWeight:'900' },
-  cardSuit:    { fontSize:14 },
-  playBtn:     { backgroundColor:'#ef4444', margin:10, borderRadius:16, paddingVertical:14, alignItems:'center' },
-  playBtnText: { color:'#fff', fontSize:16, fontWeight:'900' },
-
-  chatFab: {
-    position:'absolute', bottom:80, right:16,
-    width:52, height:52, borderRadius:26,
-    backgroundColor:'#ef4444', alignItems:'center', justifyContent:'center',
-    shadowColor:'#ef4444', shadowOpacity:0.5, shadowRadius:8, shadowOffset:{width:0,height:4},
-    elevation:8,
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 10,
   },
-  chatFabIcon:  { fontSize:24 },
-  chatBadge:    { position:'absolute', top:-4, right:-4, backgroundColor:'#f5c518', borderRadius:10, minWidth:20, height:20, alignItems:'center', justifyContent:'center', paddingHorizontal:4 },
-  chatBadgeText:{ color:'#06061a', fontSize:11, fontWeight:'900' },
+  backBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    borderWidth: 1, alignItems: 'center', justifyContent: 'center',
+  },
+  titleBlock: { flex: 1, alignItems: 'center' },
+  pileBadge: {
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 12, borderWidth: 1,
+  },
 
-  resultContent:      { flex:1, alignItems:'center', justifyContent:'center', padding:24, gap:16 },
-  resultEmoji:        { fontSize:80 },
-  resultTitle:        { color:'#ef4444', fontSize:36, fontWeight:'900' },
-  resultWinner:       { color:'#f5c518', fontSize:20, fontWeight:'700' },
-  finalPlayers:       { width:'100%', gap:8 },
-  finalPlayer:        { backgroundColor:'#1a1a3e', borderRadius:14, padding:14, flexDirection:'row', alignItems:'center', gap:12, borderWidth:1.5, borderColor:'#2a2a55' },
-  finalPlayerWinner:  { borderColor:'#f5c518', backgroundColor:'#f5c51815' },
-  finalRank:          { fontSize:22 },
-  finalName:          { flex:1, color:'#e0e0ff', fontSize:15, fontWeight:'700', textAlign:'right' },
-  finalCards:         { color:'#a09060', fontSize:12 },
+  playersRow: {
+    paddingHorizontal: 12,
+    maxHeight: 82,
+    marginBottom: 12,
+  },
+  playerChip: {
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginRight: 8,
+    gap: 2,
+  },
+
+  tableArea: {
+    marginHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    height: SH * 0.18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  pileContainer: {
+    width: 100,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  lastDeclareTag: {
+    position: 'absolute',
+    bottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+
+  accuseBtn: {
+    marginHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+
+  declareArea: {
+    marginHorizontal: 16,
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  declareGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+
+  handArea: {
+    flex: 1,
+    paddingTop: 4,
+    minHeight: 110,
+    maxHeight: 130,
+    marginBottom: 6,
+  },
+
+  playBtn: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1.5,
+  },
+
+  btn: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
 });
+ 

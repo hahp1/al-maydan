@@ -1,174 +1,264 @@
+/**
+ * friendService.js
+ * ════════════════════════════════════════════════════════════
+ * خدمة الأصدقاء والمحادثات
+ *
+ * Firestore collections:
+ *  users/{uid}                          — بيانات المستخدم
+ *  friendRequests/{reqId}               — { from, to, status, createdAt }
+ *  conversations/{convId}               — { type, members[], name, lastMessage, lastAt }
+ *  conversations/{convId}/messages/{id} — { uid, name, text, createdAt }
+ */
+
 import { db } from './firebaseConfig';
 import {
-  doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, query, where, getDocs,
-  onSnapshot, orderBy, limit,
-  serverTimestamp, arrayUnion,
+  collection, doc, setDoc, getDoc, updateDoc, deleteDoc,
+  query, where, onSnapshot, addDoc, orderBy,
+  serverTimestamp, getDocs, limit,
 } from 'firebase/firestore';
 
-// ══════════════════════════════
-// البحث عن مستخدمين
-// ══════════════════════════════
-export const searchUsers = async (query_text, currentUid) => {
-  const results = [];
-  const lower = query_text.toLowerCase();
-  const q = query(
-    collection(db, 'users'),
-    where('username', '>=', lower),
-    where('username', '<=', lower + '\uf8ff')
-  );
-  const snap = await getDocs(q);
-  snap.forEach(d => {
-    if (d.id !== currentUid) results.push(d.data());
-  });
-  return results;
-};
+// ── مساعد لتوليد ID للمحادثة الثنائية ──
+function dmId(uid1, uid2) {
+  return [uid1, uid2].sort().join('_');
+}
 
-// ══════════════════════════════
-// طلبات الصداقة
-// ══════════════════════════════
-export const sendFriendRequest = async (fromUid, toUid) => {
+// ════════════════════════════════════════════════════════════
+//  البحث عن مستخدمين
+// ════════════════════════════════════════════════════════════
+
+/**
+ * يبحث في users بالـ username أو الاسم
+ * @param {string} queryText
+ * @param {string} currentUid — يُستثنى من النتائج
+ * @returns {Promise<Array>}
+ */
+export async function searchUsers(queryText, currentUid) {
+  if (!queryText?.trim()) return [];
+  const lower = queryText.toLowerCase().trim();
+  const results = [];
+  const seen = new Set();
+
   try {
-    if (!fromUid || !toUid || fromUid === toUid) return { error: 'invalid' };
-    const toSnap = await getDoc(doc(db, 'users', toUid));
-    if (!toSnap.exists()) return { error: 'user_not_found' };
-    const toData = toSnap.data();
-    if (toData.friends?.includes(fromUid)) return { error: 'already_friends' };
+    // بحث بـ username
+    const uSnap = await getDocs(query(
+      collection(db, 'users'),
+      where('username', '>=', lower),
+      where('username', '<=', lower + '\uf8ff'),
+      limit(15),
+    ));
+    uSnap.forEach(d => {
+      if (d.id !== currentUid && !seen.has(d.id)) {
+        seen.add(d.id);
+        results.push({ uid: d.id, ...d.data() });
+      }
+    });
+
+    // بحث بالاسم (إذا لم تمتلئ النتائج)
+    if (results.length < 5) {
+      const nSnap = await getDocs(query(
+        collection(db, 'users'),
+        where('name', '>=', queryText),
+        where('name', '<=', queryText + '\uf8ff'),
+        limit(10),
+      ));
+      nSnap.forEach(d => {
+        if (d.id !== currentUid && !seen.has(d.id)) {
+          seen.add(d.id);
+          results.push({ uid: d.id, ...d.data() });
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('[friendService] searchUsers:', e);
+  }
+
+  return results;
+}
+
+// ════════════════════════════════════════════════════════════
+//  طلبات الصداقة
+// ════════════════════════════════════════════════════════════
+
+/**
+ * إرسال طلب صداقة
+ * @param {string} fromUid
+ * @param {string} toUid
+ * @returns {Promise<{success?: boolean, error?: string}>}
+ */
+export async function sendFriendRequest(fromUid, toUid) {
+  if (!fromUid || !toUid) return { error: 'بيانات ناقصة' };
+  try {
     const reqId = `${fromUid}_${toUid}`;
     await setDoc(doc(db, 'friendRequests', reqId), {
-      from: fromUid,
-      to: toUid,
-      status: 'pending',
+      from:      fromUid,
+      to:        toUid,
+      status:    'pending',
       createdAt: serverTimestamp(),
     });
     return { success: true };
   } catch (e) {
+    console.warn('[friendService] sendFriendRequest:', e);
     return { error: e.message };
   }
-};
+}
 
-export const listenIncomingRequests = (uid, callback) => {
+/**
+ * الاستماع لطلبات الصداقة الواردة
+ * @param {string} uid
+ * @param {Function} onData — callback(requests[])
+ * @returns {Function} unsubscribe
+ */
+export function listenIncomingRequests(uid, onData) {
   if (!uid) return () => {};
   const q = query(
     collection(db, 'friendRequests'),
     where('to', '==', uid),
-    where('status', '==', 'pending')
+    where('status', '==', 'pending'),
   );
-  return onSnapshot(q, async (snap) => {
-    const requests = await Promise.all(
-      snap.docs.map(async (d) => {
-        const data = d.data();
-        const fromSnap = await getDoc(doc(db, 'users', data.from));
-        return {
-          id: d.id,
-          ...data,
-          fromUser: fromSnap.exists() ? fromSnap.data() : { name: 'مستخدم', uid: data.from },
-        };
-      })
-    );
-    callback(requests);
-  });
-};
+  return onSnapshot(q, (snap) => {
+    const reqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    onData(reqs);
+  }, (e) => console.warn('[friendService] listenIncomingRequests:', e));
+}
 
-export const acceptFriendRequest = async (requestId, fromUid, toUid) => {
+/**
+ * قبول طلب صداقة — ينشئ محادثة DM تلقائياً
+ * @param {string} reqId
+ * @param {string} fromUid
+ * @param {string} toUid
+ */
+export async function acceptFriendRequest(reqId, fromUid, toUid) {
+  if (!reqId || !fromUid || !toUid) return;
   try {
-    await updateDoc(doc(db, 'users', toUid), { friends: arrayUnion(fromUid) });
-    await updateDoc(doc(db, 'users', fromUid), { friends: arrayUnion(toUid) });
-    const convId = [fromUid, toUid].sort().join('_');
+    // تحديث الطلب
+    await updateDoc(doc(db, 'friendRequests', reqId), { status: 'accepted' });
+
+    // إنشاء محادثة DM إذا لم تكن موجودة
+    const convId = dmId(fromUid, toUid);
     const convRef = doc(db, 'conversations', convId);
-    const convSnap = await getDoc(convRef);
-    if (!convSnap.exists()) {
+    const existing = await getDoc(convRef);
+    if (!existing.exists()) {
       await setDoc(convRef, {
-        type: 'dm',
-        members: [fromUid, toUid],
-        createdAt: serverTimestamp(),
+        type:        'dm',
+        members:     [fromUid, toUid],
         lastMessage: '',
-        lastMessageAt: serverTimestamp(),
+        lastAt:      serverTimestamp(),
+        createdAt:   serverTimestamp(),
       });
     }
-    await deleteDoc(doc(db, 'friendRequests', requestId));
-    return { success: true };
   } catch (e) {
-    return { error: e.message };
+    console.warn('[friendService] acceptFriendRequest:', e);
   }
-};
+}
 
-export const declineFriendRequest = async (requestId) => {
+/**
+ * رفض / حذف طلب صداقة
+ * @param {string} reqId
+ */
+export async function declineFriendRequest(reqId) {
+  if (!reqId) return;
   try {
-    await deleteDoc(doc(db, 'friendRequests', requestId));
-    return { success: true };
+    await deleteDoc(doc(db, 'friendRequests', reqId));
   } catch (e) {
-    return { error: e.message };
+    console.warn('[friendService] declineFriendRequest:', e);
   }
-};
+}
 
-// ══════════════════════════════
-// المحادثات
-// ══════════════════════════════
-export const listenConversations = (uid, callback) => {
+// ════════════════════════════════════════════════════════════
+//  المحادثات
+// ════════════════════════════════════════════════════════════
+
+/**
+ * الاستماع لمحادثات المستخدم
+ * @param {string} uid
+ * @param {Function} onData — callback(conversations[])
+ * @returns {Function} unsubscribe
+ */
+export function listenConversations(uid, onData) {
   if (!uid) return () => {};
   const q = query(
     collection(db, 'conversations'),
     where('members', 'array-contains', uid),
-    orderBy('lastMessageAt', 'desc')
+    orderBy('lastAt', 'desc'),
   );
   return onSnapshot(q, (snap) => {
-    const convs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    callback(convs);
-  });
-};
+    const convs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    onData(convs);
+  }, (e) => console.warn('[friendService] listenConversations:', e));
+}
 
-export const listenMessages = (convId, callback) => {
+/**
+ * الاستماع لرسائل محادثة
+ * @param {string} convId
+ * @param {Function} onData — callback(messages[])
+ * @returns {Function} unsubscribe
+ */
+export function listenMessages(convId, onData) {
   if (!convId) return () => {};
   const q = query(
     collection(db, 'conversations', convId, 'messages'),
     orderBy('createdAt', 'asc'),
-    limit(100)
   );
   return onSnapshot(q, (snap) => {
-    const msgs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    callback(msgs);
-  });
-};
+    const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    onData(msgs);
+  }, (e) => console.warn('[friendService] listenMessages:', e));
+}
 
-export const sendMessage = async (convId, senderUid, senderName, text) => {
+/**
+ * إرسال رسالة
+ * @param {string} convId
+ * @param {string} uid
+ * @param {string} name
+ * @param {string} text
+ */
+export async function sendMessage(convId, uid, name, text) {
+  if (!convId || !uid || !text?.trim()) return;
   try {
-    if (!text?.trim()) return;
-    const msgRef = doc(collection(db, 'conversations', convId, 'messages'));
-    await setDoc(msgRef, {
-      text: text.trim(),
-      sender: senderUid,
-      senderName,
+    const msgRef = collection(db, 'conversations', convId, 'messages');
+    await addDoc(msgRef, {
+      uid,
+      name,
+      text:      text.trim(),
       createdAt: serverTimestamp(),
     });
+    // تحديث آخر رسالة في المحادثة
     await updateDoc(doc(db, 'conversations', convId), {
-      lastMessage: text.trim(),
-      lastMessageAt: serverTimestamp(),
+      lastMessage: text.trim().slice(0, 60),
+      lastAt:      serverTimestamp(),
     });
-    return { success: true };
   } catch (e) {
-    return { error: e.message };
+    console.warn('[friendService] sendMessage:', e);
   }
-};
+}
 
-// ══════════════════════════════
-// المجموعات
-// ══════════════════════════════
-export const createGroup = async (creatorUid, groupName, memberUids) => {
+// ════════════════════════════════════════════════════════════
+//  المجموعات
+// ════════════════════════════════════════════════════════════
+
+/**
+ * إنشاء محادثة جماعية
+ * @param {string} creatorUid
+ * @param {string} groupName
+ * @param {string[]} memberUids — بدون المنشئ (يُضاف تلقائياً)
+ * @returns {Promise<string>} convId
+ */
+export async function createGroup(creatorUid, groupName, memberUids) {
+  if (!creatorUid || !groupName?.trim()) return null;
   try {
-    const allMembers = [creatorUid, ...memberUids.filter(u => u !== creatorUid)];
-    const convRef = doc(collection(db, 'conversations'));
-    await setDoc(convRef, {
-      type: 'group',
-      name: groupName,
-      members: allMembers,
-      createdBy: creatorUid,
-      createdAt: serverTimestamp(),
+    const members = [...new Set([creatorUid, ...memberUids])];
+    const convRef = await addDoc(collection(db, 'conversations'), {
+      type:        'group',
+      name:        groupName.trim(),
+      members,
+      createdBy:   creatorUid,
       lastMessage: '',
-      lastMessageAt: serverTimestamp(),
+      lastAt:      serverTimestamp(),
+      createdAt:   serverTimestamp(),
     });
-    return { success: true, convId: convRef.id };
+    return convRef.id;
   } catch (e) {
-    return { error: e.message };
+    console.warn('[friendService] createGroup:', e);
+    return null;
   }
-};
+}

@@ -24,7 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // ══════════════════════════════════════════════════════════════
 export const HEARTS_CONFIG = {
   maxFreeDaily: 3,    // السقف الصارم (لا يتجاوز إلا بالشراء)
-  refillHours:  5,    // ساعات لشحن قلب واحد
+  refillHours:  4,    // ساعات لشحن قلب واحد
   maxAdDaily:   5,    // أقصى إعلانات للقلوب/يوم
   costNormal:   1,    // تكلفة اللعبة العادية
   costClassic:  2,    // تكلفة كلاسيك تريفيا
@@ -59,7 +59,7 @@ function todayStr() {
 //  منطق الشحن المتقدم:
 //   • إذا hearts >= 3 → لا شحن (lastRefill متوقف)
 //   • إذا hearts < 3 → نحسب hoursPassed منذ lastRefill
-//     - كل 5 ساعات = قلب واحد (حتى نصل لـ 3)
+//     - كل 4 ساعات = قلب واحد (حتى نصل لـ 3)
 //     - الباقي يبقى يعدّ على القلب التالي
 // ══════════════════════════════════════════════════════════════
 export async function loadHearts() {

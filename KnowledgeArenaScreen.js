@@ -17,10 +17,13 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   Animated, StatusBar, Modal, ScrollView,
   TouchableWithoutFeedback, ActivityIndicator,
-} from 'react-native';
+, BackHandler } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TokenModal from './TokenModal';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
+import LeaveModal from './LeaveModal';
+import HeartIcon from './HeartIcon';
 import { useT } from './I18n';
 import { EXPERIENCE_KEY, EXPERIENCES } from './OnboardingScreen';
 import {
@@ -208,9 +211,7 @@ const TournamentPopup = memo(({
                 </Text>
               </View>
             )}
-            <TouchableOpacity style={styles.popupCloseBtn} onPress={onClose} hitSlop={HIT_SLOP}>
-              <Text style={[styles.popupCloseTxt, { color: theme.textMuted }]}>✕</Text>
-            </TouchableOpacity>
+            <ExitButton onPress={onClose} />
           </View>
 
           <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
@@ -325,9 +326,7 @@ const TournamentPopup = memo(({
         <View style={styles.popupOverlay}>
           <View style={[styles.popupBox, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, borderColor: theme.border }]}>
             <View style={[styles.pastHeader, { borderBottomColor: theme.divider }]}>
-              <TouchableOpacity onPress={() => setShowPast(false)} hitSlop={HIT_SLOP}>
-                <Text style={[styles.pastBackText, { color: theme.accent }]}>←</Text>
-              </TouchableOpacity>
+              <ExitButton onPress={() => setShowPast(false)} size={32} />
               <Text style={[styles.pastTitle, { color: theme.textPrimary }]}>🏅 الفائزون السابقون</Text>
               <View style={{ width: 32 }} />
             </View>
@@ -373,7 +372,7 @@ const TournamentPopup = memo(({
 // ══════════════════════════════════════════════
 //  ModeCard
 // ══════════════════════════════════════════════
-const ModeCard = memo(({ emoji, title, subtitle, cost, costColor, costBg, borderColor,
+const ModeCard = memo(({ emoji, title, subtitle, heartCost = 1, costColor, costBg, borderColor,
                           disabled, onPress, cardBg, badge }) => (
   <TouchableOpacity
     style={[styles.modeCard, { borderColor, backgroundColor: cardBg }, disabled && styles.modeDisabled]}
@@ -394,8 +393,9 @@ const ModeCard = memo(({ emoji, title, subtitle, cost, costColor, costBg, border
         <Text style={[styles.modeSubtitle, { color: '#6a6a90' }]}>{subtitle}</Text>
       </View>
     </View>
-    <View style={[styles.modeCostBadge, { backgroundColor: costBg }]}>
-      <Text style={[styles.modeCost, { color: costColor }]}>{cost}</Text>
+    <View style={[styles.modeCostBadge, { backgroundColor: costBg, flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+      <Text style={[styles.modeCost, { color: costColor }]}>{heartCost}</Text>
+      <HeartIcon size={16} filled glow={false} />
     </View>
   </TouchableOpacity>
 ));
@@ -421,7 +421,10 @@ const SubOption = memo(({ emoji, title, heartCost, ranked, disabled, onPress, on
         )}
       </View>
       <View style={[styles.subCostBadge, { backgroundColor: '#ef444418' }]}>
-        <Text style={[styles.subCostText, { color: '#ef4444' }]}>❤️ {heartCost}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Text style={[styles.subCostText, { color: '#ef4444' }]}>{heartCost}</Text>
+          <HeartIcon size={14} filled glow={false} />
+        </View>
       </View>
     </View>
     <TouchableOpacity onPress={onInfo} hitSlop={HIT_SLOP} style={styles.infoBtn}>
@@ -550,6 +553,7 @@ export default function KnowledgeArenaScreen({
   const slide3   = useRef(new Animated.Value(50)).current;
 
   // ── حالة الشاشات ──
+  const [leaveVisible, setLeaveVisible] = useState(false);
   const [showRankedSheet,   setShowRankedSheet]   = useState(false);
   const [showFriendlySheet, setShowFriendlySheet] = useState(false);
   const [tooltip,           setTooltip]           = useState(null);
@@ -570,6 +574,14 @@ export default function KnowledgeArenaScreen({
   const userName = currentUser?.name ?? 'لاعب';
 
   // ── تحميل البطولة ──
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setLeaveVisible(true);
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     const unsub = subscribeToActiveTournament((tour) => {
       setTournament(tour);
@@ -736,7 +748,7 @@ export default function KnowledgeArenaScreen({
             emoji="🎯"
             title="تصنيف"
             subtitle="عشوائي · مع صديق · فردي — فئات عشوائية"
-            cost="❤️ قلب واحد"
+            heartCost={1}
             costColor="#34d399"
             costBg="#10b98122"
             borderColor="#10b98140"
@@ -752,7 +764,7 @@ export default function KnowledgeArenaScreen({
             emoji="🤝"
             title="ودية"
             subtitle="مباراة ودية · لعب حر"
-            cost="❤️ قلب واحد"
+            heartCost={1}
             costColor="#93c5fd"
             costBg="#3b82f622"
             borderColor="#3b82f640"
@@ -768,7 +780,7 @@ export default function KnowledgeArenaScreen({
             emoji="⚔️"
             title={t('knowledge.teamsTitle')}
             subtitle={t('knowledge.teamsDesc')}
-            cost="❤️❤️ قلبان"
+            heartCost={2}
             costColor={theme.accent}
             costBg={theme.accentSoft}
             borderColor={theme.accentBorder}
@@ -901,6 +913,11 @@ export default function KnowledgeArenaScreen({
         onAddTokens={(amount) => setTokens(prev => prev + amount)}
       />
     </View>
+      <LeaveModal
+        visible={leaveVisible}
+        onCancel={() => setLeaveVisible(false)}
+        onConfirm={() => { setLeaveVisible(false); onBack(); }}
+      />
   );
 }
 

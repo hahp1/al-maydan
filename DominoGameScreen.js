@@ -4,6 +4,7 @@ import {
   Dimensions, PanResponder, Animated, Platform,
 } from 'react-native';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
@@ -767,9 +768,7 @@ export default function DominoGameScreen({ onBack, currentUser, players: initial
       {/* ── HEADER ── */}
       <View style={styles.header}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <TouchableOpacity onPress={onBack} style={styles.exitBtn}>
-            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 16, fontWeight: '700' }}>✕</Text>
-          </TouchableOpacity>
+          <ExitButton onPress={onBack} />
           <GameInfoButton gameType="domino" lang={lang} />
           <WebScreenButton
             playerUid={currentUser?.uid || 'dom_p0'}

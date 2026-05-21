@@ -29,6 +29,7 @@ export const saveUserToFirestore = async ({ uid, name, email, photo }) => {
       photo: photo || '',
       username,
       tokens: 50,
+      type: email?.includes('apple') || uid.startsWith('apple') ? 'apple' : 'google',
       friends: [],
       createdAt: serverTimestamp(),
       // ── نظام XP ──
@@ -46,7 +47,8 @@ export const saveUserToFirestore = async ({ uid, name, email, photo }) => {
         gameWins:          {},
       },
     });
-    return { uid, name, email, photo, username, tokens: 50, xp: 0, level: 1 };
+    const type = email?.includes('apple') || uid.startsWith('apple') ? 'apple' : 'google';
+    return { uid, name, email, photo, username, tokens: 50, xp: 0, level: 1, type };
   } else {
     // تحديث الاسم والصورة فقط إذا كانت القيم غير null/undefined
     const updates = {};

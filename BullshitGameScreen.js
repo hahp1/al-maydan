@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useOnlineGame } from './useOnlineGame';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import LeaveModal from './LeaveModal';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
@@ -229,6 +230,10 @@ function AccusationModal({ accusation, players, myUid, theme, onClose }) {
   const scaleAnim = useRef(new Animated.Value(0.7)).current;
 
   useEffect(() => {
+    // صوت النتيجة: صادق → ضحكة استهزاء، كاذب → صمت
+    if (!isBluff) {
+      setTimeout(() => playSound('maktshof_laugh'), 500);
+    }
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
       Animated.spring(scaleAnim, { toValue: 1, friction: 5, useNativeDriver: true }),
@@ -274,7 +279,7 @@ function AccusationModal({ accusation, players, myUid, theme, onClose }) {
         >
           <Text style={{ fontSize: 48 }}>{isBluff ? '🤥' : '😇'}</Text>
           <Text style={{ fontSize: 22, fontWeight: '800', color: resultColor, marginTop: 8, textAlign: 'center' }}>
-            {isBluff ? 'كان كاذب! 🎯' : 'كان صادق! 😤'}
+            {isBluff ? '🎯 مكشوف' : '😇 كان صادقاً'}
           </Text>
 
           <View style={{ marginTop: 16, padding: 12, backgroundColor: theme.bgElevated, borderRadius: 12, width: '100%' }}>
@@ -341,7 +346,7 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd }) {
     updateRoom,
     endGame,
     leaveRoom,
-  } = useOnlineGame('bullshit', currentUser);
+  } = useOnlineGame('maktshof', currentUser);
 
   const [leaveModalVisible, setLeaveModalVisible] = useState(false);
 
@@ -446,6 +451,7 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd }) {
   // ── منطق التشكيك الحقيقي ──
   const handleAccuse = async () => {
     if (playHistory.length === 0) { Alert.alert('لا أحد لعب بعد'); return; }
+    playSound('maktshof_accuse');
 
     const lastPlay = playHistory[playHistory.length - 1];
     const { uid: accusedUid, declaredVal: lastDeclaredVal, actualCards } = lastPlay;
@@ -518,13 +524,12 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd }) {
             onPress={() => setLeaveModalVisible(true)}
             style={[s.backBtn, { borderColor: theme.borderCard }]}
           >
-            <Text style={{ color: theme.textMuted, fontSize: 18 }}>✕</Text>
-          </TouchableOpacity>
-          <GameInfoButton gameType="bullshit" lang={lang} />
+            </ExitButton_placeholder>
+          <GameInfoButton gameType="maktshof" lang={lang} />
           <WebScreenButton
             playerUid={myUid}
             playerName={currentUser?.name || ''}
-            gameType="bullshit"
+            gameType="maktshof"
             gameRoomId={roomId || ''}
             getPublicData={() => ({ status: 'lobby' })}
             themeName={themeId || 'dark'}
@@ -590,14 +595,12 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd }) {
       {/* ── Header ── */}
       <View style={s.topRow}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <TouchableOpacity onPress={handleQuit} style={[s.backBtn, { borderColor: theme.borderCard }]}>
-            <Text style={{ color: theme.textMuted, fontSize: 18 }}>✕</Text>
-          </TouchableOpacity>
-          <GameInfoButton gameType="bullshit" lang={lang} />
+          <ExitButton onPress={onBack} />
+          <GameInfoButton gameType="maktshof" lang={lang} />
           <WebScreenButton
             playerUid={myUid}
             playerName={currentUser?.name || ''}
-            gameType="bullshit"
+            gameType="maktshof"
             gameRoomId={roomId || ''}
             getPublicData={() => ({ currentPlayerIdx, playersCount: players.length, pileCount: pile?.length || 0 })}
             themeName={themeId || 'dark'}
@@ -680,7 +683,7 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd }) {
               : {},
           ]}
         >
-          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>🤨 تشكيك!</Text>
+          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>🃏 مكشوف</Text>
         </TouchableOpacity>
       )}
 

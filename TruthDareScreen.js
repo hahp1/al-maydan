@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import Svg, { Path, Circle, Line, Text as SvgText, G } from 'react-native-svg';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { useT, useRTLStyles, useLanguage } from './I18n';
 import { TruthDareEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
@@ -196,7 +197,7 @@ const SpinWheel = memo(({ players, excludeId, onDone, label, theme }) => {
 // ─────────────────────────────────────────────────────────────────────
 // SetupScreen
 // ─────────────────────────────────────────────────────────────────────
-function SetupScreen({ onStart, onBack, theme, t, rs }) {
+function SetupScreen({ onStart, onBack, theme, t, rs, isGlobal = false }) {
   const [names, setNames] = useState(['', '']);
 
   const updateName   = useCallback((i, val) => setNames(prev => { const n = [...prev]; n[i] = val; return n; }), []);
@@ -261,7 +262,7 @@ function SetupScreen({ onStart, onBack, theme, t, rs }) {
           activeOpacity={0.85}
         >
           <Text style={[styles.startBtnText, { color: canStart ? theme.textOnAccent : theme.textMuted }]}>
-            ابدأ اللعبة ←
+            {isGlobal ? 'Start →' : 'ابدأ اللعبة ←'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -272,7 +273,7 @@ function SetupScreen({ onStart, onBack, theme, t, rs }) {
 // ─────────────────────────────────────────────────────────────────────
 // GameScreen
 // ─────────────────────────────────────────────────────────────────────
-function GameScreen({ players, onBack, theme, t, rs }) {
+function GameScreen({ players, onBack, theme, t, rs, isGlobal = false }) {
   const { lang } = useLanguage();
   // كل دورة في queue = id لاعب سيُسأل/يُتحدى
   const victimQueue = useRef(buildVictimQueue(players)).current;
@@ -367,9 +368,7 @@ function GameScreen({ players, onBack, theme, t, rs }) {
       {/* ── Header: زر خروج + جولة + شريط تقدم ── */}
       <View style={[styles.gameHeader, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-          <TouchableOpacity onPress={onBack} style={[styles.exitBtn, { backgroundColor: theme.bgCard, borderColor: '#ef444430' }]} hitSlop={HIT_SLOP}>
-            <Text style={[styles.exitBtnText, { color: '#ef4444' }]}>✕</Text>
-          </TouchableOpacity>
+          <ExitButton onPress={onBack} />
           <GameInfoButton gameType="truth_dare" lang={lang} />
           <WebScreenButton
             playerUid="td_p0"
@@ -400,7 +399,7 @@ function GameScreen({ players, onBack, theme, t, rs }) {
           <SpinWheel
             players={players}
             onDone={handleVictimDone}
-            label="من هي الضحية هذه الدورة؟"
+            label={isGlobal ? 'Who is the victim this round?' : 'من هي الضحية هذه الدورة؟'}
             theme={theme}
           />
         )}
@@ -432,7 +431,7 @@ function GameScreen({ players, onBack, theme, t, rs }) {
             >
               <Text style={styles.chooseCardEmoji}>🗣</Text>
               <Text style={styles.chooseCardLabel}>صراحة</Text>
-              <Text style={[styles.chooseCardPts, { color: '#93c5fd' }]}>+{TRUTH_PTS} نقطة إذا أجبت</Text>
+              <Text style={[styles.chooseCardPts, { color: '#93c5fd' }]}>{isGlobal ? `+${TRUTH_PTS} pts if answered` : `+${TRUTH_PTS} نقطة إذا أجبت`}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.chooseCard, { backgroundColor: theme.error + '22', borderColor: theme.error }]}
@@ -441,7 +440,7 @@ function GameScreen({ players, onBack, theme, t, rs }) {
             >
               <Text style={styles.chooseCardEmoji}>😈</Text>
               <Text style={styles.chooseCardLabel}>تحدي</Text>
-              <Text style={[styles.chooseCardPts, { color: '#fca5a5' }]}>+{DARE_PTS} نقطة إذا نفّذت</Text>
+              <Text style={[styles.chooseCardPts, { color: '#fca5a5' }]}>{isGlobal ? `+${DARE_PTS} pts if completed` : `+${DARE_PTS} نقطة إذا نفّذت`}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -453,14 +452,14 @@ function GameScreen({ players, onBack, theme, t, rs }) {
               {/* بطاقة المحقق والضحية */}
               <View style={[styles.actionCard, { backgroundColor: theme.bgCard, borderColor: choice === 'truth' ? '#3b82f6' : '#ef4444' }]}>
                 <Text style={[styles.actionLabel, { color: theme.textMuted }]}>
-                  {choice === 'truth' ? '🗣 صراحة — المحقق يسأل الضحية' : '😈 تحدي — المحقق يتحدى الضحية'}
+                  {choice === 'truth' ? {isGlobal ? '🗣 Truth — questioner asks the victim' : '🗣 صراحة — المحقق يسأل الضحية'} : {isGlobal ? '😈 Dare — questioner challenges the victim' : '😈 تحدي — المحقق يتحدى الضحية'}}
                 </Text>
                 <View style={styles.actionPlayers}>
                   <View style={[styles.playerPill, { backgroundColor: choice === 'truth' ? theme.purple + '33' : theme.error + '33' }]}>
                     <Text style={styles.playerPillText}>{asker.name}</Text>
                   </View>
                   <Text style={[styles.actionArrow, { color: theme.textMuted }]}>
-                    {choice === 'truth' ? '⟶ يسأل' : '⟶ يتحدى'}
+                    {choice === 'truth' ? {isGlobal ? '⟶ asks' : '⟶ يسأل'} : {isGlobal ? '⟶ dares' : '⟶ يتحدى'}}
                   </Text>
                   <View style={[styles.playerPill, { backgroundColor: theme.bgCard, borderWidth: 1, borderColor: theme.accent }]}>
                     <Text style={[styles.playerPillText, { color: theme.accent }]}>{victim.name}</Text>
@@ -476,7 +475,7 @@ function GameScreen({ players, onBack, theme, t, rs }) {
                   activeOpacity={0.85}
                 >
                   <Text style={styles.resultBtnText}>
-                    {choice === 'truth' ? '✅  أجاب صادقاً' : '✅  نفّذ التحدي'}
+                    {choice === 'truth' ? {isGlobal ? '✅  Answered Honestly' : '✅  أجاب صادقاً'} : {isGlobal ? '✅  Completed the Dare' : '✅  نفّذ التحدي'}}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -485,7 +484,7 @@ function GameScreen({ players, onBack, theme, t, rs }) {
                   activeOpacity={0.85}
                 >
                   <Text style={styles.resultBtnText}>
-                    {choice === 'truth' ? '❌  رفض الإجابة' : '❌  لم يكمل التحدي'}
+                    {choice === 'truth' ? {isGlobal ? '❌  Refused to Answer' : '❌  رفض الإجابة'} : {isGlobal ? '❌  Skipped the Dare' : '❌  لم يكمل التحدي'}}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -516,10 +515,12 @@ function GameScreen({ players, onBack, theme, t, rs }) {
 // ─────────────────────────────────────────────────────────────────────
 // Root
 // ─────────────────────────────────────────────────────────────────────
-export default function TruthDareScreen({ onBack }) {
+export default function TruthDareScreen({ onBack, experience }) {
   const { theme, themeId } = useTheme();
   const t  = useT();
   const rs = useRTLStyles();
+  const { lang } = useLanguage();
+  const isGlobal = experience === 'global';
   const [players, setPlayers] = useState(null);
 
   const handleStart = useCallback((p) => setPlayers(p), []);
@@ -532,8 +533,8 @@ export default function TruthDareScreen({ onBack }) {
     <View style={[styles.root, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
       <TruthDareEngraving theme={theme} />
       {!players
-        ? <SetupScreen onStart={handleStart} onBack={handleBack} theme={theme} t={t} rs={rs} />
-        : <GameScreen   players={players}    onBack={handleBack} theme={theme} t={t} rs={rs} />
+        ? <SetupScreen onStart={handleStart} onBack={handleBack} theme={theme} t={t} rs={rs} isGlobal={isGlobal} />
+        : <GameScreen   players={players}    onBack={handleBack} theme={theme} t={t} rs={rs} isGlobal={isGlobal} />
       }
     </View>
   );

@@ -54,7 +54,10 @@ export const KeepAliveScreen = memo(function KeepAliveScreen({ active, children,
 
   return (
     <View
-      style={[StyleSheet.absoluteFill, style, { display: active ? 'flex' : 'none' }]}
+      style={[StyleSheet.absoluteFill, style, {
+        display: active ? 'flex' : 'none',
+        backgroundColor: '#0a0a1a', // يمنع الوميض الأبيض
+      }]}
       pointerEvents={active ? 'auto' : 'none'}
     >
       {children}
@@ -66,7 +69,7 @@ export const KeepAliveScreen = memo(function KeepAliveScreen({ active, children,
 //  useScreenTransition
 //  يُعطي Animated.Value جاهز لـ fade عند تغيير الشاشة
 // ════════════════════════════════════════════════════════════
-const FADE_DURATION = 180; // ms — سريع بما يكفي ليبدو سلساً
+const FADE_DURATION = 220; // ms — سريع بما يكفي ليبدو سلساً
 
 export function useScreenTransition(screen) {
   const fadeAnim   = useRef(new Animated.Value(1)).current;
@@ -91,7 +94,17 @@ export function useScreenTransition(screen) {
     ]).start();
   }, [screen]);
 
-  return { transitionStyle: { opacity: fadeAnim } };
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  
+  return { 
+    transitionStyle: { 
+      opacity: fadeAnim,
+      transform: [{ scale: fadeAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.98, 1],
+      })}],
+    } 
+  };
 }
 
 // ════════════════════════════════════════════════════════════

@@ -44,6 +44,8 @@ const SOUND_FILES = {
   reward_task:           require('./assets/sounds/reward_task.mp3'),
   reward_heart_refresh:  require('./assets/sounds/reward_heart_refresh.mp3'),
   reward_heart_ad:       require('./assets/sounds/reward_heart_ad.mp3'),
+  maktshof_accuse:       require('./assets/sounds/maktshof_accuse.mp3'),
+  maktshof_laugh:        require('./assets/sounds/maktshof_laugh.mp3'),
 };
 
 // ── علو كل صوت ──
@@ -60,6 +62,8 @@ const VOLUMES = {
   reward_task:           0.58,
   reward_heart_refresh:  0.40,
   reward_heart_ad:       0.50,
+  maktshof_accuse:       0.90,
+  maktshof_laugh:        0.85,
 };
 
 // ── تهيئة الإعدادات ──

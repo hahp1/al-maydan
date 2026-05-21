@@ -13,9 +13,11 @@ import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
   StatusBar, Animated, Alert, ScrollView, ActivityIndicator,
-} from 'react-native';
+, BackHandler } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
+import LeaveModal from './LeaveModal';
 import { useT, useLanguage } from './I18n';
 import LifelinesBar from './LifelineBar';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
@@ -118,6 +120,7 @@ export default function SoloGameScreen({
   onGameEnd,           // callback لـ XP (won: boolean)
   onAdWatched,         // ← جديد: callback لـ XP عند مشاهدة إعلان
 }) {
+  const [leaveVisible, setLeaveVisible] = useState(false);
   const { theme, isDark, themeId } = useTheme();
   const { lang } = useLanguage();
   const t = useT();
@@ -148,6 +151,14 @@ export default function SoloGameScreen({
   const totalRounds  = LEVELS.length * ROUNDS_PER_LEVEL;
   const progressPct  = ((totalRound - 1) / totalRounds) * 100;
   const levelColor   = theme.isLight ? levelColorsLight[currentLevel] : levelColors[currentLevel];
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setLeaveVisible(true);
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem(HIGHSCORE_KEY).then(val => { if (val) setHighScore(parseInt(val)); });
@@ -561,6 +572,11 @@ export default function SoloGameScreen({
         )}
       </ScrollView>
     </View>
+      <LeaveModal
+        visible={leaveVisible}
+        onCancel={() => setLeaveVisible(false)}
+        onConfirm={() => { setLeaveVisible(false); onBack(); }}
+      />
   );
 }
 

@@ -206,6 +206,8 @@ function MainApp() {
   // ── تحميل البيانات الأولية + استعادة الجلسة ──
   useEffect(() => {
     const restore = async () => {
+      // مزامنة وقت السيرفر أولاً
+      initServerTime().catch(() => {});
       try {
         // 1. استعادة التجربة
         const exp = await AsyncStorage.getItem(EXPERIENCE_KEY);

@@ -10,10 +10,10 @@
 import { useState, useCallback, memo, useMemo, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
-  StatusBar, ScrollView, useWindowDimensions, Alert, ActivityIndicator,
-} from 'react-native';
+  StatusBar, ScrollView, useWindowDimensions, Alert, ActivityIndicator,, BackHandler}, BackHandler } from 'react-native';
 import QuestionScreen from './QuestionScreen';
 import { useTheme } from './ThemeContext';
+import LeaveModal from './LeaveModal';
 import { useT, useLanguage } from './I18n';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { fetchQuestionsForCategories } from './firebaseConfig';
@@ -98,7 +98,8 @@ export default function GameBoardScreen({
   const [scores,         setScores]         = useState({ team1: 0, team2: 0 });
   const [currentTeam,    setCurrentTeam]    = useState(1);
   const [usedQuestions,  setUsedQuestions]  = useState({});
-  const [activeQuestion, setActiveQuestion] = useState(null);
+  const [activeQuestion,  setActiveQuestion]  = useState(null);
+  const [leaveVisible,    setLeaveVisible]    = useState(false);
 
   // ── أسئلة تُجلب lazy عند بداية اللوح ──
   const [questionsMap, setQuestionsMap] = useState(null); // { [catId]: questions[] }
@@ -169,7 +170,20 @@ export default function GameBoardScreen({
     ]);
   }, [scores, onGameEnd, t]);
 
-  const handleBack = useCallback(() => setActiveQuestion(null), []);
+  const handleBack = useCallback(() => {
+    if (activeQuestion) { setActiveQuestion(null); return; }
+    setLeaveVisible(true);
+  }, [activeQuestion]);
+
+  // اعترض السحب من الطرف وزر الرجوع
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (activeQuestion) { setActiveQuestion(null); return true; }
+      setLeaveVisible(true);
+      return true;
+    });
+    return () => sub.remove();
+  }, [activeQuestion]);
 
   // ── خصم التوكنز لوسائل المساعدة ──
   const handleSpendTokens = useCallback((cost) => {
@@ -235,6 +249,7 @@ export default function GameBoardScreen({
         onSpendTokens={handleSpendTokens}
         onSwapSame={handleSwapSame}
         onSwapRandom={handleSwapRandom}
+        imageUrl={q.imageUrl ?? null}
       />
     );
   }

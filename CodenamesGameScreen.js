@@ -35,6 +35,7 @@ import {
   doc, setDoc, updateDoc, onSnapshot, getDoc,
 } from 'firebase/firestore';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import { CodenamesEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
@@ -43,22 +44,22 @@ import { WebScreenButton, GameInfoButton } from './WebRoomService';
 // 4 صور لكل لون: 0-3 أزرق، 4-7 أحمر، 8-11 بيج/محايد
 const CARD_IMAGES = {
   blue:    [
-    require('./assets/codenames/card_00.webp'),
-    require('./assets/codenames/card_04.webp'),
-    require('./assets/codenames/card_08.webp'),
-    require('./assets/codenames/card_11.webp'),
+    require('./assets/codenames/card_00.png'),
+    require('./assets/codenames/card_04.png'),
+    require('./assets/codenames/card_08.png'),
+    require('./assets/codenames/card_11.png'),
   ],
   red:     [
-    require('./assets/codenames/card_01.webp'),
-    require('./assets/codenames/card_05.webp'),
-    require('./assets/codenames/card_06.webp'),
-    require('./assets/codenames/card_10.webp'),
+    require('./assets/codenames/card_01.png'),
+    require('./assets/codenames/card_05.png'),
+    require('./assets/codenames/card_06.png'),
+    require('./assets/codenames/card_10.png'),
   ],
   neutral: [
-    require('./assets/codenames/card_02.webp'),
-    require('./assets/codenames/card_03.webp'),
-    require('./assets/codenames/card_07.webp'),
-    require('./assets/codenames/card_09.webp'),
+    require('./assets/codenames/card_02.png'),
+    require('./assets/codenames/card_03.png'),
+    require('./assets/codenames/card_07.png'),
+    require('./assets/codenames/card_09.png'),
   ],
 };
 
@@ -66,20 +67,82 @@ const CARD_IMAGES = {
 function randomImgIdx() { return Math.floor(Math.random() * 4); }
 
 // ─── قائمة الكلمات العربية ─────────────────────────────────────
+const WORD_POOL_EN = [
+  // Nature
+  'Mountain','River','Sea','Desert','Forest','Island','Volcano','Cave','Waterfall','Oasis',
+  'Plain','Hill','Summit','Bay','Lake','Swamp','Coral','Reef','Snow','Fire',
+  'Water','Wind','Dust','Sand','Rock','Lightning','Thunder','Cloud','Fog','Storm',
+  // Animals
+  'Lion','Tiger','Elephant','Giraffe','Horse','Wolf','Fox','Rabbit','Monkey','Bear',
+  'Bird','Eagle','Penguin','Dolphin','Whale','Fish','Crocodile','Snake','Scorpion','Bee',
+  'Butterfly','Parrot','Dove','Falcon','Camel','Cheetah','Deer','Sheep','Rooster','Owl',
+  // Professions
+  'Doctor','Lawyer','Engineer','Teacher','Pilot','Chef','Artist','Writer','Actor','Singer',
+  'Athlete','Soldier','Officer','Judge','Pharmacist','Mechanic','Carpenter','Blacksmith','Builder','Farmer',
+  'Fisher','Painter','Photographer','Musician','Director','Astronaut','Diver','Translator','Activist','Driver',
+  // Cities & Countries
+  'Mecca','Baghdad','Cairo','Dubai','Riyadh','Beirut','Amman','Damascus','Kuwait','Muscat',
+  'London','Paris','Tokyo','New York','Rome','Berlin','Madrid','Moscow','Beijing','Sydney',
+  // Buildings & Places
+  'Palace','Tower','Church','Mosque','Temple','Prison','Hospital','School','University','Stadium',
+  'Theater','Museum','Library','Market','Airport','Harbor','Station','Hotel','Restaurant','Nightclub',
+  // Transport
+  'Car','Train','Airplane','Ship','Bicycle','Subway','Taxi','Yacht','Rocket','Helicopter',
+  // Tech & Tools
+  'Phone','Screen','Camera','Telescope','Microscope','Computer','Robot','Key','Lock','Sword',
+  'Shield','Bow','Cannon','Radar','Satellite','Radio','Printer','Lens','Wave','Atom',
+  // Food & Things
+  'Coffee','Tea','Bread','Date','Pomegranate','Olive','Honey','Milk','Mushroom','Spice',
+  // Emotions & Concepts
+  'Love','Fear','Hope','Dream','Peace','War','Justice','Secret','Betrayal','Loyalty',
+  'Generosity','Courage','Patience','Anger','Joy','Sadness','Loneliness','Trust','Lie','Truth',
+  // Household & General
+  'Mirror','Clock','Book','Pen','Paper','Painting','Song','Dance','Game','Film',
+  'Story','Letter','Door','Window','Ladder','Lamp','Table','Chair','Bed','Tent',
+  // Space & Science
+  'Star','Moon','Sun','Planet','Galaxy','Black Hole','Meteor','Space','Gravity','Light',
+];
+
 const WORD_POOL = [
-  'ملك','نهر','جبل','بحر','سيف','قلب','باب','نجمة','قمر','شمس',
-  'طائر','سمكة','حصان','أسد','نمر','ورد','شجرة','صحراء','ثلج','نار',
-  'ماء','هواء','تراب','برق','رعد','سحاب','قوس','مفتاح','كنز','خريطة',
-  'سفينة','طيارة','قطار','سيارة','دراجة','ساعة','مرآة','كتاب','قلم','ورقة',
-  'صوت','لون','ضوء','ظلام','حلم','خوف','أمل','حب','عدل','سلام',
-  'حرب','مدينة','قرية','بيت','قصر','سجن','مستشفى','مدرسة','سوق','طريق',
-  'جسر','برج','تمثال','لوحة','أغنية','رقصة','لعبة','فيلم','قصة','سر',
-  'رسالة','هاتف','شاشة','كاميرا','عدسة','تلسكوب','مجهر','موجة','ذرة','نجاح',
+  // طبيعة
+  'جبل','نهر','بحر','صحراء','غابة','جزيرة','بركان','كهف','شلال','واحة',
+  'سهل','تل','قمة','خليج','بحيرة','مستنقع','مرجان','شعاب','ثلج','نار',
+  'ماء','هواء','تراب','رمل','صخرة','برق','رعد','سحاب','ضباب','عاصفة',
+  // حيوانات
+  'أسد','نمر','فيل','زرافة','حصان','ذئب','ثعلب','أرنب','قرد','دب',
+  'طائر','نسر','بطريق','دلفين','حوت','سمكة','تمساح','ثعبان','عقرب','نحلة',
+  'فراشة','ببغاء','حمامة','صقر','جمل','فهد','غزال','خروف','ديك','بومة',
+  // مهن ووظائف
+  'طبيب','محامي','مهندس','معلم','طيار','شيف','فنان','كاتب','ممثل','مغني',
+  'رياضي','جندي','شرطي','قاضي','صيدلاني','ميكانيكي','نجار','حداد','بنّاء','مزارع',
+  'صياد','رسام','مصوّر','موسيقار','مخرج','رائد فضاء','غواص','مترجم','ناشط','سائق',
+  // بلدان ومدن
+  'مكة','بغداد','القاهرة','دبي','الرياض','بيروت','عمّان','دمشق','الكويت','مسقط',
+  'لندن','باريس','طوكيو','نيويورك','روما','برلين','مدريد','موسكو','بكين','سيدني',
+  // مبانٍ وأماكن
+  'قصر','برج','كنيسة','مسجد','معبد','سجن','مستشفى','مدرسة','جامعة','ملعب',
+  'مسرح','متحف','مكتبة','سوق','مطار','ميناء','محطة','فندق','مطعم','ملهى',
+  // وسائل نقل
+  'سيارة','قطار','طيارة','سفينة','دراجة','مترو','تاكسي','يخت','صاروخ','مروحية',
+  // تقنية وأدوات
+  'هاتف','شاشة','كاميرا','تلسكوب','مجهر','حاسوب','روبوت','مفتاح','قفل','سيف',
+  'درع','قوس','مدفع','رادار','قمر صناعي','لاسلكي','طابعة','عدسة','موجة','ذرة',
+  // طعام وأشياء
+  'قهوة','شاي','خبز','تمر','رمّان','زيتون','عسل','لبن','فطر','بهار',
+  // مشاعر ومفاهيم
+  'حب','خوف','أمل','حلم','سلام','حرب','عدل','سر','خيانة','وفاء',
+  'كرم','شجاعة','صبر','غضب','فرح','حزن','وحدة','ثقة','كذب','صدق',
+  // أشياء عامة
+  'مرآة','ساعة','كتاب','قلم','ورقة','لوحة','أغنية','رقصة','لعبة','فيلم',
+  'قصة','رسالة','باب','نافذة','سلّم','مصباح','طاولة','كرسي','سرير','خيمة',
+  // فضاء وعلوم
+  'نجمة','قمر','شمس','كوكب','مجرة','ثقب أسود','نيزك','فضاء','جاذبية','ضوء',
 ];
 
 // ─── توليد اللوحة ──────────────────────────────────────────────
-function generateBoard() {
-  const shuffled = [...WORD_POOL].sort(() => Math.random() - 0.5).slice(0, 25);
+function generateBoard(lang = 'ar') {
+  const activePool = lang === 'en' ? WORD_POOL_EN : WORD_POOL;
+  const shuffled = [...activePool].sort(() => Math.random() - 0.5).slice(0, 25);
   const owners = [
     ...Array(9).fill('red'),
     ...Array(8).fill('blue'),
@@ -174,7 +237,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd }) 
       }
 
       // غرفة جديدة
-      const board    = generateBoard();
+      const board    = generateBoard(lang);
       const redLeft  = board.filter(c => c.owner === 'red').length;
       const blueLeft = board.filter(c => c.owner === 'blue').length;
 
@@ -351,9 +414,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd }) 
 
         <View style={s.topBar}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <TouchableOpacity onPress={onBack} style={s.backBtn}>
-              <Text style={{ color: theme.textSecondary, fontSize: 20 }}>✕</Text>
-            </TouchableOpacity>
+            <ExitButton onPress={onBack} />
             <GameInfoButton gameType="codenames" lang={lang} />
             <WebScreenButton
               playerUid={myUid}
@@ -473,9 +534,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd }) 
       {/* ══ الشريط العلوي ══ */}
       <View style={s.topBar}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <TouchableOpacity onPress={onBack} style={s.backBtn}>
-            <Text style={{ color: theme.textSecondary, fontSize: 18 }}>✕</Text>
-          </TouchableOpacity>
+          <ExitButton onPress={onBack} />
           <GameInfoButton gameType="codenames" lang={lang} />
           <WebScreenButton
             playerUid={myUid}

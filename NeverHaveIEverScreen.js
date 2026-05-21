@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView, Platform, Alert, Animated,
 } from 'react-native';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { NeverHaveIEverEngraving } from './GameEngraving';
 import { useLanguage } from './I18n';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
@@ -221,7 +222,7 @@ function DefaultSetupScreen({ onStart, theme, tx, lang }) {
       Alert.alert('', tx('minPlayers'));
       return;
     }
-    const pool = lang === 'en' ? STATEMENTS_EN : STATEMENTS_AR;
+    const pool = isGlobal ? STATEMENTS_EN : STATEMENTS_AR;
     onStart({ players, statements: pool });
   }, [players, lang, onStart, tx]);
 
@@ -651,13 +652,7 @@ function GameScreen({ initialPlayers, statements, onBack, theme, tx }) {
 
       {/* زر الخروج + زر شاشة كبيرة */}
       <View style={styles.exitBtnRow}>
-        <TouchableOpacity
-          style={[styles.exitBtn, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-          onPress={handleExitRequest}
-          hitSlop={HIT}
-        >
-          <Text style={[styles.exitBtnText, { color: theme.textMuted }]}>✕</Text>
-        </TouchableOpacity>
+        <ExitButton onPress={onBack} />
         <GameInfoButton gameType="never_have" lang={lang} />
         <WebScreenButton
           playerUid="nhi_p0"
@@ -761,9 +756,10 @@ function GameScreen({ initialPlayers, statements, onBack, theme, tx }) {
 // ══════════════════════════════════════════════════════════════
 // المكوّن الرئيسي
 // ══════════════════════════════════════════════════════════════
-export default function NeverHaveIEver({ onBack }) {
+export default function NeverHaveIEver({ onBack, experience }) {
   const { theme, themeId } = useTheme();
   const { t, lang } = useLanguage();
+  const isGlobal = experience === 'global';
 
   const tx = useCallback((key, params) => {
     const entry = TXT[key];
@@ -782,7 +778,7 @@ export default function NeverHaveIEver({ onBack }) {
   const [gameConfig, setGameConfig] = useState(null);
 
   // الحد الأقصى للجمل في اللعبة المخصصة = عدد جمل اللعبة الجاهزة
-  const maxStatements = lang === 'en' ? STATEMENTS_EN.length : STATEMENTS_AR.length;
+  const maxStatements = isGlobal ? STATEMENTS_EN.length : STATEMENTS_AR.length;
 
   const handlePickMode = useCallback((m) => {
     setStage(m === 'default' ? 'default-setup' : 'custom-setup');
@@ -810,13 +806,7 @@ export default function NeverHaveIEver({ onBack }) {
     <View style={[styles.root, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
       {/* زر رجوع خارج شاشة اللعب */}
       {stage !== 'play' && (
-        <TouchableOpacity
-          style={[styles.globalBackBtn, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-          onPress={handleBack}
-          hitSlop={HIT}
-        >
-          <Text style={[styles.globalBackText, { color: theme.textMuted }]}>✕</Text>
-        </TouchableOpacity>
+        <ExitButton onPress={handleBack} />
       )}
 
       {stage === 'mode' && (
@@ -826,7 +816,7 @@ export default function NeverHaveIEver({ onBack }) {
         <DefaultSetupScreen onStart={handleStart} theme={theme} tx={tx} lang={lang} />
       )}
       {stage === 'custom-setup' && (
-        <CustomSetupScreen onStart={handleStart} theme={theme} tx={tx} lang={lang} maxStatements={maxStatements} />
+        <CustomSetupScreen onStart={handleStart} theme={theme} tx={tx} lang={lang} isGlobal={isGlobal} maxStatements={maxStatements} />
       )}
       {stage === 'play' && gameConfig && (
         <GameScreen

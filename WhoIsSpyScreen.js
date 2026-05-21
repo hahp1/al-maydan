@@ -21,7 +21,7 @@
  * ══════════════════════════════════════════════════════════
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   StatusBar, ScrollView, TextInput, Alert,
@@ -29,6 +29,7 @@ import {
   Modal, Pressable, ActivityIndicator,
 } from 'react-native';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { spendHeart } from './HeartsService';
 import { db } from './firebaseConfig';
@@ -783,9 +784,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
         <View style={s.gameHeader}>
           <TouchableOpacity onPress={() => Alert.alert('خروج', 'هل تريد الخروج؟', [
             { text: 'لا' }, { text: 'نعم', onPress: onBack }])}
-            style={[s.quitBtn, { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)' }]}>
-            <Text style={{ color: '#ef4444', fontSize: 16 }}>✕</Text>
-          </TouchableOpacity>
+/>
           <View style={[s.roundPill, { backgroundColor: theme.bgCard }]}>
             <Text style={{ color: ACCENT, fontWeight: '800' }}>جولة {round}/{totalRounds}</Text>
           </View>
@@ -800,10 +799,6 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
           </Text>
           <View style={[s.revealCard, { backgroundColor: theme.bgCard, borderColor: ACCENT_B }]}>
             <Text style={[s.revealPlayerName, { color: ACCENT }]}>{current}</Text>
-            <Text style={[s.revealInstruction, { color: theme.textSecondary }]}>
-              اضغط "أرِني" لترى كلمتك وحدك
-            </Text>
-
             {!revealed ? (
               <TouchableOpacity
                 style={[s.bigBtn, { backgroundColor: ACCENT }]}
@@ -820,11 +815,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
                 <Text style={[s.wordRevealValue, { color: isLiar ? '#ef4444' : ACCENT }]}>
                   {isLiar ? wordPair.fake : wordPair.common}
                 </Text>
-                {isLiar && (
-                  <Text style={[s.wordRevealHint, { color: theme.textMuted }]}>
-                    كلمتك قريبة — لكنها ليست الصح!
-                  </Text>
-                )}
+
                 <TouchableOpacity
                   style={[s.bigBtn, { backgroundColor: theme.bgElevated, marginTop: 16 }]}
                   onPress={() => {
@@ -860,15 +851,23 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
   //  مرحلة النقاش
   // ────────────────────────────────────────────────────
   if (localPhase === 'discuss') {
+    // نظام السؤال المنظم: كل لاعب يُسأل مرتين من شخصين مختلفين
+    // questioner = (targetIdx + 1 + questionIdx) % players.length
+    const totalQuestions  = players.length * 2; // مرتين لكل لاعب
+    const [qStep, setQStep] = React.useState(0); // 0 .. totalQuestions-1
+    const targetIdx    = Math.floor(qStep / 2);           // اللاعب المستهدف
+    const questionerIdx = (targetIdx + 1 + (qStep % 2)) % players.length; // السائل
+    const targetName    = players[targetIdx];
+    const questionerName = players[questionerIdx];
+    const isLastStep    = qStep + 1 >= totalQuestions;
+
     return (
-      <Animated.View style={[s.flex, { backgroundColor: theme.bg, opacity: fade }]}>
+      <Animated.View style={[s.flex, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, opacity: fade }]}>
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.gameHeader}>
           <TouchableOpacity onPress={() => Alert.alert('خروج', 'هل تريد الخروج؟', [
             { text: 'لا' }, { text: 'نعم', onPress: onBack }])}
-            style={[s.quitBtn, { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)' }]}>
-            <Text style={{ color: '#ef4444', fontSize: 16 }}>✕</Text>
-          </TouchableOpacity>
+/>
           <View style={[s.roundPill, { backgroundColor: theme.bgCard }]}>
             <Text style={{ color: ACCENT, fontWeight: '800' }}>جولة {round}/{totalRounds} — نقاش</Text>
           </View>
@@ -876,27 +875,41 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
         </View>
 
         <View style={s.discussCenter}>
-          <Text style={s.discussEmoji}>💬</Text>
-          <Text style={[s.discussTitle, { color: theme.textPrimary }]}>ناقشوا فيما بينكم!</Text>
-          <Text style={[s.discussDesc, { color: theme.textMuted }]}>
-            كل شخص يصف كلمته دون أن يقولها مباشرة.{'\n'}
-            الكاذب يحاول إقناعكم أنه يعرف الكلمة.{'\n'}
-            حين تنتهون من النقاش، ابدأوا التصويت.
-          </Text>
-
-          <View style={[s.instructBox, { backgroundColor: ACCENT_S, borderColor: ACCENT_B }]}>
-            <Text style={[s.instructTitle, { color: ACCENT }]}>💡 كيف تلعب</Text>
-            <Text style={[s.instructText, { color: theme.textSecondary }]}>
-              • اسأل كل شخص يصف الكلمة بكلمة واحدة{'\n'}
-              • لا تقل الكلمة مباشرة{'\n'}
-              • راقب من يتردد أو يجيب بشكل غريب{'\n'}
-              • الكاذب عنده كلمة قريبة — ليست نفسها
+          {/* شريط تقدم النقاش */}
+          <View style={{ width: '80%', marginBottom: 8 }}>
+            <Text style={[s.revealStep, { color: theme.textMuted, textAlign: 'center' }]}>
+              {qStep + 1} / {totalQuestions}
             </Text>
+            <View style={[s.progressTrack, { backgroundColor: theme.border, marginTop: 4 }]}>
+              <View style={[s.progressFill, { backgroundColor: ACCENT, width: `${((qStep + 1) / totalQuestions) * 100}%` }]} />
+            </View>
+          </View>
+
+          {/* بطاقة السؤال */}
+          <View style={[s.revealCard, { backgroundColor: theme.bgCard, borderColor: ACCENT_B, width: '88%' }]}>
+            {/* السائل */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Text style={{ fontSize: 20 }}>🎤</Text>
+              <Text style={[s.revealInstruction, { color: theme.textMuted, flex: 1 }]}>السائل</Text>
+              <Text style={[s.revealPlayerName, { color: ACCENT }]}>{questionerName}</Text>
+            </View>
+
+            {/* السهم */}
+            <Text style={{ fontSize: 22, textAlign: 'center', marginVertical: 4 }}>↓</Text>
+
+            {/* المستهدف */}
+            <View style={[{ backgroundColor: ACCENT_S, borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: ACCENT_B }]}>
+              <Text style={[s.revealInstruction, { color: theme.textMuted }]}>اسألوه: كيف تصف الكلمة؟</Text>
+              <Text style={[s.revealPlayerName, { color: ACCENT, fontSize: 22, marginTop: 4 }]}>{targetName}</Text>
+            </View>
           </View>
 
           <TouchableOpacity
             style={[s.bigBtn, { backgroundColor: ACCENT, marginTop: 24, width: '80%' }]}
-            onPress={startVoting}
+            onPress={() => {
+              if (isLastStep) { startVoting(); }
+              else { setQStep(q => q + 1); }
+            }}
             activeOpacity={0.85}
           >
             <Text style={s.bigBtnText}>🗳️ ابدأ التصويت</Text>
@@ -1403,9 +1416,7 @@ function OnlineLobbyPhase({ theme, currentUser, onBack }) {
           <TouchableOpacity
             onPress={() => { if (unsubRef.current) unsubRef.current(); onBack(); }}
             style={[s.quitBtn, { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)' }]}
-          >
-            <Text style={{ color: '#ef4444', fontSize: 16 }}>✕</Text>
-          </TouchableOpacity>
+/>
           <View style={[s.roundPill, { backgroundColor: theme.bgCard }]}>
             <Text style={{ color: ACCENT, fontWeight: '800' }}>غرفة الانتظار</Text>
           </View>
@@ -1645,10 +1656,7 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
       <View style={[s.flex, { backgroundColor: theme.bg }]}>
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.gameHeader}>
-          <TouchableOpacity onPress={onBack}
-            style={[s.quitBtn, { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)' }]}>
-            <Text style={{ color: '#ef4444', fontSize: 16 }}>✕</Text>
-          </TouchableOpacity>
+          <ExitButton onPress={onBack} />
           <View style={[s.roundPill, { backgroundColor: theme.bgCard }]}>
             <Text style={{ color: ACCENT, fontWeight: '800' }}>جولة {round}/{TOTAL_ROUNDS}</Text>
           </View>
@@ -1690,11 +1698,7 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
               <Text style={[s.wordRevealValue, { color: amLiar ? '#ef4444' : ACCENT }]}>
                 {myWord}
               </Text>
-              {amLiar && (
-                <Text style={[s.wordRevealHint, { color: theme.textMuted }]}>
-                  كلمتك قريبة من الكلمة الصحيحة — لكنها ليست نفسها!
-                </Text>
-              )}
+
             </View>
           )}
 

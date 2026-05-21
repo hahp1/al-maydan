@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { BackHandler, Alert, View, ActivityIndicator, Modal, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCachedCategories } from './useCachedCategories';
+import { useCachedCategories } from './UseCachedCategories';
 
 // ── Providers ──
 import { ThemeProvider, useTheme, ALL_THEMES } from './ThemeContext';
@@ -50,7 +50,7 @@ import BullshitGameScreen   from './BullshitGameScreen';
 import MafiaGameScreen      from './MafiaGameScreen';
 import CodenamesGameScreen  from './CodenamesGameScreen';
 import KoutGameScreen       from './KoutGameScreen';
-import ManAnaScreen         from './ManAnaScreen';
+import ManAnaScreen from './ManAnaScreen';
 import ActItOutScreen       from './ActItOutScreen';
 import TruthDareScreen      from './TruthDareScreen';
 import DominoGameScreen     from './DominoGameScreen';
@@ -67,7 +67,7 @@ import { loadHearts, spendHeart } from './HeartsService';
 import HeartsModal from './HeartsModal';
 
 // ── البطولة ──
-import { getActiveTournament, addTournamentScore } from './TournamentService';
+import { getActiveTournament, addTournamentScore, autoCreateNextTournament } from './TournamentService';
 
 // ── XP ──
 import {
@@ -203,13 +203,56 @@ function MainApp() {
     });
   }, []);
 
-  // ── تحميل البيانات الأولية ──
+  // ── تحميل البيانات الأولية + استعادة الجلسة ──
   useEffect(() => {
-    AsyncStorage.getItem(EXPERIENCE_KEY)
-      .then(val => {
-        if (val === EXPERIENCES.GLOBAL || val === EXPERIENCES.ARABIC) setExperience(val);
-      })
-      .finally(() => setBootLoading(false));
+    const restore = async () => {
+      try {
+        // 1. استعادة التجربة
+        const exp = await AsyncStorage.getItem(EXPERIENCE_KEY);
+        if (exp === EXPERIENCES.GLOBAL || exp === EXPERIENCES.ARABIC) setExperience(exp);
+
+        // 2. استعادة الجلسة
+        const sessionRaw = await AsyncStorage.getItem(SESSION_KEY);
+        if (sessionRaw) {
+          const session = JSON.parse(sessionRaw);
+
+          if (session.isGuest) {
+            // ضيف — استعادة مباشرة
+            setUser(session);
+            setInitialTokens(session.tokens ?? 0);
+            setScreen('home');
+          } else {
+            // مستخدم مسجل — تحقق من Firebase Auth
+            const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+              unsubscribe();
+              if (firebaseUser && firebaseUser.uid === session.uid) {
+                // الجلسة لا تزال صالحة
+                setUser(session);
+                setInitialTokens(session.tokens ?? 30);
+                setScreen('home');
+              } else {
+                // انتهت الجلسة — حذف وإعادة للـ login
+                await AsyncStorage.removeItem(SESSION_KEY);
+                setScreen('login');
+              }
+            });
+            // timeout: لو Firebase تأخر (offline token منتهي) → استخدم الـ cache
+            setTimeout(() => {
+              if (screen === 'login' && session?.uid) {
+                setUser(session);
+                setInitialTokens(session.tokens ?? 30);
+                setScreen('home');
+              }
+            }, 3000);
+          }
+        }
+      } catch (e) {
+        console.warn('Session restore error:', e);
+      } finally {
+        setBootLoading(false);
+      }
+    };
+    restore();
   }, []);
 
   useEffect(() => {
@@ -224,7 +267,9 @@ function MainApp() {
   }, []);
 
   useEffect(() => {
+    // جلب البطولة الحالية + إنشاء القادمة تلقائياً إذا لم توجد
     getActiveTournament().then(tour => { activeTournamentRef.current = tour; });
+    autoCreateNextTournament().catch(() => {});
   }, []);
 
   // ── تسجيل الدخول اليومي + splash ──
@@ -242,9 +287,15 @@ function MainApp() {
   // ══════════════════════════════════════════════
   //  tryStartGame
   // ══════════════════════════════════════════════
-  const tryStartGame = useCallback(async (targetScreen, cost = 1, extraAction = null) => {
+  const tryStartGame = useCallback(async (targetScreen, cost = 1, extraAction = null, deferred = false) => {
     // Pro: قلوب لا محدودة — لا نخصم
     if (isPro) {
+      if (extraAction) extraAction();
+      setScreen(targetScreen);
+      return;
+    }
+    // deferred = true → للألعاب الأونلاين: انتقل أولاً، اقتطع بعد بدء اللعبة الفعلي
+    if (deferred) {
       if (extraAction) extraAction();
       setScreen(targetScreen);
       return;
@@ -258,6 +309,19 @@ function MainApp() {
     setHearts(result.hearts);
     if (extraAction) extraAction();
     setScreen(targetScreen);
+  }, [isPro]);
+
+  // spendHeartNow — يُستدعى من داخل اللعبة بعد نجاح الاتصال
+  const spendHeartNow = useCallback(async (cost = 1) => {
+    if (isPro) return true;
+    const result = await spendHeart(cost);
+    if (!result.success) {
+      setNoHeartsCost(cost);
+      setNoHeartsVisible(true);
+      return false;
+    }
+    setHearts(result.hearts);
+    return true;
   }, [isPro]);
 
   // ══════════════════════════════════════════════
@@ -393,7 +457,27 @@ function MainApp() {
     );
   }
 
-  if (!experience) return <OnboardingScreen onSelect={(exp) => setExperience(exp)} />;
+  // إذا لم تُختر تجربة بعد → أعد للوغين
+  if (!experience && screen !== 'login') {
+    return (
+      <LoginScreen
+        onLogin={async (userData, exp) => {
+          setUser(userData);
+          setInitialTokens(userData.tokens ?? 30);
+          if (exp) setExperience(exp);
+          await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData)).catch(() => {});
+          setScreen('home');
+        }}
+        onGuest={async (guestProfile, exp) => {
+          setUser(guestProfile);
+          setInitialTokens(guestProfile.tokens ?? 0);
+          if (exp) setExperience(exp);
+          await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(guestProfile)).catch(() => {});
+          setScreen('home');
+        }}
+      />
+    );
+  }
 
   const isGlobal = experience === EXPERIENCES.GLOBAL;
 
@@ -404,19 +488,24 @@ function MainApp() {
     hearts, setHearts,
     isPro,
     onOpenHeartsModal: () => setShowHeartsModal(true),
+    activeTournament: activeTournamentRef.current,
   };
 
   // ── تسجيل الدخول ──
   if (screen === 'login') return (
     <LoginScreen
-      onLogin={(userData) => {
+      onLogin={async (userData, exp) => {
         setUser(userData);
         setInitialTokens(userData.tokens ?? 30);
+        if (exp) setExperience(exp);
+        await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData)).catch(() => {});
         setScreen('home');
       }}
-      onGuest={(guestProfile) => {
+      onGuest={async (guestProfile, exp) => {
         setUser(guestProfile);
         setInitialTokens(guestProfile.tokens ?? 0);
+        if (exp) setExperience(exp);
+        await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(guestProfile)).catch(() => {});
         setScreen('home');
       }}
     />
@@ -468,18 +557,21 @@ function MainApp() {
           setScreen={setScreen}
           user={user}
           setGameMode={setGameMode}
-          tryStartGame={tryStartGame}
+          tryStartGame={(screen, cost, extra) => tryStartGame(screen, cost, extra, screen !== 'mafia' && screen !== 'actitout' && screen !== 'truthdare' && screen !== 'rankfriends' && screen !== 'neverhaveiever' && screen !== 'manana' && screen !== 'whoisspy')}
         />
         {commonModals}
       </KeepAliveScreen>
 
-      {!isGlobal && showKnowledge && (
+      {showKnowledge && (
         <KeepAliveScreen active={screen === 'knowledge'}>
           <GameScreenWrapper theme={theme}>
             <KnowledgeArenaScreen
               {...sharedProps}
               tryStartGame={tryStartGame}
               currentUser={user}
+              categories={isGlobal
+                ? categories.filter(c => !c.lang || c.lang === 'en')
+                : categories.filter(c => !c.lang || c.lang === 'ar')}
             />
           </GameScreenWrapper>
           {commonModals}
@@ -504,11 +596,11 @@ function MainApp() {
             onBack={() => setScreen('home')}
             user={user} tokens={tokens} setTokens={setTokens}
             experience={experience} isPro={isPro} purchased={purchased}
-            onChangeExperience={async () => {
-              await AsyncStorage.removeItem(EXPERIENCE_KEY);
-              setExperience(null); setScreen('login');
+            onChangeExperience={async (newExp) => {
+              await AsyncStorage.setItem(EXPERIENCE_KEY, newExp);
+              setExperience(newExp);
             }}
-            onLogout={() => { setUser(null); setInitialTokens(30); setScreen('login'); }}
+            onLogout={async () => { await AsyncStorage.removeItem(SESSION_KEY).catch(()=>{}); setUser(null); setInitialTokens(30); setScreen('login'); }}
           />
         </KeepAliveScreen>
       )}
@@ -520,7 +612,7 @@ function MainApp() {
       )}
 
       {/* ── ألعاب تريفيا ── */}
-      {!isGlobal && showSetup && (
+      {showSetup && (
         <KeepAliveScreen active={screen === 'setup'}>
           <GameScreenWrapper theme={theme}>
             <GameSetupScreen
@@ -544,7 +636,7 @@ function MainApp() {
         </KeepAliveScreen>
       )}
 
-      {!isGlobal && showBoard && gameData && (
+      {showBoard && gameData && (
         <KeepAliveScreen active={screen === 'board'}>
           <GameScreenWrapper theme={theme}>
             <GameBoardScreen
@@ -563,7 +655,7 @@ function MainApp() {
         </KeepAliveScreen>
       )}
 
-      {!isGlobal && showResults && finalScores && (
+      {showResults && finalScores && (
         <KeepAliveScreen active={screen === 'results'}>
           <GameScreenWrapper theme={theme}>
             <ResultsScreen
@@ -576,11 +668,11 @@ function MainApp() {
         </KeepAliveScreen>
       )}
 
-      {!isGlobal && showSolo && (
+      {showSolo && (
         <KeepAliveScreen active={screen === 'solo'}>
           <GameScreenWrapper theme={theme}>
             <SoloGameScreen
-              categories={categories}
+              categories={isGlobal ? categories.filter(c => !c.lang || c.lang === 'en') : categories.filter(c => !c.lang || c.lang === 'ar')}
               onBack={() => setScreen('knowledge')}
               playerName={user?.name || 'لاعب'}
               onHighScoreUpdate={(s) => setHighScore(s)}
@@ -590,11 +682,11 @@ function MainApp() {
         </KeepAliveScreen>
       )}
 
-      {!isGlobal && showSoloTournament && (
+      {showSoloTournament && (
         <KeepAliveScreen active={screen === 'soloTournament'}>
           <GameScreenWrapper theme={theme}>
             <SoloGameScreen
-              categories={categories}
+              categories={isGlobal ? categories.filter(c => !c.lang || c.lang === 'en') : categories.filter(c => !c.lang || c.lang === 'ar')}
               onBack={() => setScreen('knowledge')}
               playerName={user?.name || 'لاعب'}
               onHighScoreUpdate={(s) => setHighScore(s)}
@@ -607,11 +699,11 @@ function MainApp() {
         </KeepAliveScreen>
       )}
 
-      {!isGlobal && showOnline && (
+      {showOnline && (
         <KeepAliveScreen active={screen === 'online'}>
           <GameScreenWrapper theme={theme}>
             <OnlineGameScreen
-              categories={categories}
+              categories={isGlobal ? categories.filter(c => !c.lang || c.lang === 'en') : categories.filter(c => !c.lang || c.lang === 'ar')}
               onBack={() => setScreen('knowledge')}
               currentUser={user}
               onTournamentScore={onTournamentScore}
@@ -621,11 +713,11 @@ function MainApp() {
         </KeepAliveScreen>
       )}
 
-      {/* ── ألعاب الميدان ── */}
+      {/* ── ألعاب الميدان — deferred=true للأونلاين ── */}
       {showXO && (
         <KeepAliveScreen active={screen === 'xo'}>
           <GameScreenWrapper theme={theme}>
-            <XOGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('xo', won)} />
+            <XOGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('xo', won)} onGameReady={() => spendHeartNow(1)} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}
@@ -633,7 +725,7 @@ function MainApp() {
       {showBullshit && (
         <KeepAliveScreen active={screen === 'bullshit'}>
           <GameScreenWrapper theme={theme}>
-            <BullshitGameScreen onBack={() => setScreen('games')} currentUser={user} mode={gameMode} onGameEnd={(won) => onOnlineGameEnd('bullshit', won)} />
+            <BullshitGameScreen onBack={() => setScreen('games')} currentUser={user} mode={gameMode} onGameEnd={(won) => onOnlineGameEnd('bullshit', won)} onGameReady={() => spendHeartNow(1)} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}
@@ -641,7 +733,7 @@ function MainApp() {
       {showMafia && (
         <KeepAliveScreen active={screen === 'mafia'}>
           <GameScreenWrapper theme={theme}>
-            <MafiaGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('mafia', won)} />
+            <MafiaGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('mafia', won)} onGameReady={() => spendHeartNow(1)} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}
@@ -649,7 +741,7 @@ function MainApp() {
       {showCodenames && (
         <KeepAliveScreen active={screen === 'codenames'}>
           <GameScreenWrapper theme={theme}>
-            <CodenamesGameScreen onBack={() => setScreen('games')} currentUser={user} experience={experience} onGameEnd={(won) => onOnlineGameEnd('codenames', won)} />
+            <CodenamesGameScreen onBack={() => setScreen('games')} currentUser={user} experience={experience} onGameEnd={(won) => onOnlineGameEnd('codenames', won)} onGameReady={() => spendHeartNow(1)} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}
@@ -657,7 +749,7 @@ function MainApp() {
       {showKout && (
         <KeepAliveScreen active={screen === 'kout'}>
           <GameScreenWrapper theme={theme}>
-            <KoutGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('kout', won)} />
+            <KoutGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('kout', won)} onGameReady={() => spendHeartNow(1)} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}
@@ -665,7 +757,7 @@ function MainApp() {
       {showDominoes && (
         <KeepAliveScreen active={screen === 'dominoes'}>
           <GameScreenWrapper theme={theme}>
-            <DominoGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('domino', won)} />
+            <DominoGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('domino', won)} onGameReady={() => spendHeartNow(1)} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}
@@ -673,7 +765,7 @@ function MainApp() {
       {showBiloot && (
         <KeepAliveScreen active={screen === 'biloot'}>
           <GameScreenWrapper theme={theme}>
-            <BilootGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('biloot', won)} />
+            <BilootGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('biloot', won)} onGameReady={() => spendHeartNow(1)} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}
@@ -681,7 +773,7 @@ function MainApp() {
       {showDrawguess && (
         <KeepAliveScreen active={screen === 'drawguess'}>
           <GameScreenWrapper theme={theme}>
-            <DrawGuessScreen onBack={() => setScreen('games')} currentUser={user} mode={gameMode} onGameEnd={(won) => onOnlineGameEnd('drawguess', won)} />
+            <DrawGuessScreen onBack={() => setScreen('games')} currentUser={user} mode={gameMode} onGameEnd={(won) => onOnlineGameEnd('drawguess', won)} onGameReady={() => spendHeartNow(1)} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}
@@ -689,7 +781,7 @@ function MainApp() {
       {showWordle && (
         <KeepAliveScreen active={screen === 'wordle'}>
           <GameScreenWrapper theme={theme}>
-            <WordleGameScreen onBack={() => setScreen('games')} currentUser={user} experience={experience} onGameEnd={(won) => onOnlineGameEnd('wordle', won)} />
+            <WordleGameScreen onBack={() => setScreen('games')} currentUser={user} experience={experience} onGameEnd={(won) => onOnlineGameEnd('wordle', won)} onGameReady={() => spendHeartNow(1)} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}
@@ -705,7 +797,7 @@ function MainApp() {
       {!isGlobal && showManana && (
         <KeepAliveScreen active={screen === 'manana'}>
           <GameScreenWrapper theme={theme}>
-            <ManAnaScreen onBack={() => setScreen('games')} />
+            <ManAnaScreen onBack={() => setScreen('games')} isGlobal={isGlobal} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}
@@ -721,15 +813,15 @@ function MainApp() {
       {!isGlobal && showRankFriends && (
         <KeepAliveScreen active={screen === 'rankfriends'}>
           <GameScreenWrapper theme={theme}>
-            <RankFriendsScreen onBack={() => setScreen('games')} />
+            <RankFriendsScreen onBack={() => setScreen('games')} experience={experience} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}
 
-      {!isGlobal && showNeverHaveIEver && (
+      {showNeverHaveIEver && (
         <KeepAliveScreen active={screen === 'neverhaveiever'}>
           <GameScreenWrapper theme={theme}>
-            <NeverHaveIEver onBack={() => setScreen('games')} />
+            <NeverHaveIEver onBack={() => setScreen('games')} experience={experience} />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}

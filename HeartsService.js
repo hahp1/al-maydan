@@ -18,6 +18,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getServerNow } from './ServerTime';
 
 // ══════════════════════════════════════════════════════════════
 //  الإعدادات
@@ -69,7 +70,7 @@ export async function loadHearts() {
     ]);
 
     const today = todayStr();
-    const now   = Date.now();
+    const now   = getServerNow();
     const MAX   = HEARTS_CONFIG.maxFreeDaily;
     const TICK  = REFILL_MS();
 
@@ -157,7 +158,7 @@ export async function spendHeart(cost = 1) {
 
     // إذا كان عند السقف (≥ MAX) ونزل تحته → نبدأ الشحن الآن
     if (hearts >= MAX && newHearts < MAX) {
-      newLastRefill = Date.now();
+      newLastRefill = getServerNow();
     }
 
     await AsyncStorage.multiSet([
@@ -290,7 +291,7 @@ export async function getRefillCountdown() {
     if (lastRefill === 0) return null;
 
     const nextRefillMs = lastRefill + REFILL_MS();
-    const msLeft       = Math.max(0, nextRefillMs - Date.now());
+    const msLeft       = Math.max(0, nextRefillMs - getServerNow());
     if (msLeft === 0) return null;
 
     const totalMin = Math.floor(msLeft / 60000);
@@ -315,7 +316,7 @@ export async function getChargeProgress() {
     if (hearts >= HEARTS_CONFIG.maxFreeDaily) return 0;
     if (lastRefill === 0) return 0;
 
-    const elapsed = Date.now() - lastRefill;
+    const elapsed = getServerNow() - lastRefill;
     const ratio   = elapsed / REFILL_MS();
     return Math.max(0, Math.min(1, ratio));
   } catch {

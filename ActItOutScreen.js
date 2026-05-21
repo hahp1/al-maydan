@@ -4,6 +4,7 @@ import {
   Animated, StatusBar, ScrollView, TextInput,
 } from 'react-native';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { ActItOutEngraving } from './GameEngraving';
 import { useT, useRTLStyles, useLanguage } from './I18n';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
@@ -148,8 +149,8 @@ const SetupScreen = memo(({ onStart, onBack, theme, t, rs, isGlobal }) => {
           style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]}
           hitSlop={HIT_SLOP}
         >
-          <Text style={[styles.backText, { color: '#ec4899' }]}>←</Text>
-        </TouchableOpacity>
+/>
+        <ExitButton_ACT />
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
           {isGlobal ? 'Act It Out 🎭' : 'مثّلها 🎭'}
         </Text>
@@ -407,8 +408,8 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
         {/* back btn top-left */}
         <View style={styles.floatBackRow}>
           <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
-            <Text style={[styles.backText, { color: '#ec4899' }]}>←</Text>
-          </TouchableOpacity>
+/>
+          <ExitButton_ACT />
           <GameInfoButton gameType="act_it_out" lang={lang} />
           <WebScreenButton
             playerUid="act_p0"
@@ -505,8 +506,8 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
         {/* back btn top-left */}
         <View style={styles.floatBackRow}>
           <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
-            <Text style={[styles.backText, { color: '#ec4899' }]}>←</Text>
-          </TouchableOpacity>
+/>
+          <ExitButton_ACT />
           <GameInfoButton gameType="act_it_out" lang={lang} />
           <WebScreenButton
             playerUid="act_p0"
@@ -605,8 +606,8 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
       {/* back btn top-left */}
       <View style={styles.floatBackRow}>
         <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
-          <Text style={[styles.backText, { color: '#ec4899' }]}>←</Text>
-        </TouchableOpacity>
+/>
+        <ExitButton_ACT />
         <GameInfoButton gameType="act_it_out" lang={lang} />
         <WebScreenButton
           playerUid="act_p0"

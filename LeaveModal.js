@@ -10,7 +10,7 @@ const LeaveModal = memo(function LeaveModal({ visible, onCancel, onConfirm, mess
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onCancel} statusBarTranslucent>
       <View style={styles.overlay}>
-        <View style={[styles.card, { backgroundColor: theme.bgCard, borderColor: '#ef444440' }]}>
+        <View style={[styles.card, { backgroundColor: theme.bgCard || '#1a1a2e', borderColor: '#ef444440' }]}>
           <Text style={styles.emoji}>🚪</Text>
           <Text style={[styles.title, { color: theme.textPrimary }]}>{t('leave.title')}</Text>
           <Text style={[styles.msg, { color: theme.textSecondary }]}>{message || t('leave.message')}</Text>
@@ -35,7 +35,7 @@ const LeaveModal = memo(function LeaveModal({ visible, onCancel, onConfirm, mess
 export default LeaveModal;
 
 const styles = StyleSheet.create({
-  overlay:    { flex: 1, backgroundColor: '#000000aa', alignItems: 'center', justifyContent: 'center', padding: 32 },
+  overlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center', padding: 32 },
   card:       { borderRadius: 24, borderWidth: 1.5, padding: 28, width: '100%', alignItems: 'center', gap: 12 },
   emoji:      { fontSize: 40 },
   title:      { fontSize: 20, fontWeight: '900' },

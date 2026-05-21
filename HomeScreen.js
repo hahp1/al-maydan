@@ -247,44 +247,29 @@ export default function HomeScreen({
         </Text>
       </Animated.View>
 
-      {/* ─── شريط المستخدم ─── */}
-      <Animated.View style={[
-        styles.userBar,
-        { opacity: fadeAnim,
-          backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
-          borderColor: theme.accentBorder },
-      ]}>
-        {/* ⚙️ الإعدادات */}
-        <TouchableOpacity onPress={() => setScreen('settings')} style={styles.settingsBtn} hitSlop={HIT_SLOP}>
-          <Text style={styles.settingsIcon}>⚙️</Text>
-        </TouchableOpacity>
-
-        {/* 💰 العملات */}
-        <View style={styles.currencyRow}>
+      {/* ─── Top Bar شفاف ─── */}
+      <Animated.View style={[styles.topBar, { opacity: fadeAnim }]}>
+        {/* يسار: قلوب + توكن */}
+        <View style={styles.topLeft}>
           <HeartsWidget hearts={hearts ?? 0} countdown={countdown} onPress={onOpenHeartsModal} theme={theme} />
           <TouchableOpacity
             onPress={openTokenModal}
-            style={[styles.tokenBtn, {
-              backgroundColor: isCityTheme ? theme.accent + '14' : theme.bgInput,
-              borderColor: theme.accentBorder,
-            }]}
+            style={styles.topTokenBtn}
             hitSlop={HIT_SLOP}
+            activeOpacity={0.7}
           >
-            <Text style={[styles.tokenText, { color: theme.accent }]}>🪙 {tokens}</Text>
+            <Text style={[styles.topTokenText, { color: theme.accent }]}>🪙 {tokens}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* 👤 اسم المستخدم + بادج المستوى — قابل للنقر */}
+        {/* يمين: الملف الشخصي */}
         <TouchableOpacity
-          style={styles.userInfoBtn}
+          style={styles.topProfile}
           onPress={openProfile}
           hitSlop={HIT_SLOP}
           activeOpacity={0.7}
         >
           <LevelBadge user={user} theme={theme} onPress={openProfile} />
-          <Text style={[styles.userText, { color: theme.accent }]} numberOfLines={1}>
-            {userName}
-          </Text>
         </TouchableOpacity>
       </Animated.View>
 
@@ -347,6 +332,36 @@ export default function HomeScreen({
         </Animated.View>
       </View>
 
+      {/* ─── الأكثر استخداماً ─── */}
+      <Animated.View style={[styles.quickSection, { opacity: fadeAnim }]}>
+        <Text style={[styles.quickLabel, { color: theme.textMuted }]}>
+          {lang === 'en' ? '— Most Played —' : '— الأكثر استخداماً —'}
+        </Text>
+        <View style={styles.quickRow}>
+          {[
+            { emoji: '✕○', nameAr: 'XO',       nameEn: 'XO',       screen: 'xo'       },
+            { emoji: '🃏', nameAr: 'مكشوف',    nameEn: 'Busted',   screen: 'bullshit' },
+            { emoji: '🎭', nameAr: 'مافيا',    nameEn: 'Mafia',    screen: 'mafia'    },
+            { emoji: '🤔', nameAr: 'من أنا؟',  nameEn: 'Who Am I', screen: 'manana'   },
+          ].map(item => (
+            <TouchableOpacity
+              key={item.screen}
+              style={[styles.quickItem, {
+                backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
+                borderColor: theme.borderCard,
+              }]}
+              onPress={() => setScreen(item.screen)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.quickEmoji}>{item.emoji}</Text>
+              <Text style={[styles.quickName, { color: theme.textMuted }]}>
+                {lang === 'en' ? item.nameEn : item.nameAr}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Animated.View>
+
       {/* ─── أزرار الأسفل ─── */}
       <Animated.View style={[styles.friendsWrap, { opacity: fadeAnim, gap: 10 }]}>
         {/* زر البطولة — يظهر فقط إذا كانت بطولة نشطة */}
@@ -366,19 +381,30 @@ export default function HomeScreen({
             </Text>
           </TouchableOpacity>
         )}
-        {/* زر الأصدقاء */}
-        <TouchableOpacity
-          style={[styles.friendsBtn, {
-            backgroundColor: isCityTheme ? theme.purple + '0c' : theme.bgCard,
-            borderColor: theme.purple + '55',
-          }]}
-          onPress={() => setScreen('friends')}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.friendsBtnText, { color: theme.purple }]}>
-            {t('home.friendsBtn')}
-          </Text>
-        </TouchableOpacity>
+        {/* ── BottomNav ── */}
+        <View style={styles.bottomNav}>
+          {(lang === 'en' ? [
+            { emoji: '⚔️', label: 'Arena',    active: true,  onPress: () => {}                },
+            { emoji: '👥', label: 'Friends',  active: false, onPress: () => setScreen('friends') },
+            { emoji: '⚙️', label: 'Settings', active: false, onPress: () => setScreen('settings') },
+          ] : [
+            { emoji: '⚙️', label: 'إعدادات', active: false, onPress: () => setScreen('settings') },
+            { emoji: '👥', label: 'أصدقاء',  active: false, onPress: () => setScreen('friends')  },
+            { emoji: '⚔️', label: 'الميدان', active: true,  onPress: () => {}                    },
+          ]).map((item, i) => (
+            <TouchableOpacity key={i} style={styles.navItem} onPress={item.onPress} activeOpacity={0.8}>
+              <View style={[styles.navCircle, {
+                borderColor:     item.active ? theme.accent : theme.borderCard,
+                backgroundColor: item.active ? theme.accentSoft : (isCityTheme ? theme.accent + '0c' : theme.bgCard),
+              }]}>
+                <Text style={styles.navEmoji}>{item.emoji}</Text>
+              </View>
+              <Text style={[styles.navLabel, { color: item.active ? theme.accent : theme.textMuted }]}>
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </Animated.View>
 
       <TokenModal visible={showTokenModal} onClose={closeTokenModal} tokens={tokens} onAddTokens={addTokens} />
@@ -435,8 +461,7 @@ const styles = StyleSheet.create({
   titleRow:        { flexDirection: 'row', alignItems: 'baseline' },
   titleLetter:     { fontSize: 68, fontWeight: '900', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 24, letterSpacing: 2 },
   subtitle:        { fontSize: 16, marginTop: 6, letterSpacing: 1 },
-  // userBar
-  userBar:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 16, borderWidth: 1 },
+  // topBar (replaced userBar)
   settingsBtn:     { padding: 4 },
   settingsIcon:    { fontSize: 20 },
   currencyRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -455,6 +480,19 @@ const styles = StyleSheet.create({
   profileLevel:    { fontSize: 11, fontWeight: '900' },
   userText:        { fontSize: 12, fontWeight: '600', maxWidth: 72 },
   // باقي العناصر
+  // ── Quick Games ──
+  quickSection:   { gap: 6, marginBottom: 10 },
+  quickLabel:     { fontSize: 11, textAlign: 'center' },
+  quickRow:       { flexDirection: 'row', gap: 8 },
+  quickItem:      { flex: 1, borderRadius: 14, borderWidth: 1, paddingVertical: 10, alignItems: 'center', gap: 4 },
+  quickEmoji:     { fontSize: 20 },
+  quickName:      { fontSize: 9, fontWeight: '700' },
+  // ── BottomNav ──
+  bottomNav:      { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', width: '100%', paddingTop: 8 },
+  navItem:        { alignItems: 'center', gap: 4 },
+  navCircle:      { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  navEmoji:       { fontSize: 20 },
+  navLabel:       { fontSize: 9, fontWeight: '800' },
   highScoreBar:    { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14, borderWidth: 1, width: '100%', alignItems: 'center' },
   highScoreText:   { fontSize: 14, fontWeight: '700' },
   arenaRow:        { flexDirection: 'row', gap: 14, width: '100%' },

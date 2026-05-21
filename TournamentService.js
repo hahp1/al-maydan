@@ -79,9 +79,12 @@ export const TOURNAMENT_PRIZES = [
   { rank: 20, tokens: 250  },
 ];
 
-// مدة البطولة: 7 أيام، ويُغلق الحساب قبل 36 ساعة من النهاية
-export const TOURNAMENT_DURATION_MS      = 7  * 24 * 60 * 60 * 1000;
-export const SCORING_CLOSE_BEFORE_END_MS = 36 * 60 * 60 * 1000;
+// مدة البطولة: 5 أيام (الخميس 00:00 → الثلاثاء 00:00)
+// يومان راحة (الثلاثاء 00:00 → الخميس 00:00) — اللعب مستمر بدون حساب
+// السكورنغ يُغلق قبل دقيقة واحدة من نهاية البطولة
+export const TOURNAMENT_DURATION_MS      = 5 * 24 * 60 * 60 * 1000;  // 5 أيام
+export const SCORING_CLOSE_BEFORE_END_MS = 1 * 60 * 1000;             // دقيقة واحدة
+export const REST_DURATION_MS            = 2 * 24 * 60 * 60 * 1000;  // يومان راحة
 
 // ══════════════════════════════════════════════
 //  getActiveTournament — جلب البطولة الحالية
@@ -92,8 +95,8 @@ export async function getActiveTournament() {
     const now = Date.now();
     const q = query(
       collection(db, 'tournaments'),
-      where('status', 'in', ['active', 'scoring_closed']),
-      orderBy('startsAt', 'desc'),
+      where('status', 'in', ['active', 'scoring_closed', 'upcoming']),
+      orderBy('startsAt', 'asc'),
       limit(1),
     );
     const snap = await getDocs(q);
@@ -461,17 +464,22 @@ export async function getPastWinners(limit_ = 10) {
 // ══════════════════════════════════════════════
 export async function getNextTournamentStartTime() {
   try {
-    const q    = query(
+    // أولاً: هل توجد بطولة upcoming؟
+    const q = query(
       collection(db, 'tournaments'),
       where('status', '==', 'upcoming'),
       orderBy('startsAt', 'asc'),
       limit(1),
     );
     const snap = await getDocs(q);
-    if (snap.empty) return null;
-    const data     = snap.docs[0].data();
-    const startsAt = data.startsAt?.toMillis ? data.startsAt.toMillis() : data.startsAt;
-    return { startsAt };
+    if (!snap.empty) {
+      const data     = snap.docs[0].data();
+      const startsAt = data.startsAt?.toMillis ? data.startsAt.toMillis() : data.startsAt;
+      return { startsAt };
+    }
+    // ثانياً: احسب الخميس القادم
+    const nextThursday = getNextThursdayMidnight();
+    return { startsAt: nextThursday.getTime(), isEstimate: true };
   } catch (e) {
     console.error('getNextTournamentStartTime error:', e);
     return null;
@@ -479,24 +487,88 @@ export async function getNextTournamentStartTime() {
 }
 
 // ══════════════════════════════════════════════
-//  createTournament — إنشاء بطولة جديدة (Admin)
-//  weekNumber:  number
-//  startsAt:    Date
+//  getNextThursdayMidnight — الخميس القادم 00:00
 // ══════════════════════════════════════════════
-export async function createTournament(weekNumber, startsAt = new Date()) {
+export function getNextThursdayMidnight(fromDate = new Date()) {
+  const d = new Date(fromDate);
+  // اضبط على منتصف الليل
+  d.setHours(0, 0, 0, 0);
+  // الخميس = 4 في JS (0=الأحد)
+  const day = d.getDay();
+  const daysUntilThursday = (4 - day + 7) % 7 || 7; // إذا اليوم خميس → الخميس القادم
+  d.setDate(d.getDate() + daysUntilThursday);
+  return d;
+}
+
+// ══════════════════════════════════════════════
+//  autoCreateNextTournament — ينشئ البطولة القادمة
+//  تلقائياً إذا لم تكن موجودة
+//  يُستدعى عند فتح التطبيق
+// ══════════════════════════════════════════════
+export async function autoCreateNextTournament() {
   try {
-    const startMs       = startsAt.getTime();
-    const endMs         = startMs + TOURNAMENT_DURATION_MS;
-    const scoringEndMs  = endMs   - SCORING_CLOSE_BEFORE_END_MS;
+    const now = Date.now();
+
+    // 1. هل توجد بطولة نشطة أو قادمة؟
+    const activeQ = query(
+      collection(db, 'tournaments'),
+      where('status', 'in', ['active', 'scoring_closed', 'upcoming']),
+      limit(1),
+    );
+    const activeSnap = await getDocs(activeQ);
+    if (!activeSnap.empty) return null; // موجودة، لا نحتاج إنشاء
+
+    // 2. احسب رقم البطولة
+    const allQ   = query(collection(db, 'tournaments'), orderBy('weekNumber', 'desc'), limit(1));
+    const allSnap = await getDocs(allQ);
+    const lastWeek = allSnap.empty ? 0 : (allSnap.docs[0].data().weekNumber ?? 0);
+    const weekNumber = lastWeek + 1;
+
+    // 3. الخميس القادم 00:00
+    const startDate = getNextThursdayMidnight();
+    const startMs   = startDate.getTime();
+    const endMs     = startMs + TOURNAMENT_DURATION_MS;        // الثلاثاء 00:00
+    const scoringEndMs = endMs - SCORING_CLOSE_BEFORE_END_MS; // قبل دقيقة من النهاية
 
     const ref = await addDoc(collection(db, 'tournaments'), {
       weekNumber,
-      startsAt:      Timestamp.fromMillis(startMs),
-      endsAt:        Timestamp.fromMillis(endMs),
-      scoringEndsAt: Timestamp.fromMillis(scoringEndMs),
-      status:        'active',
+      startsAt:           Timestamp.fromMillis(startMs),
+      endsAt:             Timestamp.fromMillis(endMs),
+      scoringEndsAt:      Timestamp.fromMillis(scoringEndMs),
+      status:             startMs <= now ? 'active' : 'upcoming',
       prizes_distributed: false,
-      createdAt:     serverTimestamp(),
+      createdAt:          serverTimestamp(),
+    });
+
+    console.log(`[Tournament] auto-created week ${weekNumber}`, ref.id);
+    return { success: true, id: ref.id, weekNumber, startsAt: startMs, endsAt: endMs };
+  } catch (e) {
+    console.error('autoCreateNextTournament error:', e);
+    return null;
+  }
+}
+
+// ══════════════════════════════════════════════
+//  createTournament — إنشاء يدوي (Admin)
+//  weekNumber:  number
+//  startsAt:    Date (default = الخميس القادم)
+// ══════════════════════════════════════════════
+export async function createTournament(weekNumber, startsAt) {
+  try {
+    const startDate    = startsAt ?? getNextThursdayMidnight();
+    const startMs      = startDate.getTime ? startDate.getTime() : startDate;
+    const endMs        = startMs + TOURNAMENT_DURATION_MS;
+    const scoringEndMs = endMs   - SCORING_CLOSE_BEFORE_END_MS;
+    const now          = Date.now();
+
+    const ref = await addDoc(collection(db, 'tournaments'), {
+      weekNumber,
+      startsAt:           Timestamp.fromMillis(startMs),
+      endsAt:             Timestamp.fromMillis(endMs),
+      scoringEndsAt:      Timestamp.fromMillis(scoringEndMs),
+      status:             startMs <= now ? 'active' : 'upcoming',
+      prizes_distributed: false,
+      createdAt:          serverTimestamp(),
     });
 
     console.log('createTournament: created', ref.id, `week ${weekNumber}`);

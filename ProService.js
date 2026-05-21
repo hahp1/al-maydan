@@ -87,14 +87,16 @@ export async function findUserByEmailOrUsername(query_text) {
   if (!query_text?.trim()) return null;
   const lower = query_text.toLowerCase().trim();
 
-  // بحث بـ email
-  const emailQ = query(
-    collection(db, 'users'),
-    orderBy('email'),
-  );
-  // نجلب مباشرة بدل query (Firestore لا يدعم = على email بدون index)
+  // بحث مباشر بـ #guest uid
+  if (lower.startsWith('#guest')) {
+    const num  = lower.slice(6);
+    const name = `ضيف${num}`;
+    return { uid: lower, name, username: lower, email: '', isGuest: true };
+  }
+
+  // بحث بـ email أو username في Firestore
   try {
-    const snap = await getDocs(collection(db, 'users'));
+    const snap  = await getDocs(collection(db, 'users'));
     const match = snap.docs.find(d => {
       const data = d.data();
       return (
@@ -119,16 +121,22 @@ export async function findUserByEmailOrUsername(query_text) {
 export async function grantPro(uid, adminUid, note = '', days = null) {
   if (!uid || !adminUid) return { success: false, error: 'بيانات ناقصة' };
   try {
-    // جلب بيانات المستخدم
-    const userSnap = await getDoc(doc(db, 'users', uid));
-    if (!userSnap.exists()) return { success: false, error: 'المستخدم غير موجود' };
-    const userData = userSnap.data();
+    const isGuest = uid.startsWith('#guest');
+    let userData  = { email: '', username: uid, name: isGuest ? `ضيف${uid.slice(6)}` : '' };
+
+    // للمستخدمين المسجلين — جلب بياناتهم من Firestore
+    if (!isGuest) {
+      const userSnap = await getDoc(doc(db, 'users', uid));
+      if (!userSnap.exists()) return { success: false, error: 'المستخدم غير موجود' };
+      userData = userSnap.data();
+    }
 
     const data = {
       uid,
       email:     userData.email    || '',
-      username:  userData.username || '',
-      name:      userData.name     || '',
+      username:  userData.username || uid,
+      name:      userData.name     || uid,
+      isGuest:   isGuest,
       grantedAt: serverTimestamp(),
       grantedBy: adminUid,
       note:      note || 'تفعيل يدوي',

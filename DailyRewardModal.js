@@ -103,7 +103,7 @@ export default function DailyRewardModal({ visible, streak, reward, onClaim }) {
 }
 
 const styles = StyleSheet.create({
-  overlay:        { flex: 1, backgroundColor: '#00000099', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  overlay:        { flex: 1, backgroundColor: '#000000eb', justifyContent: 'center', alignItems: 'center', padding: 24 },
   card:           { borderRadius: 28, padding: 24, width: '100%', alignItems: 'center', gap: 14, borderWidth: 1.5, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 12 },
   emoji:          { fontSize: 52 },
   title:          { fontSize: 26, fontWeight: '900', letterSpacing: 1 },

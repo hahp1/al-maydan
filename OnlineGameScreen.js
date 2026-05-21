@@ -42,13 +42,15 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   StatusBar, Animated, Alert, ScrollView, ActivityIndicator,
-} from 'react-native';
+, BackHandler } from 'react-native';
 import { db, fetchQuestionsForCategories } from './firebaseConfig';
 import {
   doc, setDoc, updateDoc, onSnapshot,
   getDoc, serverTimestamp,
 } from 'firebase/firestore';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
+import LeaveModal from './LeaveModal';
 import { useT } from './I18n';
 import LifelinesBar from './LifelineBar';
 import { WebScreenButton } from './WebRoomService';
@@ -169,6 +171,7 @@ export default function OnlineGameScreen({
   onGameEnd,           // callback لـ XP (won: boolean)
   onAdWatched,         // ← جديد: callback لـ XP عند مشاهدة إعلان
 }) {
+  const [leaveVisible, setLeaveVisible] = useState(false);
   const { theme, isDark, themeId } = useTheme();
   const t = useT();
 
@@ -215,6 +218,14 @@ export default function OnlineGameScreen({
   // ══════════════════════════════════════════════
   //  الاتصال بـ Firebase
   // ══════════════════════════════════════════════
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setLeaveVisible(true);
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     findOrJoinRoom();
     return () => {
@@ -579,8 +590,8 @@ export default function OnlineGameScreen({
       <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <TouchableOpacity onPress={onBack} style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]} hitSlop={HIT_SLOP}>
-            <Text style={[styles.backText, { color: theme.accent }]}>←</Text>
+          <TouchableOpacity onPress={onBack}>
+            <ExitButton onPress={onBack} />
           </TouchableOpacity>
           <WebScreenButton
             playerUid={myUid}
@@ -899,6 +910,11 @@ export default function OnlineGameScreen({
         )}
       </ScrollView>
     </View>
+      <LeaveModal
+        visible={leaveVisible}
+        onCancel={() => setLeaveVisible(false)}
+        onConfirm={() => { setLeaveVisible(false); onBack(); }}
+      />
   );
 }
 

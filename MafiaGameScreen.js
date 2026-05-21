@@ -26,6 +26,7 @@ import {
   query, where, getDocs, deleteDoc
 } from 'firebase/firestore';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import LeaveModal from './LeaveModal';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
@@ -657,8 +658,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd }) {
       <View style={gs.exitBtnRow}>
         <TouchableOpacity style={[gs.exitBtn, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
           onPress={() => setShowLeave(true)}>
-          <Text style={{ fontSize: 18 }}>✕</Text>
-        </TouchableOpacity>
+          </ExitButton_placeholder>
         <GameInfoButton gameType="mafia" lang={lang} />
         <WebScreenButton
           playerUid={myUid}
@@ -764,10 +764,7 @@ function SetupScreen({ theme, joinCode, setJoinCode, loading, error, onBack, onC
       <StatusBar barStyle={theme.statusBar} />
 
       {/* زر الرجوع أعلى يسار */}
-      <TouchableOpacity style={[gs.exitBtn, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
-        onPress={onBack}>
-        <Text style={{ fontSize: 18 }}>✕</Text>
-      </TouchableOpacity>
+      <ExitButton onPress={onBack} />
 
       <ScrollView contentContainerStyle={gs.setupScroll} showsVerticalScrollIndicator={false}>
         {/* العنوان */}
@@ -848,10 +845,7 @@ function LobbyScreen({ theme, roomCode, roomData, isCreator, myUid, minPlayers, 
       <StatusBar barStyle={theme.statusBar} />
 
       <View style={gs.exitBtnRow}>
-        <TouchableOpacity style={[gs.exitBtn, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
-          onPress={onLeave}>
-          <Text style={{ fontSize: 18 }}>✕</Text>
-        </TouchableOpacity>
+        <ExitButton onPress={onBack} />
         <GameInfoButton gameType="mafia" lang={lang} />
         <WebScreenButton
           playerUid={myUid}

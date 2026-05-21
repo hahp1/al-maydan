@@ -12,7 +12,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1e1040"
+      "backgroundColor": "#0a0a1a"
     },
     "assetBundlePatterns": [
       "assets/sounds/*",
@@ -29,7 +29,10 @@
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "CFBundleLocalizations": ["en", "ar"],
+        "CFBundleLocalizations": [
+          "en",
+          "ar"
+        ],
         "CFBundleDevelopmentRegion": "en"
       }
     },
@@ -44,7 +47,12 @@
         "INTERNET",
         "ACCESS_NETWORK_STATE"
       ],
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "backgroundColor": "#0a0a1a",
+      "splash": {
+        "backgroundColor": "#0a0a1a",
+        "resizeMode": "contain"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -71,7 +79,15 @@
         "projectId": "b7485332-a4e4-43fc-ba40-631a8ff884b4"
       }
     },
-    "owner": "haho1"
+    "owner": "haho1",
+    "androidStatusBar": {
+      "backgroundColor": "#0a0a1a",
+      "barStyle": "light-content",
+      "translucent": false
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#0a0a1a",
+      "barStyle": "light-content"
+    }
   }
 }
- 

@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useOnlineGame } from './useOnlineGame';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import { XOEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
@@ -86,7 +87,7 @@ function getBotMove(board, botSymbol) {
 const TOTAL_ROUNDS = 7;
 
 // ── المكوّن الرئيسي ───────────────────────────────────────────
-export default function XOGameScreen({ onBack, currentUser, onGameEnd }) {
+export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
   const {
@@ -98,7 +99,7 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd }) {
     updateRoom,
     endGame,
     leaveRoom,
-  } = useOnlineGame('xo', currentUser);
+  } = useOnlineGame('xo', currentUser, onGameReady);
 
   const [board, setBoard]             = useState(Array(9).fill(null));
   const [gameStatus, setGameStatus]   = useState('waiting');
@@ -370,10 +371,8 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd }) {
               { text: 'إلغاء', style: 'cancel' },
               { text: 'خروج', style: 'destructive', onPress: handleQuit },
             ])}
-            style={[s.quitSmall, { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)' }]}
-          >
-            <Text style={{ color: '#ef4444', fontSize: 16 }}>✕</Text>
-          </TouchableOpacity>
+/>
+          <ExitButton onPress={handleQuit} />
           <GameInfoButton gameType="xo" lang={lang} />
           <WebScreenButton
             playerUid={currentUser?.uid || 'xo_p0'}

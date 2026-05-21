@@ -1,7 +1,8 @@
 /**
- * QuestionScreen.js — محدّث
+ * QuestionScreen.js — مُصلَح
  * ════════════════════════════════════════════════
  *  ✅ LifelineBar مدمج في الكلاسيك والـ MCQ
+ *  ✅ دعم imageUrl — يعرض الصورة إذا كانت موجودة
  *  ✅ tokens و onSpendTokens ممررة من GameBoardScreen
  *  ✅ swapSame / swapRandom / hint / eliminate مربوطة
  *  ✅ تجميد الوقت في MCQ فقط (الكلاسيك بلا مؤقت ثابت)
@@ -9,7 +10,7 @@
  */
 
 import { useState, useEffect, useCallback, memo, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, StatusBar, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, StatusBar, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { useTheme } from './ThemeContext';
 import { useT } from './I18n';
 import LifelinesBar from './LifelineBar';
@@ -37,6 +38,37 @@ function useTimer() {
   return seconds;
 }
 
+// ── مكوّن عرض الصورة ────────────────────────────────────────
+const QuestionImage = memo(({ imageUrl, theme }) => {
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(false);
+
+  if (!imageUrl) return null;
+
+  return (
+    <View style={[imgStyles.wrapper, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+      {loading && !error && (
+        <ActivityIndicator
+          style={StyleSheet.absoluteFill}
+          color={theme.accent}
+          size="large"
+        />
+      )}
+      {error ? (
+        <Text style={[imgStyles.errorText, { color: theme.textMuted }]}>📷 تعذّر تحميل الصورة</Text>
+      ) : (
+        <Image
+          source={{ uri: imageUrl }}
+          style={imgStyles.image}
+          resizeMode="contain"
+          onLoad={() => setLoading(false)}
+          onError={() => { setLoading(false); setError(true); }}
+        />
+      )}
+    </View>
+  );
+});
+
 // ══════════════════════════════════════════════════════════════
 //  نمط كلاسيك — مع LifelineBar
 // ══════════════════════════════════════════════════════════════
@@ -44,6 +76,7 @@ const ClassicMode = memo(({
   question, answer, wrong, points, team1, team2, currentTeam,
   onAnswer, onBack, onSwapSame, onSwapRandom,
   tokens, onSpendTokens, onWatchAdLifeline,
+  imageUrl,
   theme, t,
 }) => {
   const seconds = useTimer();
@@ -52,6 +85,7 @@ const ClassicMode = memo(({
   const [usedLifelines, setUsedLifelines] = useState(new Set());
   const [displayQ,      setDisplayQ]      = useState(question);
   const [displayA,      setDisplayA]      = useState(answer);
+  const [displayImg,    setDisplayImg]    = useState(imageUrl);
   const [hintText,      setHintText]      = useState(null);
 
   const revealAnswer  = useCallback(() => setShowAnswer(true), []);
@@ -70,6 +104,7 @@ const ClassicMode = memo(({
     if (result) {
       setDisplayQ(result.question);
       setDisplayA(result.answer);
+      setDisplayImg(result.imageUrl || null);
       setHintText(null);
     }
   }, [onSwapSame]);
@@ -79,6 +114,7 @@ const ClassicMode = memo(({
     if (result) {
       setDisplayQ(result.question);
       setDisplayA(result.answer);
+      setDisplayImg(result.imageUrl || null);
       setHintText(null);
     }
   }, [onSwapRandom]);
@@ -89,6 +125,9 @@ const ClassicMode = memo(({
         <Text style={[styles.timerFloating, { color: theme.accentBorder }]}>⏱ {formatTime(seconds)}</Text>
         <Text style={[styles.questionText, { color: theme.textPrimary }]}>{displayQ}</Text>
       </View>
+
+      {/* صورة السؤال إن وُجدت */}
+      <QuestionImage imageUrl={displayImg} theme={theme} />
 
       {/* تلميح إذا استُخدم */}
       {hintText && (
@@ -151,6 +190,7 @@ const MCQMode = memo(({
   question, answer, wrong, points, team1, team2, currentTeam,
   onAnswer, onBack, onSwapSame, onSwapRandom,
   tokens, onSpendTokens, onWatchAdLifeline,
+  imageUrl,
   theme, t,
 }) => {
   const ARABIC_LETTERS = ['أ', 'ب', 'ج', 'د'];
@@ -158,41 +198,41 @@ const MCQMode = memo(({
   const [displayQ,      setDisplayQ]      = useState(question);
   const [displayA,      setDisplayA]      = useState(answer);
   const [displayWrong,  setDisplayWrong]  = useState(wrong);
+  const [displayImg,    setDisplayImg]    = useState(imageUrl);
   const [choices,       setChoices]       = useState(() => shuffleArray([answer, ...wrong]));
   const [selected,      setSelected]      = useState(null);
-  const [eliminated,    setEliminated]    = useState(new Set()); // خيارات محذوفة
+  const [eliminated,    setEliminated]    = useState(new Set());
   const [usedLifelines, setUsedLifelines] = useState(new Set());
 
   const isAnswered = !!selected;
   const markUsed   = useCallback((key) => setUsedLifelines(prev => new Set([...prev, key])), []);
 
-  // حذف خيارين خاطئين
   const handleEliminate = useCallback(() => {
     const wrongChoices = choices.filter(c => c !== displayA && !eliminated.has(c));
     const toRemove = shuffleArray(wrongChoices).slice(0, 2);
     setEliminated(new Set([...eliminated, ...toRemove]));
   }, [choices, displayA, eliminated]);
 
-  // تبديل نفس الفئة
   const handleSwapSame = useCallback(() => {
     const result = onSwapSame?.();
     if (result) {
       setDisplayQ(result.question);
       setDisplayA(result.answer);
       setDisplayWrong(result.wrong ?? []);
+      setDisplayImg(result.imageUrl || null);
       setChoices(shuffleArray([result.answer, ...(result.wrong ?? [])]));
       setSelected(null);
       setEliminated(new Set());
     }
   }, [onSwapSame]);
 
-  // تبديل عشوائي
   const handleSwapRandom = useCallback(() => {
     const result = onSwapRandom?.();
     if (result) {
       setDisplayQ(result.question);
       setDisplayA(result.answer);
       setDisplayWrong(result.wrong ?? []);
+      setDisplayImg(result.imageUrl || null);
       setChoices(shuffleArray([result.answer, ...(result.wrong ?? [])]));
       setSelected(null);
       setEliminated(new Set());
@@ -221,6 +261,9 @@ const MCQMode = memo(({
       <View style={[styles.questionBox, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
         <Text style={[styles.questionText, { color: theme.textPrimary }]}>{displayQ}</Text>
       </View>
+
+      {/* صورة السؤال إن وُجدت */}
+      <QuestionImage imageUrl={displayImg} theme={theme} />
 
       {/* وسائل المساعدة — MCQ يدعم: eliminate, swapSame, swapRandom, freeze */}
       {!isAnswered && (
@@ -277,19 +320,19 @@ export default function QuestionScreen({
   question, answer, wrong, points, category,
   team1, team2, currentTeam, onAnswer, onBack,
   mode = 'classic',
+  imageUrl = null,
   // وسائل المساعدة
   tokens = 0,
   onSpendTokens,
   onSwapSame,
   onSwapRandom,
-  allCategories,    // لـ swapRandom في الكلاسيك
+  allCategories,
   currentCategoryId,
 }) {
   const { theme } = useTheme();
   const t = useT();
   const isMCQ = mode === 'mcq' && wrong && wrong.length >= 3;
 
-  // محاكاة مشاهدة إعلان — ستُستبدل بـ AdMob
   const handleWatchAdLifeline = useCallback(async () => {
     return new Promise(resolve => setTimeout(resolve, 2500));
   }, []);
@@ -329,6 +372,7 @@ export default function QuestionScreen({
             onSwapSame={onSwapSame} onSwapRandom={onSwapRandom}
             tokens={tokens} onSpendTokens={onSpendTokens}
             onWatchAdLifeline={handleWatchAdLifeline}
+            imageUrl={imageUrl}
             theme={theme} t={t}
           />
         ) : (
@@ -339,6 +383,7 @@ export default function QuestionScreen({
             onSwapSame={onSwapSame} onSwapRandom={onSwapRandom}
             tokens={tokens} onSpendTokens={onSpendTokens}
             onWatchAdLifeline={handleWatchAdLifeline}
+            imageUrl={imageUrl}
             theme={theme} t={t}
           />
         )}
@@ -348,6 +393,26 @@ export default function QuestionScreen({
 }
 
 const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
+// ── ستايلات الصورة ────────────────────────────────────────────
+const imgStyles = StyleSheet.create({
+  wrapper: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    height: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  errorText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+});
 
 const styles = StyleSheet.create({
   container:       { flex: 1, paddingTop: 50, paddingHorizontal: 20 },

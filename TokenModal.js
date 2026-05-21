@@ -17,9 +17,9 @@ const AD_REWARD = 15;  // ✅ 15 توكن لكل إعلان
 const ADS_KEY   = 'almaydan_ads';
 
 const PLANS = [
-  { id: 'silver',  icon: '🥈', nameKey: 'tokens.planSilver', durationKey: 'tokens.month',    price: '4.99$'  },
-  { id: 'gold',    icon: '🥇', nameKey: 'tokens.planGold',   durationKey: 'tokens.year',     price: '19.99$' },
-  { id: 'diamond', icon: '💎', nameKey: 'tokens.planDiamond',durationKey: 'tokens.lifetime', price: '29.99$' },
+  { id: 'monthly',   icon: '🚀', nameKey: 'tokens.planMonthly',  subKey: 'tokens.planMonthlyAr',  durationKey: 'tokens.month6',   price: '$2.99'  },
+  { id: 'sixmonths', icon: '⭐', nameKey: 'tokens.planSixMonths', subKey: 'tokens.planSixMonthsAr',durationKey: 'tokens.months6',  price: '$9.99'  },
+  { id: 'yearly',    icon: '🏆', nameKey: 'tokens.planYearly',   subKey: 'tokens.planYearlyAr',   durationKey: 'tokens.year',     price: '$15.99' },
 ];
 
 const PACKAGES = [
@@ -90,9 +90,7 @@ export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
         <View style={[styles.sheet, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
 
           <View style={[styles.header, { borderBottomColor: theme.divider }]}>
-            <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: theme.bgElevated }]}>
-              <Text style={[styles.closeText, { color: theme.textPrimary }]}>✕</Text>
-            </TouchableOpacity>
+            <ExitButton onPress={onClose} size={34} />
             <Text style={[styles.title, { color: theme.textSecondary }]}>{t('tokens.title')}</Text>
             <Text style={[styles.balance, { color: theme.accent }]}>{tokens} 🪙</Text>
           </View>
@@ -121,14 +119,14 @@ export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
 
             {/* ترقية */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: theme.accent }]}>{t('tokens.upgrade')}</Text>
+              <Text style={[styles.sectionTitle, { color: theme.accent }]}>{t('tokens.upgradePremium')}</Text>
               <View style={styles.plansCol}>
                 {PLANS.map((plan) => (
                   <TouchableOpacity key={plan.id} style={[styles.planCard, { backgroundColor: theme.bgElevated, borderColor: theme.accentBorder }]} onPress={() => handlePlan(plan)}>
                     <Text style={styles.planIcon}>{plan.icon}</Text>
                     <View style={styles.planInfo}>
                       <Text style={[styles.planName, { color: theme.textPrimary }]}>{t(plan.nameKey)}</Text>
-                      <Text style={[styles.planDuration, { color: theme.textSecondary }]}>{t(plan.durationKey)}</Text>
+                      <Text style={[styles.planDuration, { color: theme.textSecondary }]}>{t(plan.subKey)}</Text>
                     </View>
                     <Text style={[styles.planPrice, { color: theme.accent }]}>{plan.price}</Text>
                   </TouchableOpacity>
@@ -161,7 +159,7 @@ export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
 }
 
 const styles = StyleSheet.create({
-  overlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  overlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'flex-end' },
   sheet:        { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%', borderWidth: 1 },
   header:       { alignItems: 'center', padding: 20, borderBottomWidth: 1, gap: 4 },
   closeBtn:     { position: 'absolute', left: 20, top: 20, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },

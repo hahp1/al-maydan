@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useTheme } from './ThemeContext';
 import { useT } from './I18n';
+import { playSound } from './SoundService';
 
 // ── بنية اللعبة ──
 const JALSA_META = [
@@ -116,8 +117,8 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
 
   const handleGamePress = useCallback((game) => {
     if (!game.ready) return;
+    playSound('tap');
     if (setGameMode) setGameMode(game.mode);
-    // كل ألعاب الميدان = قلب واحد
     if (tryStartGame) {
       tryStartGame(game.id, 1);
     } else {

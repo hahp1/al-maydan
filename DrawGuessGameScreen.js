@@ -40,6 +40,7 @@ import {
   collection, query, where, getDocs, getDoc,
 } from 'firebase/firestore';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 
@@ -214,9 +215,7 @@ function WaitingLobby({ theme, isRTL, friendCode, isFriend, onCancel }) {
   return (
     <View style={[s.lobbyWrap, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
       <StatusBar barStyle={theme.statusBar} />
-      <TouchableOpacity style={s.exitBtnAbs} onPress={onCancel}>
-        <Text style={[s.exitIcon, { color: theme.error }]}>✕</Text>
-      </TouchableOpacity>
+      <ExitButton onPress={onBack} />
       <Text style={s.lobbyBigEmoji}>🎨</Text>
       <Text style={[s.lobbyTitle, { color: theme.textPrimary }]}>
         {isRTL ? 'بانتظار لاعب...' : 'Waiting for player...'}
@@ -698,9 +697,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd }) 
   const renderHeader = (roundLabel, roleText, p1, s1, p2, s2) => (
     <View style={[s.header, { borderBottomColor: theme.border }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <TouchableOpacity style={s.exitBtn} onPress={handleExit} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={[s.exitIcon, { color: theme.error }]}>✕</Text>
-        </TouchableOpacity>
+        <ExitButton onPress={onBack} />
         <GameInfoButton gameType="draw_guess" lang={lang} />
         <WebScreenButton
           playerUid={myUid}
@@ -775,9 +772,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd }) 
     return (
       <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
         <StatusBar barStyle={theme.statusBar} />
-        <TouchableOpacity style={s.exitBtnAbs} onPress={onBack}>
-          <Text style={[s.exitIcon, { color: theme.error }]}>✕</Text>
-        </TouchableOpacity>
+        <ExitButton onPress={onBack} />
         <ScrollView contentContainerStyle={s.modeContent} keyboardShouldPersistTaps="handled">
           <Text style={s.bigEmoji}>🎨</Text>
           <Text style={[s.bigTitle, { color: theme.textPrimary }]}>{isRTL ? 'رسم وتخمين' : 'Draw & Guess'}</Text>
@@ -849,9 +844,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd }) 
     return (
       <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
         <StatusBar barStyle={theme.statusBar} />
-        <TouchableOpacity style={s.exitBtnAbs} onPress={() => setScreen('modeSelect')}>
-          <Text style={[s.exitIcon, { color: theme.error }]}>✕</Text>
-        </TouchableOpacity>
+        <ExitButton onPress={() => setScreen('modeSelect')} />
         <ScrollView contentContainerStyle={s.modeContent} keyboardShouldPersistTaps="handled">
           <Text style={s.bigEmoji}>🎨</Text>
           <Text style={[s.bigTitle, { color: theme.textPrimary }]}>{isRTL ? 'محلي' : 'Local Game'}</Text>

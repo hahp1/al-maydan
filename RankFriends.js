@@ -5,6 +5,7 @@ import {
   Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { useT, useRTLStyles, useLanguage } from './I18n';
 import { RankFriendsEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
@@ -62,6 +63,59 @@ const PRESET_QUESTIONS = [
   { id: 49, text: 'من الذي يسهر أطول وقت ممكن؟',                      emoji: '🌙' },
   { id: 50, text: 'من الأكثر تعقيداً كشخصية؟',                        emoji: '🌀' },
 ];
+const PRESET_QUESTIONS_EN = [
+  { id: 1,  text: "Who laughs the loudest in the group?",                       emoji: '😂' },
+  { id: 2,  text: "Who will fall asleep first tonight?",                        emoji: '😴' },
+  { id: 3,  text: "Who is the shyest person here?",                             emoji: '😳' },
+  { id: 4,  text: "Who will get married first?",                                emoji: '💍' },
+  { id: 5,  text: "Who is the biggest liar?",                                   emoji: '🤥' },
+  { id: 6,  text: "Who is always running late?",                                emoji: '⏰' },
+  { id: 7,  text: "Who is the bravest in the group?",                           emoji: '🦁' },
+  { id: 8,  text: "Who is the tightest with money?",                            emoji: '💰' },
+  { id: 9,  text: "Who changes their mind the most?",                           emoji: '🔄' },
+  { id: 10, text: "Who is most nosy about other people's lives?",               emoji: '👀' },
+  { id: 11, text: "Who is most likely to become famous one day?",               emoji: '🌟' },
+  { id: 12, text: "Who do you trust the most?",                                 emoji: '🤝' },
+  { id: 13, text: "Who will be the last to get married?",                       emoji: '💒' },
+  { id: 14, text: "Who is the wildest in the group?",                           emoji: '🤪' },
+  { id: 15, text: "Who looks calm but is a total mess inside?",                 emoji: '😌' },
+  { id: 16, text: "Who is the most generous?",                                  emoji: '🎁' },
+  { id: 17, text: "Who will be the richest in the group?",                      emoji: '💸' },
+  { id: 18, text: "Who is the most sensitive?",                                 emoji: '🥺' },
+  { id: 19, text: "Who has the most organized life?",                           emoji: '📋' },
+  { id: 20, text: "Who eats the most out of everyone?",                         emoji: '🍕' },
+  { id: 21, text: "Who knows everyone's secrets?",                              emoji: '🤫' },
+  { id: 22, text: "Who is most addicted to their phone?",                       emoji: '📱' },
+  { id: 23, text: "Who is most fearless about speaking their mind?",            emoji: '🎤' },
+  { id: 24, text: "Who is the biggest risk-taker?",                             emoji: '🎲' },
+  { id: 25, text: "Who will be the best parent?",                               emoji: '👨‍👩‍👧' },
+  { id: 26, text: "Who is the most pessimistic?",                               emoji: '😔' },
+  { id: 27, text: "Who is the most optimistic?",                                emoji: '🌈' },
+  { id: 28, text: "Who stubbornly sticks to their opinion even when wrong?",    emoji: '🤦' },
+  { id: 29, text: "Who do you call first in a crisis?",                         emoji: '🆘' },
+  { id: 30, text: "Who is the smartest in the group?",                          emoji: '🧠' },
+  { id: 31, text: "Who sleeps the most?",                                       emoji: '💤' },
+  { id: 32, text: "Who spends the most money on themselves?",                   emoji: '🛍️' },
+  { id: 33, text: "Who gets most attached to their friends?",                   emoji: '🫂' },
+  { id: 34, text: "Who is the most convincing?",                                emoji: '💬' },
+  { id: 35, text: "Who loses their temper the fastest?",                        emoji: '😤' },
+  { id: 36, text: "Who forgives and forgets the quickest?",                     emoji: '🕊️' },
+  { id: 37, text: "Who does everyone secretly envy?",                           emoji: '😏' },
+  { id: 38, text: "Who could go the longest without their phone?",              emoji: '📵' },
+  { id: 39, text: "Who is the most judgmental?",                                emoji: '🧐' },
+  { id: 40, text: "Who is the hardest to please?",                              emoji: '😒' },
+  { id: 41, text: "Who is most into fitness and working out?",                  emoji: '💪' },
+  { id: 42, text: "Who laughs at their own jokes before finishing them?",       emoji: '🤣' },
+  { id: 43, text: "Who is the most dramatic?",                                  emoji: '🎭' },
+  { id: 44, text: "Who gives everyone advice but never follows it themselves?", emoji: '🙄' },
+  { id: 45, text: "Who worries about the future the most?",                     emoji: '😰' },
+  { id: 46, text: "Who enjoys life the most?",                                  emoji: '🥳' },
+  { id: 47, text: "Who is closest to your heart in this group?",               emoji: '❤️' },
+  { id: 48, text: "Who would the group miss the most if they were gone?",       emoji: '🥹' },
+  { id: 49, text: "Who stays up the latest?",                                   emoji: '🦉' },
+  { id: 50, text: "Who is the most complex personality in the group?",          emoji: '🌀' },
+];
+
 
 // ─── عدد اللاعبين المصنّفين لكل سؤال حسب إجمالي عدد اللاعبين ────
 function getRanksNeeded(playerCount) {
@@ -183,9 +237,10 @@ const RevealCard = memo(({ ans, theme }) => (
 ));
 
 // ════════════════════════════════════════════════════════════════
-export default function RankFriendsScreen({ onBack }) {
+export default function RankFriendsScreen({ onBack, experience }) {
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
+  const isGlobal = experience === 'global';
   const t  = useT();
   const rs = useRTLStyles();
 

@@ -9,8 +9,8 @@
 
 import { useState, useEffect, useCallback, memo } from 'react';
 import {
-  StyleSheet, Text, View, TouchableOpacity,
-  StatusBar, ScrollView, Switch, Alert, Linking,
+  StyleSheet, Text, View, TouchableOpacity, Pressable,
+  StatusBar, ScrollView, Switch, Linking,
   Modal, Image, Dimensions,
 } from 'react-native';
 import {
@@ -120,12 +120,13 @@ const PreviewModal = memo(({ item, visible, onClose, onSelect, onBuy, isActive, 
       animationType="fade"
       onRequestClose={onClose}
     >
-      <TouchableOpacity
-        style={styles.previewOverlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <TouchableOpacity activeOpacity={1} style={styles.previewContainer}>
+      <View style={styles.previewOverlay}>
+        <View style={styles.previewContainer}>
+
+          {/* زر الإغلاق */}
+          <TouchableOpacity style={styles.previewCloseBtn} onPress={onClose}>
+            <ExitButton onPress={onClose} size={36} />
+          </TouchableOpacity>
 
           {/* محاكاة شاشة الهاتف */}
           <View style={[styles.previewPhone, { backgroundColor: t.bg, borderColor: t.borderCard }]}>
@@ -239,8 +240,8 @@ const PreviewModal = memo(({ item, visible, onClose, onSelect, onBuy, isActive, 
             )}
           </View>
 
-        </TouchableOpacity>
-      </TouchableOpacity>
+        </View>
+      </View>
     </Modal>
   );
 });
@@ -296,15 +297,8 @@ const ThemeRow = memo(({ item, isActive, unlocked = true, isPro = false, onSelec
             </View>
           )}
         </View>
-        {item.isCrystal && <Text style={[styles.themeRowSub, { color: theme.textMuted }]}>{isRtl ? '💎 كرستال' : '💎 Crystal'}</Text>}
-        {item.isMist    && <Text style={[styles.themeRowSub, { color: theme.textMuted }]}>{isRtl ? '🌫️ ضباب'   : '🌫️ Mist'}</Text>}
-        {item.isCityTheme && (
-          <Text style={[styles.themeRowSub, { color: theme.textMuted }]}>
-            {item.timeOfDay === 'dawn' ? (isRtl ? '🌅 فجر' : '🌅 Dawn') :
-             item.timeOfDay === 'dusk' ? (isRtl ? '🌇 غروب' : '🌇 Dusk') :
-                                         (isRtl ? '🌕 ليل' : '🌕 Night')}
-          </Text>
-        )}
+
+
       </View>
 
       {/* الجانب الأيمن: اختيار / زر شراء / مفتوح */}
@@ -360,9 +354,13 @@ const ThemeGroup = memo(({ group, themeId, onSelect, onPreview, onBuy, theme, la
   return (
     <View style={styles.themeGroup}>
       <View style={styles.groupHeader}>
-        <Text style={styles.groupEmoji}>{group.groupEmoji}</Text>
-        <Text style={[styles.groupLabel, { color: theme.textSecondary }]}>{label}</Text>
+        {/* يسار: الاسم الإنجليزي الرسمي */}
+        <Text style={[styles.groupLabelEn, { color: theme.textMuted }]}>{group.groupLabel}</Text>
+        {/* خط فاصل */}
         <View style={[styles.groupLine, { backgroundColor: theme.divider }]} />
+        {/* يمين: الاسم الشاعري العربي + إيموجي */}
+        <Text style={[styles.groupLabel, { color: theme.textSecondary }]}>{label}</Text>
+        <Text style={styles.groupEmoji}>{group.groupEmoji}</Text>
       </View>
       <View style={[styles.groupCard, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
         {group.themes.map((item, idx) => {
@@ -397,6 +395,158 @@ const ThemeGroup = memo(({ group, themeId, onSelect, onPreview, onBuy, theme, la
 const HIT = { top: 8, bottom: 8, left: 8, right: 8 };
 
 // ══════════════════════════════════════════════════════════════
+//  ThemedAlert — مودال تأكيد بالثيم بدلاً من Alert.alert الأبيض
+// ══════════════════════════════════════════════════════════════
+const ThemedAlert = memo(({ visible, title, message, buttons, onClose, theme }) => {
+  if (!visible) return null;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={taStyles.overlay} onPress={onClose}>
+        <Pressable style={[taStyles.box, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+          {title ? <Text style={[taStyles.title, { color: theme.textPrimary }]}>{title}</Text> : null}
+          {message ? <Text style={[taStyles.msg, { color: theme.textSecondary }]}>{message}</Text> : null}
+          <View style={taStyles.btns}>
+            {(buttons || []).map((btn, i) => (
+              <TouchableOpacity
+                key={i}
+                style={[
+                  taStyles.btn,
+                  { backgroundColor: btn.style === 'destructive' ? theme.error + '18' : theme.accentSoft,
+                    borderColor:     btn.style === 'destructive' ? theme.error + '55' : theme.accentBorder,
+                    borderWidth: 1.5 },
+                ]}
+                onPress={() => { onClose(); btn.onPress?.(); }}
+                activeOpacity={0.8}
+              >
+                <Text style={[
+                  taStyles.btnTxt,
+                  { color: btn.style === 'destructive' ? theme.error
+                         : btn.style === 'cancel'      ? theme.textMuted
+                         : theme.accent }
+                ]}>
+                  {btn.text}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+});
+
+const taStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', alignItems: 'center', justifyContent: 'center', padding: 32 },
+  box:     { width: '100%', borderRadius: 22, borderWidth: 1.5, padding: 24, gap: 10 },
+  title:   { fontSize: 18, fontWeight: '900', textAlign: 'center' },
+  msg:     { fontSize: 14, lineHeight: 22, textAlign: 'center' },
+  btns:    { flexDirection: 'row', gap: 10, marginTop: 6 },
+  btn:     { flex: 1, paddingVertical: 13, borderRadius: 14, alignItems: 'center' },
+  btnTxt:  { fontSize: 15, fontWeight: '800' },
+});
+
+// ══════════════════════════════════════════════════════════════
+//  ExperiencePickerModal — اختيار التجربة مع الثيم
+// ══════════════════════════════════════════════════════════════
+const ExperiencePickerModal = memo(({ visible, current, onSelect, onClose, theme, lang }) => {
+  const options = [
+    {
+      value: EXPERIENCES.ARABIC,
+      emoji: '🕌',
+      label: lang === 'ar' ? 'التجربة العربية' : 'Arabic Experience',
+      desc:  lang === 'ar'
+        ? 'جلسة وألعاب وأسئلة — كل شيء بالعربي'
+        : 'Games, party & trivia — everything in Arabic',
+      tag:   lang === 'ar' ? '🇸🇦 عربي كامل' : '🇸🇦 Full Arabic',
+    },
+    {
+      value: EXPERIENCES.GLOBAL,
+      emoji: '🌍',
+      label: 'Global Games',
+      desc:  'Same games & party — trivia questions in English',
+      tag:   '🌐 English Trivia',
+    },
+  ];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={[expStyles.overlay]} onPress={onClose}>
+        <Pressable style={[expStyles.box, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+          <View style={expStyles.header}>
+            <Text style={[expStyles.title, { color: theme.accent }]}>
+              {lang === 'ar' ? '🌐 نوع التجربة' : '🌐 Experience'}
+            </Text>
+            <TouchableOpacity
+              onPress={onClose}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={[expStyles.closeBtn, { backgroundColor: theme.bgElevated }]}
+            >
+              <ExitButton onPress={onClose} size={30} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={expStyles.options}>
+            {options.map(opt => {
+              const isActive = current === opt.value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    expStyles.option,
+                    { backgroundColor: isActive ? theme.accentSoft : theme.bgElevated,
+                      borderColor: isActive ? theme.accent : theme.borderCard },
+                  ]}
+                  onPress={() => { onSelect(opt.value); onClose(); }}
+                  activeOpacity={0.82}
+                >
+                  <Text style={expStyles.optionEmoji}>{opt.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={expStyles.labelRow}>
+                      <Text style={[expStyles.optionLabel, { color: isActive ? theme.accent : theme.textPrimary }]}>
+                        {opt.label}
+                      </Text>
+                      <View style={[expStyles.tag, { backgroundColor: isActive ? theme.accent + '22' : theme.bgElevated, borderColor: isActive ? theme.accent + '66' : theme.borderCard }]}>
+                        <Text style={[expStyles.tagTxt, { color: isActive ? theme.accent : theme.textMuted }]}>{opt.tag}</Text>
+                      </View>
+                    </View>
+                    <Text style={[expStyles.optionDesc, { color: theme.textSecondary }]}>{opt.desc}</Text>
+                  </View>
+                  {isActive && (
+                    <View style={[expStyles.check, { backgroundColor: theme.accent }]}>
+                      <Text style={expStyles.checkTxt}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+});
+
+const expStyles = StyleSheet.create({
+  overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  box:         { width: '100%', borderRadius: 24, borderWidth: 1.5, overflow: 'hidden' },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, paddingBottom: 14 },
+  title:       { fontSize: 18, fontWeight: '900' },
+  closeBtn:    { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  closeTxt:    { fontSize: 16, fontWeight: '700' },
+  options:     { gap: 10, paddingHorizontal: 16, paddingBottom: 20 },
+  option:      { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 16, borderWidth: 1.5 },
+  optionEmoji: { fontSize: 28 },
+  optionLabel: { fontSize: 16, fontWeight: '800' },
+  labelRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  tag:         { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderWidth: 1 },
+  tagTxt:      { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  optionDesc:  { fontSize: 13, lineHeight: 19, marginBottom: 4 },
+  optionExtra: { fontSize: 11, lineHeight: 16 },
+  check:       { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  checkTxt:    { color: '#fff', fontSize: 13, fontWeight: '900' },
+});
+
+// ══════════════════════════════════════════════════════════════
 //  الشاشة الرئيسية
 // ══════════════════════════════════════════════════════════════
 
@@ -412,7 +562,7 @@ export default function SettingsScreen({
   onChangeExperience,
 }) {
   const { t, lang, setLang } = useLanguage();
-  const { isDark, theme, themeId, setThemeId, setDark } = useTheme();
+  const { theme, themeId, setThemeId } = useTheme();
 
   const [notifications, setNotifications] = useState(true);
   const [musicOn,       setMusicOn]       = useState(true);
@@ -429,7 +579,6 @@ export default function SettingsScreen({
 
   const handleToggleMusic  = useCallback(async (v) => { setMusicOn(v);  await setMusicEnabled(v);  }, []);
   const handleToggleSounds = useCallback(async (v) => { setSoundsOn(v); await setSoundsEnabled(v); }, []);
-  const handleToggleDark   = useCallback((v) => { setDark(v); }, [setDark]);
   const handleSelectTheme = useCallback((id) => {
     const item = THEME_GROUPS.flatMap(g => g.themes).find(t => t.id === id);
     if (!isThemeUnlocked(item, isPro, purchased)) return;
@@ -439,7 +588,7 @@ export default function SettingsScreen({
   const handleBuyTheme = useCallback(async (item) => {
     if (!user?.uid) return;
     if (tokens < item.price) {
-      Alert.alert(
+      showAlert(
         lang === 'ar' ? 'رصيد غير كافٍ' : 'Not enough tokens',
         lang === 'ar'
           ? `تحتاج ${item.price} توكن. رصيدك الحالي ${tokens} توكن.`
@@ -447,7 +596,7 @@ export default function SettingsScreen({
       );
       return;
     }
-    Alert.alert(
+    showAlert(
       lang === 'ar' ? 'شراء الثيم' : 'Buy Theme',
       lang === 'ar'
         ? `شراء "${item.labelAr}" مقابل ${item.price} 🪙 ؟`
@@ -460,7 +609,7 @@ export default function SettingsScreen({
             setTokens?.(result.newTokens);
             setThemeId(item.id);
           } else {
-            Alert.alert('❌', result.error || (lang === 'ar' ? 'حدث خطأ' : 'Error'));
+            showAlert('❌', result.error || (lang === 'ar' ? 'حدث خطأ' : 'Error'), [{ text: lang === 'ar' ? 'حسناً' : 'OK' }]);
           }
         }},
       ]
@@ -474,43 +623,44 @@ export default function SettingsScreen({
   const handleClosePreview = useCallback(() => setPreviewVisible(false), []);
 
   const handleBuyTokens = useCallback(() =>
-    Alert.alert(t('settings.buyCoins'), t('settings.buyCoinsMsg'), [{ text: t('common.ok') }]), [t]);
+    showAlert(t('settings.buyCoins'), t('settings.buyCoinsMsg'), [{ text: t('common.ok') }]), [t, showAlert]);
 
   const handleLogout = useCallback(() =>
-    Alert.alert(t('settings.logoutTitle'), t('settings.logoutMsg'), [
+    showAlert(t('settings.logoutTitle'), t('settings.logoutMsg'), [
       { text: t('common.cancel'), style: 'cancel' },
       { text: t('settings.logoutConfirm'), style: 'destructive', onPress: onLogout },
-    ]), [t, onLogout]);
+    ]), [t, onLogout, showAlert]);
 
   const handleRate = useCallback(() =>
-    Alert.alert(t('settings.rateTitle'), t('settings.rateMsg'), [
+    showAlert(t('settings.rateTitle'), t('settings.rateMsg'), [
       { text: t('settings.rateLater'), style: 'cancel' },
       { text: t('settings.rateNow'), onPress: () =>
           Linking.openURL('https://play.google.com/store').catch(() =>
-            Alert.alert('', t('settings.rateSoon'), [{ text: t('common.ok') }])) },
-    ]), [t]);
+            showAlert('', t('settings.rateSoon'), [{ text: t('common.ok') }])) },
+    ]), [t, showAlert]);
 
-  const handleChangeExperience = useCallback(() =>
-    Alert.alert(
-      t('settings.experience'),
-      t('settings.experienceConfirm'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('settings.experienceChange'), onPress: onChangeExperience },
-      ]
-    ), [t, onChangeExperience]);
+  const [expModalVisible,   setExpModalVisible]   = useState(false);
+  const [alertConfig,       setAlertConfig]       = useState(null);
+  const showAlert = useCallback((title, message, buttons) => {
+    setAlertConfig({ title, message, buttons });
+  }, []);
+  const handleChangeExperience = useCallback(() => setExpModalVisible(true), []);
 
-  const handleTerms   = useCallback(() => Alert.alert(t('settings.terms'),      t('settings.termsMsg'),   [{ text: t('common.ok') }]), [t]);
-  const handleContact = useCallback(() => Alert.alert(t('settings.contact'),    t('settings.contactMsg'), [{ text: t('common.ok') }]), [t]);
-  const handleAbout   = useCallback(() => Alert.alert(t('settings.aboutTitle'), t('settings.aboutMsg'),   [{ text: t('common.ok') }]), [t]);
+  const handleTerms   = useCallback(() => showAlert(t('settings.terms'),      t('settings.termsMsg'),   [{ text: t('common.ok') }]), [t, showAlert]);
+  const handleContact = useCallback(() => showAlert(t('settings.contact'),    t('settings.contactMsg'), [{ text: t('common.ok') }]), [t, showAlert]);
+  const handleAbout   = useCallback(() => showAlert(t('settings.aboutTitle'), t('settings.aboutMsg'),   [{ text: t('common.ok') }]), [t, showAlert]);
 
   const switchToAr = useCallback(() => setLang('ar'), [setLang]);
   const switchToEn = useCallback(() => setLang('en'), [setLang]);
 
   const avatarText  = user?.type === 'guest' ? '👤' : 'G';
   const accountName = user?.type === 'guest' ? t('common.guest').replace('👤 ', '') : user?.name || '';
-  const accountType = user?.type === 'guest'  ? t('settings.guestAccount')
-    : user?.type === 'google' ? t('settings.googleAccount') : t('settings.appleAccount');
+  const isGuestUser = user?.isGuest || user?.uid?.startsWith('#guest');
+  const accountType = isGuestUser
+    ? t('settings.guestAccount')
+    : user?.type === 'apple' || user?.providerId === 'apple.com'
+      ? t('settings.appleAccount')
+      : t('settings.googleAccount');
 
   const experienceLabel = experience === EXPERIENCES.GLOBAL
     ? t('settings.experienceGlobal')
@@ -544,6 +694,52 @@ export default function SettingsScreen({
         </View>
       </View>
 
+      {/* ─── بريميوم ─── */}
+      <Section title={lang === 'ar' ? '👑 بريميوم' : '👑 Premium'} theme={theme}>
+        <View style={styles.premiumRow}>
+          {[
+            { id: 'monthly',   icon: '🚀', nameAr: 'حزمة البداية',      nameEn: 'Starter',      subAr: 'شهر',       subEn: '1 mo',  price: '$2.99',  color: '#6366f1' },
+            { id: 'sixmonths', icon: '⭐', nameAr: 'الأكثر اختياراً',   nameEn: 'Most Popular', subAr: '٦ أشهر',    subEn: '6 mo',  price: '$9.99',  color: '#f59e0b', badge: true },
+            { id: 'yearly',    icon: '🏆', nameAr: 'الأوفر',             nameEn: 'Best Value',   subAr: 'سنة',       subEn: '1 yr',  price: '$15.99', color: '#22c55e' },
+          ].map(plan => (
+            <TouchableOpacity
+              key={plan.id}
+              style={[styles.premiumCard, { backgroundColor: theme.bgElevated, borderColor: plan.color + '66' }]}
+              onPress={() => showAlert(
+                lang === 'ar' ? `👑 ${plan.nameAr}` : `👑 ${plan.nameEn}`,
+                lang === 'ar'
+                  ? `${plan.price} — ${plan.subAr}
+
+قلوب لا محدودة · كل الثيمات · بدون إعلانات
+
+سيكون متاحاً عند الإطلاق الرسمي.`
+                  : `${plan.price} — ${plan.subEn}
+
+Unlimited hearts · All themes · No ads
+
+Available at official launch.`,
+                [{ text: lang === 'ar' ? 'حسناً' : 'OK' }]
+              )}
+              activeOpacity={0.85}
+            >
+              {plan.badge && (
+                <View style={[styles.premiumBadge, { backgroundColor: plan.color }]}>
+                  <Text style={styles.premiumBadgeText}>⭐</Text>
+                </View>
+              )}
+              <Text style={styles.premiumIcon}>{plan.icon}</Text>
+              <Text style={[styles.premiumName, { color: plan.color }]}>
+                {lang === 'ar' ? plan.nameAr : plan.nameEn}
+              </Text>
+              <Text style={[styles.premiumSub, { color: theme.textMuted }]}>
+                {lang === 'ar' ? plan.subAr : plan.subEn}
+              </Text>
+              <Text style={[styles.premiumPrice, { color: theme.textPrimary }]}>{plan.price}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Section>
+
       {/* ─── النقاط ─── */}
       <Section title={t('settings.tokensSection')} theme={theme}>
         <View style={styles.row}>
@@ -573,6 +769,15 @@ export default function SettingsScreen({
         </Section>
       )}
 
+      <ExperiencePickerModal
+        visible={expModalVisible}
+        current={experience}
+        onSelect={onChangeExperience}
+        onClose={() => setExpModalVisible(false)}
+        theme={theme}
+        lang={lang}
+      />
+
       {/* ─── الصوت ─── */}
       <Section title={t('settings.soundSection')} theme={theme}>
         <SettingRow label={t('settings.music')}  sub={t('settings.musicSub')}  value={musicOn}  onChange={handleToggleMusic}  theme={theme} />
@@ -601,16 +806,7 @@ export default function SettingsScreen({
           />
         ))}
 
-        {/* Dark/Light toggle — للتوافق */}
-        <View style={[styles.card, { backgroundColor: theme.bgCard, borderColor: theme.borderCard, marginTop: 8 }]}>
-          <SettingRow
-            label={t('settings.darkMode')}
-            sub={isDark ? t('settings.darkModeOn') : t('settings.darkModeOff')}
-            value={isDark}
-            onChange={handleToggleDark}
-            theme={theme}
-          />
-        </View>
+
       </View>
 
       {/* ─── الإشعارات ─── */}
@@ -672,6 +868,16 @@ export default function SettingsScreen({
       <Text style={[styles.version, { color: theme.textMuted }]}>
         {t('settings.copyright')}
       </Text>
+
+      {/* ─── ThemedAlert ─── */}
+      <ThemedAlert
+        visible={!!alertConfig}
+        title={alertConfig?.title}
+        message={alertConfig?.message}
+        buttons={alertConfig?.buttons}
+        onClose={() => setAlertConfig(null)}
+        theme={theme}
+      />
 
       {/* ─── Preview Modal ─── */}
       <PreviewModal
@@ -741,6 +947,15 @@ const styles = StyleSheet.create({
   groupHeader:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
   groupEmoji:   { fontSize: 16 },
   groupLabel:   { fontSize: 13, fontWeight: '700', letterSpacing: 1 },
+  groupLabelEn: { fontSize: 11, fontWeight: '600', letterSpacing: 1.5, textTransform: 'uppercase', opacity: 0.55 },
+  premiumRow:      { flexDirection: 'row', gap: 8 },
+  premiumCard:     { flex: 1, borderRadius: 16, borderWidth: 1.5, padding: 12, alignItems: 'center', gap: 4, position: 'relative' },
+  premiumBadge:    { position: 'absolute', top: -8, right: -8, width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  premiumBadgeText:{ fontSize: 10, color: '#000' },
+  premiumIcon:     { fontSize: 24 },
+  premiumName:     { fontSize: 11, fontWeight: '800', textAlign: 'center' },
+  premiumSub:      { fontSize: 10, textAlign: 'center' },
+  premiumPrice:    { fontSize: 13, fontWeight: '900', marginTop: 2 },
   groupLine:    { flex: 1, height: 1 },
   groupCard:    { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
 
@@ -812,18 +1027,10 @@ const styles = StyleSheet.create({
   proNoticeText: { fontSize: 13, fontWeight: '700', color: '#f5c518' },
 
   // ── Preview Modal ──
-  previewOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewContainer: {
-    width: SW * 0.85,
-    maxWidth: 360,
-    alignItems: 'center',
-    gap: 14,
-  },
+  previewOverlay:    { flex: 1, backgroundColor: '#000000cc', alignItems: 'center', justifyContent: 'center' },
+  previewContainer:  { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  previewCloseBtn:   { position: 'absolute', top: 60, right: 24, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  previewCloseTxt:   { color: '#fff', fontSize: 18, fontWeight: '700' },
   previewPhone: {
     width: '100%',
     borderRadius: 20,

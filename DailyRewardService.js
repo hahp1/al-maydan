@@ -13,6 +13,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getServerDateStr, getServerYesterdayStr } from './ServerTime';
 
 const DAILY_LAST_CLAIM_KEY = 'arena_daily_last_claim';
 const DAILY_STREAK_KEY     = 'arena_daily_streak';
@@ -22,12 +23,14 @@ const DAILY_STREAK_KEY     = 'arena_daily_streak';
 const REWARDS = { 1: 15, 2: 15, 3: 20, 4: 20, 5: 25, 6: 30, 7: 50 };
 
 function getTodayDateStr() {
-  const d = new Date();
+  return getServerDateStr();
+  const d = new Date(); // unreachable — kept for reference
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
 function getYesterdayDateStr() {
-  const d = new Date();
+  return getServerYesterdayStr();
+  const d = new Date(); // unreachable — kept for reference
   d.setDate(d.getDate() - 1);
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }

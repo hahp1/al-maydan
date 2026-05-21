@@ -16,6 +16,8 @@ import DailyRewardModal from './DailyRewardModal';
 import { checkDailyReward, claimDailyReward } from './DailyRewardService';
 import { useLanguage } from './I18n';
 import { useTheme } from './ThemeContext';
+import HeartIcon     from './HeartIcon';
+import ChargingHeart from './ChargingHeart';
 import { getRefillCountdown } from './HeartsService';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -98,9 +100,9 @@ function HeartsWidget({ hearts, countdown, onPress, theme }) {
       hitSlop={HIT_SLOP}
       activeOpacity={0.75}
     >
-      <Animated.Text style={[styles.heartIcon, { transform: [{ scale: pulseHeart }] }]}>
-        {hearts > 0 ? '❤️' : '🖤'}
-      </Animated.Text>
+      <Animated.View style={{ transform: [{ scale: pulseHeart }] }}>
+        <HeartIcon size={22} filled={hearts > 0} hearts={hearts} pulseWhenZero glow={false} />
+      </Animated.View>
       <Text style={[styles.heartsCount, { color: heartColor }]}>{hearts}</Text>
       {countdown && hearts === 0 && (
         <Text style={[styles.heartsCountdown, { color: '#9ca3af' }]}>{countdown}</Text>
@@ -136,6 +138,7 @@ export default function HomeScreen({
   highScore,
   hearts, setHearts,
   onOpenHeartsModal,
+  activeTournament,
 }) {
   const { t }     = useLanguage();
   const { theme } = useTheme();
@@ -344,8 +347,26 @@ export default function HomeScreen({
         </Animated.View>
       </View>
 
-      {/* ─── زر الأصدقاء ─── */}
-      <Animated.View style={[styles.friendsWrap, { opacity: fadeAnim }]}>
+      {/* ─── أزرار الأسفل ─── */}
+      <Animated.View style={[styles.friendsWrap, { opacity: fadeAnim, gap: 10 }]}>
+        {/* زر البطولة — يظهر فقط إذا كانت بطولة نشطة */}
+        {activeTournament?.isActive && (
+          <TouchableOpacity
+            style={[styles.friendsBtn, {
+              backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
+              borderColor: '#f59e0b66',
+              flexDirection: 'row', gap: 8,
+            }]}
+            onPress={() => setScreen('knowledge')}
+            activeOpacity={0.8}
+          >
+            <Text style={{ fontSize: 18 }}>🏆</Text>
+            <Text style={[styles.friendsBtnText, { color: '#f59e0b' }]}>
+              {t('home.tournament') || 'البطولة الأسبوعية'}
+            </Text>
+          </TouchableOpacity>
+        )}
+        {/* زر الأصدقاء */}
         <TouchableOpacity
           style={[styles.friendsBtn, {
             backgroundColor: isCityTheme ? theme.purple + '0c' : theme.bgCard,

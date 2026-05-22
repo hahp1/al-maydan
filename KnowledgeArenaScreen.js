@@ -17,7 +17,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   Animated, StatusBar, Modal, ScrollView,
   TouchableWithoutFeedback, ActivityIndicator,
-, BackHandler } from 'react-native';
+  BackHandler } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TokenModal from './TokenModal';
 import { useTheme } from './ThemeContext';

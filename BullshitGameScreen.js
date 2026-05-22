@@ -334,7 +334,7 @@ function AccusationModal({ accusation, players, myUid, theme, onClose }) {
 // ─────────────────────────────────────────────
 //  الشاشة الرئيسية
 // ─────────────────────────────────────────────
-export default function BullshitGameScreen({ onBack, currentUser, onGameEnd }) {
+export default function BullshitGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
   const {
@@ -346,7 +346,7 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd }) {
     updateRoom,
     endGame,
     leaveRoom,
-  } = useOnlineGame('maktshof', currentUser);
+  } = useOnlineGame('maktshof', currentUser, onGameReady);
 
   const [leaveModalVisible, setLeaveModalVisible] = useState(false);
 

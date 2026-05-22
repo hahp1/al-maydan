@@ -63,7 +63,7 @@ const VOLUMES = {
   reward_heart_refresh:  0.40,
   reward_heart_ad:       0.50,
   maktshof_accuse:       0.90,
-  maktshof_laugh:        0.85,
+  maktshof_laugh:        0.65,
 };
 
 // ── تهيئة الإعدادات ──

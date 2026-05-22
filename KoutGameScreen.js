@@ -4,6 +4,7 @@ import {
   Dimensions, Animated, Platform, Modal,
 } from 'react-native';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import { useOnlineGame } from './useOnlineGame';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
@@ -577,11 +578,11 @@ function GameOverModal({ visible, teamA, teamB, onNewGame, onExit }) {
 /* ═══════════════════════════════════════════════
    MAIN SCREEN
 ═══════════════════════════════════════════════ */
-export default function KoutGameScreen({ onBack, currentUser, onGameEnd }) {
+export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
   const { roomId, isPlayer1, roomData, loading, error, updateRoom, endGame, leaveRoom } =
-    useOnlineGame('kout', currentUser);
+    useOnlineGame('kout', currentUser, onGameReady);
 
   /* ── Local game state (mirrors Firestore) ── */
   const [phase, setPhase] = useState('waiting'); // waiting|lobby|bidding|hokmChoice|playing|roundEnd|gameOver
@@ -901,9 +902,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd }) {
       <View style={styles.header}>
         {/* exit + web top-left */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <TouchableOpacity onPress={() => { leaveRoom(); onBack(); }} style={styles.exitBtn}>
-            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '700' }}>✕</Text>
-          </TouchableOpacity>
+          <ExitButton onPress={() => { leaveRoom(); onBack(); }} />
           <GameInfoButton gameType="kout" lang={lang} />
           <WebScreenButton
             playerUid={myUid}

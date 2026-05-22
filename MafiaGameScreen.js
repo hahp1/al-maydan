@@ -189,7 +189,7 @@ function CircleTimer({ total, remaining, color, theme }) {
 // ═══════════════════════════════════════════
 //  الشاشة الرئيسية
 // ═══════════════════════════════════════════
-export default function MafiaGameScreen({ onBack, currentUser, onGameEnd }) {
+export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
 
@@ -368,6 +368,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd }) {
       lastUpdate: Date.now(),
     });
     setScreen('game');
+    onGameReady?.();
   };
 
   // ─────────────────────────────────────────

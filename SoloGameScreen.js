@@ -13,7 +13,7 @@ import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
   StatusBar, Animated, Alert, ScrollView, ActivityIndicator,
-, BackHandler } from 'react-native';
+  BackHandler } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from './ThemeContext';
 import ExitButton from './ExitButton';

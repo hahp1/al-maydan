@@ -909,12 +909,12 @@ export default function OnlineGameScreen({
           </TouchableOpacity>
         )}
       </ScrollView>
-    </View>
       <LeaveModal
         visible={leaveVisible}
         onCancel={() => setLeaveVisible(false)}
         onConfirm={() => { setLeaveVisible(false); onBack(); }}
       />
+    </View>
   );
 }
 

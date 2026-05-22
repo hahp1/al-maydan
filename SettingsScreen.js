@@ -21,6 +21,7 @@ import { useLanguage } from './I18n';
 import { useTheme, THEME_GROUPS } from './ThemeContext';
 import { EXPERIENCES } from './OnboardingScreen';
 import { purchaseTheme, isThemeUnlocked } from './ProService';
+import ExitButton from './ExitButton';
 
 const PACKAGES = [
   { amount: 200,  price: '0.99$' },

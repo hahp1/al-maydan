@@ -131,8 +131,7 @@ export default function HeartsModal({
           {/* ── هيدر ثابت — دائماً ظاهر ── */}
           <View style={styles.headerRow}>
             <Text style={[styles.sheetTitle, { color: theme.accent }]}>❤️ القلوب</Text>
-            <ExitButton onPress={onClose} size={32}
-            </TouchableOpacity>
+            <ExitButton onPress={onClose} size={32} />
           </View>
 
           {/* ── عداد القلوب ── */}

@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from './ThemeContext';
+import ExitButton from './ExitButton';
 import { useT } from './I18n';
 
 const MAX_ADS   = 10;  // ✅ 10 إعلانات/يوم للتوكنز

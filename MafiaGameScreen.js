@@ -657,9 +657,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
 
       {/* زر الخروج + شاشة كبيرة */}
       <View style={gs.exitBtnRow}>
-        <TouchableOpacity style={[gs.exitBtn, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
-          onPress={() => setShowLeave(true)}>
-          </ExitButton_placeholder>
+        <ExitButton onPress={() => setShowLeave(true)} />
         <GameInfoButton gameType="mafia" lang={lang} />
         <WebScreenButton
           playerUid={myUid}

@@ -14,6 +14,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { BackHandler, Alert, View, ActivityIndicator, Modal, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCachedCategories } from './UseCachedCategories';
+import { auth } from './firebaseConfig';
+import { onAuthStateChanged } from 'firebase/auth';
+import { initServerTime } from './ServerTime';
+
+const SESSION_KEY = 'almaydan_session';
 
 // ── Providers ──
 import { ThemeProvider, useTheme, ALL_THEMES } from './ThemeContext';

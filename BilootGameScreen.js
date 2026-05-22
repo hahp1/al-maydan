@@ -416,13 +416,13 @@ function ScoreBar({ teamAName, teamBName, scoreA, scoreB, trickPtsA, trickPtsB, 
   );
 }
 
-export default function BilootGameScreen({ onBack, currentUser, onGameEnd }) {
+export default function BilootGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme, themeId } = useTheme();
   const { lang }           = useLanguage();
   const {
     roomId, isPlayer1, roomData, loading, error,
     updateRoom, leaveRoom,
-  } = useOnlineGame('biloot', currentUser);
+  } = useOnlineGame('biloot', currentUser, onGameReady);
 
   const [phase, setPhase]               = useState('waiting');
   const [players, setPlayers]           = useState([]);

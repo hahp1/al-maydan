@@ -10,7 +10,7 @@
 import { useState, useCallback, memo, useMemo, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
-  StatusBar, ScrollView, useWindowDimensions, Alert, ActivityIndicator,, BackHandler}, BackHandler } from 'react-native';
+  StatusBar, ScrollView, useWindowDimensions, Alert, ActivityIndicator, BackHandler } from 'react-native';
 import QuestionScreen from './QuestionScreen';
 import { useTheme } from './ThemeContext';
 import LeaveModal from './LeaveModal';

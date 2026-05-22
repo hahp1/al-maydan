@@ -177,7 +177,7 @@ const CARD_W   = (SW - H_PAD * 2 - GAP * (COLS - 1)) / COLS;
 const CARD_H   = CARD_W * 0.65; // نسبة أبعاد 16:9 تقريباً على شبكة صغيرة
 
 // ════════════════════════════════════════════════════════════════
-export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd }) {
+export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
 
@@ -324,7 +324,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd }) 
   };
 
   const canStart = playerList.length === 4 && spyRed && spyBlue;
-  const startGame = async () => { if (canStart) await updateRoom({ status: 'playing' }); };
+  const startGame = async () => { if (canStart) { await updateRoom({ status: 'playing' }); onGameReady?.(); } };
 
   // ─── إرسال تلميح ──────────────────────────────────────────
   const sendClue = async () => {

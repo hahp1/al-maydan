@@ -520,11 +520,7 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd, onG
       <View style={[s.container, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, margin: 16 }}>
-          <TouchableOpacity
-            onPress={() => setLeaveModalVisible(true)}
-            style={[s.backBtn, { borderColor: theme.borderCard }]}
-          >
-            </ExitButton_placeholder>
+          <ExitButton onPress={() => setLeaveModalVisible(true)} />
           <GameInfoButton gameType="maktshof" lang={lang} />
           <WebScreenButton
             playerUid={myUid}

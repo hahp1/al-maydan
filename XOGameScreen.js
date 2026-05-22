@@ -366,12 +366,6 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
       {/* ── TopBar: زر خروج + بروفايل الخصم ── */}
       <View style={s.topBar}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <TouchableOpacity
-            onPress={() => Alert.alert('خروج', 'هل تريد مغادرة اللعبة؟', [
-              { text: 'إلغاء', style: 'cancel' },
-              { text: 'خروج', style: 'destructive', onPress: handleQuit },
-            ])}
-/>
           <ExitButton onPress={handleQuit} />
           <GameInfoButton gameType="xo" lang={lang} />
           <WebScreenButton

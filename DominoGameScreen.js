@@ -774,7 +774,7 @@ export default function DominoGameScreen({ onBack, currentUser, players: initial
             playerUid={currentUser?.uid || 'dom_p0'}
             playerName={playerInfo?.[0]?.name || ''}
             gameType="domino"
-            gameRoomId={roomId || ''}
+            gameRoomId={''}
             getPublicData={() => ({ scores, round: roundNum })}
             themeName={themeId || 'dark'}
           />

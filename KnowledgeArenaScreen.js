@@ -912,12 +912,12 @@ export default function KnowledgeArenaScreen({
         tokens={tokens}
         onAddTokens={(amount) => setTokens(prev => prev + amount)}
       />
-    </View>
       <LeaveModal
         visible={leaveVisible}
         onCancel={() => setLeaveVisible(false)}
         onConfirm={() => { setLeaveVisible(false); onBack(); }}
       />
+    </View>
   );
 }
 

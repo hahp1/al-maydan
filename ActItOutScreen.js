@@ -149,8 +149,8 @@ const SetupScreen = memo(({ onStart, onBack, theme, t, rs, isGlobal }) => {
           style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]}
           hitSlop={HIT_SLOP}
         >
-/>
-        <ExitButton_ACT />
+          <Text style={{ color: theme.accent, fontSize: 20, fontWeight: '700' }}>←</Text>
+        </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
           {isGlobal ? 'Act It Out 🎭' : 'مثّلها 🎭'}
         </Text>
@@ -408,8 +408,8 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
         {/* back btn top-left */}
         <View style={styles.floatBackRow}>
           <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
-/>
-          <ExitButton_ACT />
+            <Text style={{ color: theme.accent, fontSize: 20, fontWeight: '700' }}>←</Text>
+          </TouchableOpacity>
           <GameInfoButton gameType="act_it_out" lang={lang} />
           <WebScreenButton
             playerUid="act_p0"
@@ -506,8 +506,8 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
         {/* back btn top-left */}
         <View style={styles.floatBackRow}>
           <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
-/>
-          <ExitButton_ACT />
+            <Text style={{ color: theme.accent, fontSize: 20, fontWeight: '700' }}>←</Text>
+          </TouchableOpacity>
           <GameInfoButton gameType="act_it_out" lang={lang} />
           <WebScreenButton
             playerUid="act_p0"
@@ -606,8 +606,8 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
       {/* back btn top-left */}
       <View style={styles.floatBackRow}>
         <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
-/>
-        <ExitButton_ACT />
+          <Text style={{ color: theme.accent, fontSize: 20, fontWeight: '700' }}>←</Text>
+        </TouchableOpacity>
         <GameInfoButton gameType="act_it_out" lang={lang} />
         <WebScreenButton
           playerUid="act_p0"

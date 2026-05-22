@@ -783,8 +783,9 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.gameHeader}>
           <TouchableOpacity onPress={() => Alert.alert('خروج', 'هل تريد الخروج؟', [
-            { text: 'لا' }, { text: 'نعم', onPress: onBack }])}
-/>
+            { text: 'لا' }, { text: 'نعم', onPress: onBack }])}>
+            <Text style={{ color: '#ef4444', fontSize: 20, fontWeight: '700' }}>✕</Text>
+          </TouchableOpacity>
           <View style={[s.roundPill, { backgroundColor: theme.bgCard }]}>
             <Text style={{ color: ACCENT, fontWeight: '800' }}>جولة {round}/{totalRounds}</Text>
           </View>
@@ -866,8 +867,9 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.gameHeader}>
           <TouchableOpacity onPress={() => Alert.alert('خروج', 'هل تريد الخروج؟', [
-            { text: 'لا' }, { text: 'نعم', onPress: onBack }])}
-/>
+            { text: 'لا' }, { text: 'نعم', onPress: onBack }])}>
+            <Text style={{ color: '#ef4444', fontSize: 20, fontWeight: '700' }}>✕</Text>
+          </TouchableOpacity>
           <View style={[s.roundPill, { backgroundColor: theme.bgCard }]}>
             <Text style={{ color: ACCENT, fontWeight: '800' }}>جولة {round}/{totalRounds} — نقاش</Text>
           </View>
@@ -1415,8 +1417,9 @@ function OnlineLobbyPhase({ theme, currentUser, onBack }) {
         <View style={s.gameHeader}>
           <TouchableOpacity
             onPress={() => { if (unsubRef.current) unsubRef.current(); onBack(); }}
-            style={[s.quitBtn, { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)' }]}
-/>
+            style={[s.quitBtn, { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)' }]}>
+            <Text style={{ color: '#ef4444', fontSize: 20, fontWeight: '700' }}>✕</Text>
+          </TouchableOpacity>
           <View style={[s.roundPill, { backgroundColor: theme.bgCard }]}>
             <Text style={{ color: ACCENT, fontWeight: '800' }}>غرفة الانتظار</Text>
           </View>

@@ -452,14 +452,14 @@ function GameScreen({ players, onBack, theme, t, rs, isGlobal = false }) {
               {/* بطاقة المحقق والضحية */}
               <View style={[styles.actionCard, { backgroundColor: theme.bgCard, borderColor: choice === 'truth' ? '#3b82f6' : '#ef4444' }]}>
                 <Text style={[styles.actionLabel, { color: theme.textMuted }]}>
-                  {choice === 'truth' ? {isGlobal ? '🗣 Truth — questioner asks the victim' : '🗣 صراحة — المحقق يسأل الضحية'} : {isGlobal ? '😈 Dare — questioner challenges the victim' : '😈 تحدي — المحقق يتحدى الضحية'}}
+                  {choice === 'truth' ? (isGlobal ? '🗣 Truth — questioner asks the victim' : '🗣 صراحة — المحقق يسأل الضحية') : (isGlobal ? '😈 Dare — questioner challenges the victim' : '😈 تحدي — المحقق يتحدى الضحية')}
                 </Text>
                 <View style={styles.actionPlayers}>
                   <View style={[styles.playerPill, { backgroundColor: choice === 'truth' ? theme.purple + '33' : theme.error + '33' }]}>
                     <Text style={styles.playerPillText}>{asker.name}</Text>
                   </View>
                   <Text style={[styles.actionArrow, { color: theme.textMuted }]}>
-                    {choice === 'truth' ? {isGlobal ? '⟶ asks' : '⟶ يسأل'} : {isGlobal ? '⟶ dares' : '⟶ يتحدى'}}
+                    {choice === 'truth' ? (isGlobal ? '⟶ asks' : '⟶ يسأل') : (isGlobal ? '⟶ dares' : '⟶ يتحدى')}
                   </Text>
                   <View style={[styles.playerPill, { backgroundColor: theme.bgCard, borderWidth: 1, borderColor: theme.accent }]}>
                     <Text style={[styles.playerPillText, { color: theme.accent }]}>{victim.name}</Text>
@@ -475,7 +475,7 @@ function GameScreen({ players, onBack, theme, t, rs, isGlobal = false }) {
                   activeOpacity={0.85}
                 >
                   <Text style={styles.resultBtnText}>
-                    {choice === 'truth' ? {isGlobal ? '✅  Answered Honestly' : '✅  أجاب صادقاً'} : {isGlobal ? '✅  Completed the Dare' : '✅  نفّذ التحدي'}}
+                    {choice === 'truth' ? (isGlobal ? '✅  Answered Honestly' : '✅  أجاب صادقاً') : (isGlobal ? '✅  Completed the Dare' : '✅  نفّذ التحدي')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -484,7 +484,7 @@ function GameScreen({ players, onBack, theme, t, rs, isGlobal = false }) {
                   activeOpacity={0.85}
                 >
                   <Text style={styles.resultBtnText}>
-                    {choice === 'truth' ? {isGlobal ? '❌  Refused to Answer' : '❌  رفض الإجابة'} : {isGlobal ? '❌  Skipped the Dare' : '❌  لم يكمل التحدي'}}
+                    {choice === 'truth' ? (isGlobal ? '❌  Refused to Answer' : '❌  رفض الإجابة') : (isGlobal ? '❌  Skipped the Dare' : '❌  لم يكمل التحدي')}
                   </Text>
                 </TouchableOpacity>
               </View>

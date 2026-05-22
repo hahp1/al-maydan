@@ -42,7 +42,7 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   StatusBar, Animated, Alert, ScrollView, ActivityIndicator,
-, BackHandler } from 'react-native';
+  BackHandler } from 'react-native';
 import { db, fetchQuestionsForCategories } from './firebaseConfig';
 import {
   doc, setDoc, updateDoc, onSnapshot,

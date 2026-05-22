@@ -215,7 +215,7 @@ function WaitingLobby({ theme, isRTL, friendCode, isFriend, onCancel }) {
   return (
     <View style={[s.lobbyWrap, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
       <StatusBar barStyle={theme.statusBar} />
-      <ExitButton onPress={onBack} />
+      <ExitButton onPress={onCancel} />
       <Text style={s.lobbyBigEmoji}>🎨</Text>
       <Text style={[s.lobbyTitle, { color: theme.textPrimary }]}>
         {isRTL ? 'بانتظار لاعب...' : 'Waiting for player...'}
@@ -287,7 +287,7 @@ function GameOver({ players, scores, myUid, isRTL, theme, onBack }) {
 // ══════════════════════════════════════════════════════════
 //  MAIN
 // ══════════════════════════════════════════════════════════
-export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd }) {
+export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme, themeId } = useTheme();
   const { lang }  = useLanguage();
   const isRTL     = lang === 'ar';
@@ -508,6 +508,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd }) 
     if (screen === 'lobby' && roomData.status !== 'waiting') {
       clearTimeout(botRef.current);
       setScreen('game');
+      onGameReady?.();
     }
     if (roomData.status === 'finished') setScreen('gameover');
   }, [roomData, screen]);

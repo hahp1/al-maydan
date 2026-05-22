@@ -44,10 +44,10 @@ function isValidWord(w, lang) {
 }
 
 // ─────────────────────────────────────────────────────────────
-export default function WordleGameScreen({ onBack, currentUser, onGameEnd }) {
+export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme } = useTheme();
   const { roomId, isPlayer1, roomData, loading, error, updateRoom, endGame, leaveRoom } =
-    useOnlineGame('wordle', currentUser);
+    useOnlineGame('wordle', currentUser, onGameReady);
 
   // المراحل: 'setting' | 'waiting' | 'playing' | 'finished'
   const [phase,        setPhase]        = useState('setting');

@@ -140,7 +140,7 @@ export default function HomeScreen({
   onOpenHeartsModal,
   activeTournament,
 }) {
-  const { t }     = useLanguage();
+  const { t, lang } = useLanguage();
   const { theme } = useTheme();
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;

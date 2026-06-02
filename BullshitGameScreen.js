@@ -10,6 +10,7 @@ import { useLanguage } from './I18n';
 import LeaveModal from './LeaveModal';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 

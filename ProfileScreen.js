@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useTheme } from './ThemeContext';
 import { useLanguage } from './I18n';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 import {
   getProfileSummary,
   getDailyMissions,

@@ -90,8 +90,8 @@ function HeartsWidget({ hearts, countdown, onPress, theme }) {
     }
   }, [hearts]);
 
-  const heartColor = hearts > 0 ? '#ef4444' : '#6b7280';
-  const bgColor    = hearts > 0 ? '#ef444420' : theme.bgElevated;
+  const heartColor = hearts > 0 ? theme.error : theme.textMuted;
+  const bgColor    = hearts > 0 ? theme.error + '20' : theme.bgElevated;
 
   return (
     <TouchableOpacity
@@ -105,7 +105,7 @@ function HeartsWidget({ hearts, countdown, onPress, theme }) {
       </Animated.View>
       <Text style={[styles.heartsCount, { color: heartColor }]}>{hearts}</Text>
       {countdown && hearts === 0 && (
-        <Text style={[styles.heartsCountdown, { color: '#9ca3af' }]}>{countdown}</Text>
+        <Text style={[styles.heartsCountdown, { color: theme.textMuted }]}>{countdown}</Text>
       )}
     </TouchableOpacity>
   );
@@ -140,7 +140,7 @@ export default function HomeScreen({
   onOpenHeartsModal,
   activeTournament,
 }) {
-  const { t, lang } = useLanguage();
+  const { t }     = useLanguage();
   const { theme } = useTheme();
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;

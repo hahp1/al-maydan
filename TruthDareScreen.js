@@ -10,6 +10,7 @@ import ExitButton from './ExitButton';
 import { useT, useRTLStyles, useLanguage } from './I18n';
 import { TruthDareEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 // ── ثوابت ───────────────────────────────────────────────────────────
 const TURNS_PER_PLAYER = 3;          // كل لاعب يُسأل/يُتحدى 3 مرات
@@ -216,9 +217,7 @@ function SetupScreen({ onStart, onBack, theme, t, rs, isGlobal = false }) {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
-        <TouchableOpacity onPress={onBack} style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]} hitSlop={HIT_SLOP}>
-          <Text style={[styles.backBtnText, { color: theme.accent }]}>→</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label="→" variant="ghost" size="small" fullWidth={false} />
         <Text style={[styles.headerTitle, { color: theme.accent }]}>😈 صراحة أو تحدي</Text>
         <View style={{ width: 40 }} />
       </View>

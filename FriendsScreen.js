@@ -13,6 +13,7 @@ import {
 } from './friendService';
 import { useTheme } from './ThemeContext';
 import { useT, useRTLStyles } from './I18n';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const TABS = { CHATS: 'chats', FRIENDS: 'friends', REQUESTS: 'requests' };
 
@@ -131,12 +132,12 @@ function AddFriendTab({ user, theme, t, rs }) {
           onSubmitEditing={handleSearch}
           returnKeyType="search"
         />
-        <TouchableOpacity style={[styles.searchBtn, { backgroundColor: theme.accent }]} onPress={handleSearch} activeOpacity={0.85}>
-          {loading
-            ? <ActivityIndicator color={theme.textOnAccent} size="small" />
-            : <Text style={styles.searchBtnText}>🔍</Text>
-          }
-        </TouchableOpacity>
+        <ThemedButton
+          onPress={handleSearch}
+          label={loading ? '...' : '🔍'}
+          variant="primary" size="small" fullWidth={false}
+          disabled={loading}
+        />
       </View>
       {results.length === 0 && !loading && query.length > 0 && (
         <EmptyView emoji="🔍" text="لا نتائج" theme={theme} />

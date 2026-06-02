@@ -14,6 +14,7 @@ import { StyleSheet, Text, View, TouchableOpacity, StatusBar, ScrollView, Image,
 import { useTheme } from './ThemeContext';
 import { useT } from './I18n';
 import LifelinesBar from './LifelineBar';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -152,9 +153,7 @@ const ClassicMode = memo(({
       )}
 
       {!showAnswer ? (
-        <TouchableOpacity style={[styles.showAnswerBtn, { backgroundColor: theme.accent }]} onPress={revealAnswer}>
-          <Text style={[styles.showAnswerText, { color: theme.textOnAccent }]}>{t('question.showAnswer')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={revealAnswer} label={t('question.showAnswer')} variant="primary" size="large" />
       ) : (
         <View style={styles.answerSection}>
           <Text style={[styles.answerLabel, { color: theme.textSecondary }]}>{t('question.answer')}</Text>

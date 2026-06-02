@@ -22,6 +22,7 @@ import {
 } from './HeartsService';
 import { playSound } from './SoundService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
+import ExitButton from './ExitButton';
 
 const PRO_KEY = 'arena_is_pro';
 

@@ -9,6 +9,7 @@ import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import { XOEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
 
 const LINES = [
   [0,1,2],[3,4,5],[6,7,8],

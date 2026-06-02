@@ -2757,7 +2757,7 @@ export const GUESS_IMAGE_DATA = {
       "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Range_Rover_2013_%28cropped%29.jpg/400px-Range_Rover_2013_%28cropped%29.jpg",
       "info": {
         "الشركة": "Land Rover — بريطانيا",
-        "السنة": "1970 — الآن"
+        "السنة": "1970 — الآن",
          "المحرك": "V8 4.4L سوبر شارج",
         "أقصى سرعة": "225 كم/س",
         "الحصان": "525"

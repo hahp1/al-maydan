@@ -24,6 +24,7 @@ import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
 import { fetchQuestionsForCategories } from './firebaseConfig';
 import CachedCategoryImage from './CachedCategoryImage';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const HIGHSCORE_KEY    = 'almaydan_highscore';
 const TIMER_SECONDS    = 15;

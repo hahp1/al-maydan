@@ -2,6 +2,7 @@ import { memo, useCallback } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, StatusBar } from 'react-native';
 import { useTheme } from './ThemeContext';
 import { useT } from './I18n';
+import { ThemedButton, ThemedCard } from './ThemedComponents';
 
 const ResultsScreen = memo(function ResultsScreen({ team1, team2, score1, score2, onRematch, onHome }) {
   const { theme } = useTheme();
@@ -61,20 +62,8 @@ const ResultsScreen = memo(function ResultsScreen({ team1, team2, score1, score2
       )}
 
       <View style={styles.buttons}>
-        <TouchableOpacity
-          style={[styles.btnRematch, { backgroundColor: theme.accent }]}
-          onPress={handleRematch}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.btnRematchText, { color: theme.textOnAccent }]}>{t('results.rematch')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.btnHome, { backgroundColor: theme.bgCard, borderColor: theme.accent }]}
-          onPress={handleHome}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.btnHomeText, { color: theme.accent }]}>{t('common.returnHome')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={handleRematch} label={t('results.rematch')} variant="primary" size="large" />
+        <ThemedButton onPress={handleHome} label={t('common.returnHome')} variant="secondary" size="medium" />
       </View>
     </View>
   );

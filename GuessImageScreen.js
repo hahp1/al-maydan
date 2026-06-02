@@ -30,6 +30,9 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 
+
+
+
 // ══════════════════════════════════════════════════════════════
 //  بيانات الفئات والصور — مستوردة من GuessImageData.js
 // ══════════════════════════════════════════════════════════════
@@ -159,6 +162,8 @@ const infoStyles = StyleSheet.create({
   infoKey: { fontSize: 12, fontWeight: '700', width: 90, flexShrink: 0 },
   infoVal: { fontSize: 12, fontWeight: '500', flex: 1, textAlign: 'right' },
 });
+
+
 
 // ══════════════════════════════════════════════════════════════
 //  SCREEN: اختيار الفئات (منشئ الغرفة)
@@ -623,7 +628,6 @@ function PlayScreen({
           />
         </Animated.View>
       </View>
-    </View>
     </View>
     </TouchableOpacity>
   );

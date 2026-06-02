@@ -1,7 +1,8 @@
 import { memo } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Modal, View, Text, StyleSheet } from 'react-native';
 import { useTheme } from './ThemeContext';
 import { useT } from './I18n';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const LeaveModal = memo(function LeaveModal({ visible, onCancel, onConfirm, message }) {
   const { theme } = useTheme();
@@ -10,23 +11,15 @@ const LeaveModal = memo(function LeaveModal({ visible, onCancel, onConfirm, mess
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onCancel} statusBarTranslucent>
       <View style={styles.overlay}>
-        <View style={[styles.card, { backgroundColor: theme.bgCard || '#1a1a2e', borderColor: '#ef444440' }]}>
+        <ThemedCard radius={24} padding={28} style={{width:'100%',alignItems:'center',gap:12}}>
           <Text style={styles.emoji}>🚪</Text>
           <Text style={[styles.title, { color: theme.textPrimary }]}>{t('leave.title')}</Text>
           <Text style={[styles.msg, { color: theme.textSecondary }]}>{message || t('leave.message')}</Text>
           <View style={styles.btns}>
-            <TouchableOpacity
-              style={[styles.cancelBtn, { backgroundColor: theme.bgElevated, borderColor: theme.border }]}
-              onPress={onCancel}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.cancelText, { color: theme.textSecondary }]}>{t('leave.cancel')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.confirmBtn} onPress={onConfirm} activeOpacity={0.8}>
-              <Text style={[styles.confirmText, { color: theme.error }]}>{t('leave.confirm')}</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={onCancel}   label={t('leave.cancel')}  variant="secondary" size="medium" fullWidth={false} style={{flex:1}} />
+            <ThemedButton onPress={onConfirm}  label={t('leave.confirm')} variant="danger"    size="medium" fullWidth={false} style={{flex:1}} />
           </View>
-        </View>
+        </ThemedCard>
       </View>
     </Modal>
   );

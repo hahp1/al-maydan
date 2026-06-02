@@ -8,6 +8,7 @@ import { ManAnaEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { useT, useLanguage } from './I18n';
 import { playSound } from './SoundService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 // ══════════════════════════════════════════════════════════════
 //  قوائم الكلمات — التجربة العربية

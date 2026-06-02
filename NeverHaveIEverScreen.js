@@ -9,6 +9,7 @@ import ExitButton from './ExitButton';
 import { NeverHaveIEverEngraving } from './GameEngraving';
 import { useLanguage } from './I18n';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 // ══════════════════════════════════════════════════════════════
 // جمل افتراضية — عربية وإنجليزية

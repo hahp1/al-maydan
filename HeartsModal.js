@@ -21,6 +21,7 @@ import {
   HEARTS_CONFIG,
 } from './HeartsService';
 import { playSound } from './SoundService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const PRO_KEY = 'arena_is_pro';
 
@@ -204,24 +205,13 @@ export default function HeartsModal({
                   )}
                 </View>
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.adBtn,
-                  { backgroundColor: theme.success },
-                  (watchingAd || (!isPro && adsLeft <= 0)) && { backgroundColor: theme.bgElevated },
-                ]}
+              <ThemedButton
                 onPress={handleWatchAd}
+                label={watchingAd ? '⏳ جاري الإعلان...' : (!isPro && adsLeft <= 0) ? '✋ حد اليوم' : '▶️ شاهد الآن'}
+                variant="success"
+                size="medium"
                 disabled={watchingAd || (!isPro && adsLeft <= 0)}
-                activeOpacity={0.8}
-              >
-                <Text style={[
-                  styles.adBtnText,
-                  { color: '#fff' },
-                  (watchingAd || (!isPro && adsLeft <= 0)) && { color: theme.textMuted },
-                ]}>
-                  {watchingAd ? '⏳ جاري الإعلان...' : (!isPro && adsLeft <= 0) ? '✋ حد اليوم' : '▶️ شاهد الآن'}
-                </Text>
-              </TouchableOpacity>
+              />
             </View>
 
             {/* شراء بالتوكنز */}
@@ -230,17 +220,12 @@ export default function HeartsModal({
               {HEART_PACKAGES.map(pkg => {
                 const canAfford = tokens >= pkg.tokens;
                 return (
-                  <TouchableOpacity
+                  <ThemedCard
                     key={pkg.tokens}
-                    style={[
-                      styles.pkgCard,
-                      { backgroundColor: theme.bgCard, borderColor: canAfford ? heartColor + '55' : theme.borderCard },
-                      !canAfford && { opacity: 0.5 },
-                      buying && { opacity: 0.6 },
-                    ]}
                     onPress={() => handleBuy(pkg)}
-                    disabled={buying || !canAfford}
-                    activeOpacity={0.8}
+                    radius={14} padding={12}
+                    style={[{opacity: (!canAfford||buying)?0.5:1}]}
+                    variant={canAfford?'accent':'default'}
                   >
                     <View style={{ flexDirection: 'row', gap: 2 }}>
                       {[...Array(Math.min(pkg.hearts, 5))].map((_, i) => (
@@ -251,7 +236,7 @@ export default function HeartsModal({
                     <View style={[styles.pkgPrice, { backgroundColor: theme.accent + '22', borderColor: theme.accent }]}>
                       <Text style={[styles.pkgPriceText, { color: theme.accent }]}>🪙 {pkg.tokens}</Text>
                     </View>
-                  </TouchableOpacity>
+                  </ThemedCard>
                 );
               })}
             </View>

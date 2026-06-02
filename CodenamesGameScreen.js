@@ -39,6 +39,7 @@ import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import { CodenamesEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
 
 // ─── صور البطاقات ──────────────────────────────────────────────
 // 4 صور لكل لون: 0-3 أزرق، 4-7 أحمر، 8-11 بيج/محايد

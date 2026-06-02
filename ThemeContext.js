@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import RippleBackground from './RippleBackground';
 
 // ── ثيمات المدن — مصدر الحقيقة الوحيد هو CityThemes.js ──────
 import {
@@ -24,57 +26,70 @@ const THEME_KEY = 'arena_theme_id';
 
 export const DARK = {
   id: 'dark',
-  bg:          '#07071f',
-  bgCard:      '#12123a',
-  bgElevated:  '#1a1a4a',
-  bgInput:     '#0e0e30',
-  bgOverlay:   'rgba(0,0,0,0.75)',
-  textPrimary:   '#f0f0ff',
-  textSecondary: '#9090c0',
-  textMuted:     '#50507a',
-  textOnAccent:  '#07071f',
+  isNeon: true,
+  bg:          '#05050f',
+  bgCard:      'rgba(8,8,28,0.92)',
+  bgElevated:  'rgba(12,12,36,0.95)',
+  bgInput:     'rgba(6,6,22,0.96)',
+  bgOverlay:   'rgba(0,0,0,0.80)',
+  textPrimary:   'rgba(245,245,255,0.97)',
+  textSecondary: 'rgba(180,180,220,0.75)',
+  textMuted:     'rgba(100,100,160,0.60)',
+  textOnAccent:  '#05050f',
   accent:        '#f5c518',
-  accentSoft:    '#f5c51822',
-  accentBorder:  '#f5c51840',
+  accentSoft:    'rgba(245,197,24,0.10)',
+  accentBorder:  'rgba(245,197,24,0.28)',
   purple:        '#a78bfa',
-  purpleSoft:    '#7c3aed22',
-  purpleBorder:  '#7c3aed55',
-  border:        '#1e1e4e',
-  divider:       '#1e1e4e',
-  borderCard:    '#2a2a60',
+  purpleSoft:    'rgba(167,139,250,0.10)',
+  purpleBorder:  'rgba(167,139,250,0.28)',
+  border:        'rgba(245,197,24,0.12)',
+  divider:       'rgba(245,197,24,0.08)',
+  borderCard:    'rgba(245,197,24,0.15)',
   success:       '#34d399',
   error:         '#f87171',
   warning:       '#fbbf24',
   statusBar:     'light-content',
-  statusBg:      '#07071f',
+  statusBg:      '#05050f',
+  neonAccentGlow:   'rgba(245,197,24,0.35)',
+  neonPurpleGlow:   'rgba(167,139,250,0.30)',
+  neonCardShadow:   '0 0 16px rgba(245,197,24,0.12), 0 2px 8px rgba(0,0,0,0.60)',
+  neonAccentShadow: '0 0 20px rgba(245,197,24,0.40)',
+  neonPurpleShadow: '0 0 18px rgba(167,139,250,0.35)',
 };
 
 export const LIGHT = {
   id: 'light',
   isLight: true,
-  bg:          '#f0f0fa',
+  bg:          '#fff8d6',
   bgCard:      '#ffffff',
-  bgElevated:  '#e8e8f8',
-  bgInput:     '#f8f8ff',
-  bgOverlay:   'rgba(0,0,0,0.45)',
-  textPrimary:   '#1a1a3e',
-  textSecondary: '#5a5a8a',
-  textMuted:     '#9090b0',
-  textOnAccent:  '#1a1a3e',
-  accent:        '#d4a800',
-  accentSoft:    '#f5c51820',
-  accentBorder:  '#f5c51850',
-  purple:        '#7c3aed',
-  purpleSoft:    '#7c3aed15',
-  purpleBorder:  '#7c3aed40',
-  border:        '#dcdcf0',
-  divider:       '#e8e8f5',
-  borderCard:    '#dcdcf0',
+  bgElevated:  '#fffdf0',
+  bgInput:     '#ffffff',
+  bgOverlay:   'rgba(0,0,0,0.40)',
+  textPrimary:   '#150a28',
+  textSecondary: '#3d1870',
+  textMuted:     '#7850a8',
+  textOnAccent:  '#ffffff',
+  accent:        '#6d28d9',
+  accentSoft:    'rgba(109,40,217,0.08)',
+  accentBorder:  'rgba(109,40,217,0.20)',
+  purple:        '#5b21b6',
+  purpleSoft:    'rgba(91,33,182,0.08)',
+  purpleBorder:  'rgba(91,33,182,0.20)',
+  border:        'rgba(109,40,217,0.12)',
+  divider:       'rgba(109,40,217,0.08)',
+  borderCard:    'rgba(109,40,217,0.13)',
   success:       '#059669',
   error:         '#dc2626',
   warning:       '#d97706',
   statusBar:     'dark-content',
-  statusBg:      '#f0f0fa',
+  statusBg:      '#fff8d6',
+  // توهج بنفسجي خفي — يُستخدم خلف العنوان وعلى البطاقات الرئيسية
+  lightGlow:     'rgba(109,40,217,0.10)',
+  lightGlowSoft: 'rgba(109,40,217,0.05)',
+  // لون التوكن/الذهب يبقى حاضراً كلون ثانوي
+  gold:          '#b8860b',
+  goldSoft:      'rgba(184,134,11,0.10)',
+  goldBorder:    'rgba(184,134,11,0.22)',
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -273,10 +288,15 @@ export const CRYSTAL_RUBY = {
   statusBar:     'light-content',
   statusBg:      '#06010a',
   crystalColor:  '#b0101e',
-  crystalLight:  '#eb3c5a',
+  crystalLight:  '#ff8099',
   crystalSoft:   'rgba(235,60,90,0.10)',
   crystalBorder: 'rgba(235,60,90,0.20)',
   orbColors:     ['#b0101e', '#780010', '#eb3c5a', '#b0101e'],
+  // canvas tokens
+  crystalC0:    '#3a0010',
+  crystalC1:    '#1e0008',
+  crystalGlow:  '#ff1133',
+  crystalPrism: ['#ff6688','#ffcc44','#ff44aa','#ff2244','#ffaa66','#ffddcc'],
 };
 
 export const CRYSTAL_EMERALD = {
@@ -307,10 +327,15 @@ export const CRYSTAL_EMERALD = {
   statusBar:     'light-content',
   statusBg:      '#010904',
   crystalColor:  '#036845',
-  crystalLight:  '#0aaa73',
+  crystalLight:  '#00ff99',
   crystalSoft:   'rgba(10,170,115,0.10)',
   crystalBorder: 'rgba(10,170,115,0.20)',
   orbColors:     ['#036845', '#024d32', '#0aaa73', '#036845'],
+  // canvas tokens
+  crystalC0:    '#003818',
+  crystalC1:    '#001e0c',
+  crystalGlow:  '#00cc66',
+  crystalPrism: ['#00ffaa','#aaff44','#00ffcc','#66ff88','#ccffaa','#eeffdd'],
 };
 
 export const CRYSTAL_SAPPHIRE = {
@@ -341,10 +366,15 @@ export const CRYSTAL_SAPPHIRE = {
   statusBar:     'light-content',
   statusBg:      '#01020e',
   crystalColor:  '#1a3580',
-  crystalLight:  '#3273e6',
+  crystalLight:  '#6699ff',
   crystalSoft:   'rgba(50,115,230,0.10)',
   crystalBorder: 'rgba(50,115,230,0.20)',
   orbColors:     ['#1a3580', '#1a3aa0', '#3273e6', '#1a3580'],
+  // canvas tokens
+  crystalC0:    '#001440',
+  crystalC1:    '#000a28',
+  crystalGlow:  '#2255ff',
+  crystalPrism: ['#77ccff','#aaddff','#ffffff','#5588ff','#bb99ff','#cceeff'],
 };
 
 export const CRYSTAL_AMETHYST = {
@@ -375,10 +405,15 @@ export const CRYSTAL_AMETHYST = {
   statusBar:     'light-content',
   statusBg:      '#030108',
   crystalColor:  '#521898',
-  crystalLight:  '#804beb',
+  crystalLight:  '#cc88ff',
   crystalSoft:   'rgba(128,75,235,0.10)',
   crystalBorder: 'rgba(128,75,235,0.20)',
   orbColors:     ['#521898', '#421580', '#804beb', '#521898'],
+  // canvas tokens
+  crystalC0:    '#200038',
+  crystalC1:    '#100020',
+  crystalGlow:  '#9922ee',
+  crystalPrism: ['#ff88ff','#cc44ff','#8833ff','#ff55bb','#ddaaff','#ffccff'],
 };
 
 export const CRYSTAL_TOPAZ = {
@@ -409,10 +444,15 @@ export const CRYSTAL_TOPAZ = {
   statusBar:     'light-content',
   statusBg:      '#060501',
   crystalColor:  '#8a7200',
-  crystalLight:  '#d4b800',
+  crystalLight:  '#ffdd44',
   crystalSoft:   'rgba(212,184,0,0.10)',
   crystalBorder: 'rgba(212,184,0,0.20)',
   orbColors:     ['#8a7200', '#6e5a00', '#d4b800', '#8a7200'],
+  // canvas tokens
+  crystalC0:    '#2a1800',
+  crystalC1:    '#160c00',
+  crystalGlow:  '#ffcc00',
+  crystalPrism: ['#ffff55','#ffcc00','#ff8800','#ffee77','#ffffff','#ffdd44'],
 };
 
 export const CRYSTAL_DIAMOND = {
@@ -443,10 +483,15 @@ export const CRYSTAL_DIAMOND = {
   statusBar:     'light-content',
   statusBg:      '#05070f',
   crystalColor:  '#475569',
-  crystalLight:  '#94a3b8',
+  crystalLight:  '#e2e8f0',
   crystalSoft:   'rgba(148,163,184,0.12)',
   crystalBorder: 'rgba(148,163,184,0.20)',
   orbColors:     ['#334155', '#1e293b', '#94a3b8', '#475569'],
+  // canvas tokens
+  crystalC0:    '#1a2240',
+  crystalC1:    '#0c1428',
+  crystalGlow:  '#88aaee',
+  crystalPrism: ['#ff7777','#ffdd44','#77ee88','#66aaff','#dd88ff','#ffaaee'],
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -460,8 +505,8 @@ export const THEME_GROUPS = [
     groupLabelAr: 'قبل الضجيج الأول',
     groupEmoji: '⭐',
     themes: [
-      { theme: DARK,  id: 'dark',  label: 'Dark',  labelAr: 'داكن',  emoji: '🌙', previewBg: '#07071f', previewAccent: '#f5c518', price: 0 },
-      { theme: LIGHT, id: 'light', label: 'Light', labelAr: 'فاتح', emoji: '☀️', previewBg: '#f0f0fa', previewAccent: '#d4a800', price: 0 },
+      { theme: DARK,  id: 'dark',  label: 'Dark',  labelAr: 'داكن',  emoji: '🌙', previewBg: '#05050f', previewAccent: '#f5c518', price: 0 },
+      { theme: LIGHT, id: 'light', label: 'Light', labelAr: 'فاتح', emoji: '☀️', previewBg: '#fff8d6', previewAccent: '#6d28d9', price: 0 },
     ],
   },
   {
@@ -483,12 +528,12 @@ export const THEME_GROUPS = [
     groupLabelAr: 'حين يتحرر الضوء',
     groupEmoji: '💎',
     themes: [
-      { theme: CRYSTAL_DIAMOND,  id: 'crystal_diamond',  label: 'Diamond',  labelAr: 'الماس',           emoji: '⬜', previewBg: '#05070f', previewAccent: '#94a3b8', isCrystal: true, price: 0    },
-      { theme: CRYSTAL_RUBY,     id: 'crystal_ruby',     label: 'Ruby',     labelAr: 'الياقوت',         emoji: '🔴', previewBg: '#07020a', previewAccent: '#ff4d6d', isCrystal: true, price: 300  },
-      { theme: CRYSTAL_EMERALD,  id: 'crystal_emerald',  label: 'Emerald',  labelAr: 'الزمرد',          emoji: '🟢', previewBg: '#010a05', previewAccent: '#10b981', isCrystal: true, price: 500  },
-      { theme: CRYSTAL_SAPPHIRE, id: 'crystal_sapphire', label: 'Sapphire', labelAr: 'الياقوت الأزرق', emoji: '🔵', previewBg: '#01030f', previewAccent: '#3b82f6', isCrystal: true, price: 750  },
-      { theme: CRYSTAL_AMETHYST, id: 'crystal_amethyst', label: 'Amethyst', labelAr: 'الجمشت',          emoji: '🟣', previewBg: '#040108', previewAccent: '#8b5cf6', isCrystal: true, price: 1000 },
-      { theme: CRYSTAL_TOPAZ,    id: 'crystal_topaz',    label: 'Topaz',    labelAr: 'التوباز',         emoji: '🟡', previewBg: '#060300', previewAccent: '#f59e0b', isCrystal: true, price: 1500 },
+      { theme: CRYSTAL_DIAMOND,  id: 'crystal_diamond',  label: 'Diamond',  labelAr: 'الماس',           emoji: '⬜', previewBg: '#05070f', previewAccent: '#e2e8f0', isCrystal: true, price: 0    },
+      { theme: CRYSTAL_RUBY,     id: 'crystal_ruby',     label: 'Ruby',     labelAr: 'الياقوت',         emoji: '🔴', previewBg: '#06010a', previewAccent: '#ff8099', isCrystal: true, price: 300  },
+      { theme: CRYSTAL_EMERALD,  id: 'crystal_emerald',  label: 'Emerald',  labelAr: 'الزمرد',          emoji: '🟢', previewBg: '#010904', previewAccent: '#00ff99', isCrystal: true, price: 500  },
+      { theme: CRYSTAL_SAPPHIRE, id: 'crystal_sapphire', label: 'Sapphire', labelAr: 'الياقوت الأزرق', emoji: '🔵', previewBg: '#01020e', previewAccent: '#6699ff', isCrystal: true, price: 750  },
+      { theme: CRYSTAL_AMETHYST, id: 'crystal_amethyst', label: 'Amethyst', labelAr: 'الجمشت',          emoji: '🟣', previewBg: '#030108', previewAccent: '#cc88ff', isCrystal: true, price: 1000 },
+      { theme: CRYSTAL_TOPAZ,    id: 'crystal_topaz',    label: 'Topaz',    labelAr: 'التوباز',         emoji: '🟡', previewBg: '#060501', previewAccent: '#ffdd44', isCrystal: true, price: 1500 },
     ],
   },
   {
@@ -570,7 +615,16 @@ export function ThemeProvider({ children }) {
       toggleTheme,
       setDark,
     }}>
-      {children}
+      {theme.isMist ? (
+        <View style={StyleSheet.absoluteFill}>
+          <RippleBackground theme={theme} />
+          <View style={StyleSheet.absoluteFill}>
+            {children}
+          </View>
+        </View>
+      ) : (
+        children
+      )}
     </ThemeContext.Provider>
   );
 }

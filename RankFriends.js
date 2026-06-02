@@ -9,6 +9,7 @@ import ExitButton from './ExitButton';
 import { useT, useRTLStyles, useLanguage } from './I18n';
 import { RankFriendsEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
 
 // ─── أسئلة جاهزة (50 سؤال — يُختار 10 عشوائياً كل جولة) ──────────
 const PRESET_QUESTIONS = [

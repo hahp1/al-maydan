@@ -55,6 +55,7 @@ import { useT } from './I18n';
 import LifelinesBar from './LifelineBar';
 import { WebScreenButton } from './WebRoomService';
 import { playSound } from './SoundService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
 
 // ══════════════════════════════════════════════
 //  إعدادات اللعبة

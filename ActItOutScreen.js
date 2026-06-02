@@ -9,6 +9,7 @@ import { ActItOutEngraving } from './GameEngraving';
 import { useT, useRTLStyles, useLanguage } from './I18n';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 // ══════════════════════════════════════════════════════════════
 // محتوى عربي

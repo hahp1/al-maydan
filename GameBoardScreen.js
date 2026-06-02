@@ -17,6 +17,7 @@ import LeaveModal from './LeaveModal';
 import { useT, useLanguage } from './I18n';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { fetchQuestionsForCategories } from './firebaseConfig';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const pointColors      = { 100: '#1a3a6e', 200: '#1a5a3a', 300: '#5a5a00', 400: '#7a3a00', 500: '#7a1a1a' };
 const pointColorsLight = { 100: '#2a5aaa', 200: '#2a8a5a', 300: '#8a8a00', 400: '#aa5a00', 500: '#aa2a2a' };

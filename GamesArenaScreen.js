@@ -14,6 +14,7 @@ import {
 import { useTheme } from './ThemeContext';
 import { useT } from './I18n';
 import { playSound } from './SoundService';
+import { ThemedCard, ThemedPill } from './ThemedComponents';
 
 // ── بنية اللعبة ──
 const JALSA_META = [
@@ -29,6 +30,7 @@ const JALSA_META = [
   { id: 'drawguess',      emoji: '🎨', color: '#3b82f6', border: '#3b82f640', bg: '#3b82f612', ready: true,  mode: 'local', isNew: true },
   { id: 'wordle',         emoji: '🔤', color: '#22c55e', border: '#22c55e40', bg: '#22c55e12', ready: true,  mode: 'local', isNew: true },
   { id: 'whoisspy',     emoji: '🕵️', color: '#f97316', border: '#f9731640', bg: '#f9731612', ready: true,  mode: 'local', isNew: true },
+  { id: 'guessimage',    emoji: '🖼️', color: '#f5c518', border: '#f5c51840', bg: '#f5c51812', ready: true,  mode: 'local', isNew: true },
 ];
 
 const ONLINE_META = [
@@ -53,11 +55,12 @@ function buildGames(metaList, t) {
 }
 
 // ── بطاقة اللعبة ──
-const GameCard = memo(({ game, onPress, cardBg, theme, t }) => (
-  <TouchableOpacity
-    style={[styles.gameCard, { backgroundColor: cardBg, borderColor: game.border }]}
-    onPress={() => onPress(game)}
-    activeOpacity={game.ready ? 0.8 : 0.95}
+const GameCard = memo(({ game, onPress, theme, t }) => (
+  <ThemedCard
+    onPress={game.ready ? () => onPress(game) : undefined}
+    radius={18}
+    padding={14}
+    style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: game.ready ? 1 : 0.75 }}
   >
     <View style={[styles.gameIconWrap, { backgroundColor: game.bg, borderColor: game.border }]}>
       <Text style={styles.gameEmoji}>{game.emoji}</Text>
@@ -66,14 +69,14 @@ const GameCard = memo(({ game, onPress, cardBg, theme, t }) => (
       <View style={styles.gameTitleRow}>
         <Text style={[styles.gameTitle, { color: game.color }]}>{game.title}</Text>
         {!game.ready && (
-          <View style={styles.soonBadge}>
-            <Text style={styles.soonText}>{t('games.soon')}</Text>
-          </View>
+          <ThemedPill variant="secondary" small style={{ paddingHorizontal: 8 }}>
+            {t('games.soon')}
+          </ThemedPill>
         )}
         {game.isNew && game.ready && (
-          <View style={[styles.soonBadge, styles.newBadge]}>
-            <Text style={[styles.soonText, styles.newText]}>{t('games.newBadge')}</Text>
-          </View>
+          <ThemedPill variant="warning" small style={{ paddingHorizontal: 8 }}>
+            {t('games.newBadge')}
+          </ThemedPill>
         )}
       </View>
       <Text style={[styles.gameDesc,    { color: theme.textMuted }]}>{game.desc}</Text>
@@ -81,11 +84,9 @@ const GameCard = memo(({ game, onPress, cardBg, theme, t }) => (
     </View>
     {/* شارة التكلفة */}
     {game.ready && (
-      <View style={styles.costBadge}>
-        <Text style={styles.costText}>❤️ 1</Text>
-      </View>
+      <ThemedPill variant="danger" small>❤️ 1</ThemedPill>
     )}
-  </TouchableOpacity>
+  </ThemedCard>
 ));
 
 const SEPARATOR = <View style={{ height: 12 }} />;
@@ -130,14 +131,14 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
   const switchOnline = useCallback(() => setActiveTab('online'), []);
   const keyExtractor = useCallback((item) => item.id + item.mode, []);
   const renderItem   = useCallback(({ item }) => (
-    <GameCard game={item} onPress={handleGamePress} cardBg={theme.bgCard} theme={theme} t={t} />
+    <GameCard game={item} onPress={handleGamePress} theme={theme} t={t} />
   ), [handleGamePress, theme.bgCard, t]);
 
   const ListFooter = useCallback(() => (
-    <View style={[styles.comingSoonCard, { borderColor: theme.border }]}>
+    <ThemedCard radius={18} padding={20} style={{ alignItems: 'center', gap: 8, borderStyle: 'dashed' }}>
       <Text style={styles.comingSoonEmoji}>✨</Text>
       <Text style={[styles.comingSoonText, { color: theme.textMuted }]}>{t('games.comingSoon')}</Text>
-    </View>
+    </ThemedCard>
   ), [theme, t]);
 
   return (
@@ -163,30 +164,32 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
       {/* تابين */}
       <Animated.View style={[styles.tabsWrap, { opacity: fadeAnim }]}>
         <View style={[styles.tabsContainer, { backgroundColor: theme.bgCard, borderColor: theme.purpleBorder }]}>
-          <Animated.View style={[
-            styles.tabBtn,
-            activeTab === 'jalsa' && [styles.tabBtnActive, { backgroundColor: theme.bgElevated, borderColor: theme.purpleBorder }],
-            { transform: [{ scale: tabScaleJ }] },
-          ]}>
-            <TouchableOpacity style={styles.tabInner} onPress={switchJalsa} activeOpacity={0.8}>
+          <Animated.View style={[styles.tabBtn, { transform: [{ scale: tabScaleJ }] }]}>
+            <ThemedCard
+              onPress={switchJalsa}
+              radius={12} padding={0}
+              variant={activeTab === 'jalsa' ? 'accent' : 'default'}
+              style={styles.tabInner}
+            >
               <Text style={styles.tabEmoji}>🏠</Text>
               <Text style={[styles.tabText, { color: activeTab === 'jalsa' ? theme.purple : theme.textMuted }]}>
                 {t('games.jalsa')}
               </Text>
-            </TouchableOpacity>
+            </ThemedCard>
           </Animated.View>
 
-          <Animated.View style={[
-            styles.tabBtn,
-            activeTab === 'online' && [styles.tabBtnActive, { backgroundColor: theme.bgElevated, borderColor: theme.purpleBorder }],
-            { transform: [{ scale: tabScaleO }] },
-          ]}>
-            <TouchableOpacity style={styles.tabInner} onPress={switchOnline} activeOpacity={0.8}>
+          <Animated.View style={[styles.tabBtn, { transform: [{ scale: tabScaleO }] }]}>
+            <ThemedCard
+              onPress={switchOnline}
+              radius={12} padding={0}
+              variant={activeTab === 'online' ? 'accent' : 'default'}
+              style={styles.tabInner}
+            >
               <Text style={styles.tabEmoji}>📡</Text>
               <Text style={[styles.tabText, { color: activeTab === 'online' ? theme.purple : theme.textMuted }]}>
                 {t('games.online')}
               </Text>
-            </TouchableOpacity>
+            </ThemedCard>
           </Animated.View>
         </View>
 

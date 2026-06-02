@@ -3,6 +3,7 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, Animated } from 'react
 import { useTheme } from './ThemeContext';
 import { useT } from './I18n';
 import { playSound } from './SoundService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const REWARDS    = { 1: 10, 2: 10, 3: 10, 4: 15, 5: 20, 6: 25, 7: 30 };
 const DAYS_ARRAY = [1, 2, 3, 4, 5, 6, 7];

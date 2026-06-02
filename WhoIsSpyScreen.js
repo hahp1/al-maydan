@@ -34,6 +34,7 @@ import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { spendHeart } from './HeartsService';
 import { db } from './firebaseConfig';
 import { playSound } from './SoundService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
 import {
   doc, setDoc, updateDoc, onSnapshot, getDoc, deleteDoc,
 } from 'firebase/firestore';

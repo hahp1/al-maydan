@@ -8,6 +8,7 @@ import { useTheme } from './ThemeContext';
 import { WordleEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
 
 // ── ثوابت ────────────────────────────────────────────────────
 const MAX_ATTEMPTS  = 7;

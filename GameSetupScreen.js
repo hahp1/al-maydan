@@ -6,6 +6,7 @@ import {
 import { useTheme } from './ThemeContext';
 import { useT, useRTLStyles } from './I18n';
 import CachedCategoryImage from './CachedCategoryImage';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const CategoryCard = memo(({ cat, isSelected, isFull, itemSize, onPress, theme }) => (
   <TouchableOpacity
@@ -170,19 +171,13 @@ export default function GameSetupScreen({ onStart, onBack, tokens = 0, categorie
       </View>
 
       {/* ── زر البدء ── */}
-      <TouchableOpacity
-        style={[
-          styles.startBtn,
-          { backgroundColor: canStart ? theme.accent : theme.bgCard },
-          !canStart && { borderWidth: 1, borderColor: theme.borderCard },
-        ]}
+      <ThemedButton
         onPress={handleStart}
-        activeOpacity={canStart ? 0.85 : 1}
-      >
-        <Text style={[styles.startBtnText, { color: canStart ? theme.textOnAccent : theme.textMuted }]}>
-          {startBtnLabel}
-        </Text>
-      </TouchableOpacity>
+        label={startBtnLabel}
+        variant="primary"
+        size="large"
+        disabled={!canStart}
+      />
 
       {/* ── تلميح وسائل المساعدة ── */}
       <Text style={[styles.lifelineHint, { color: theme.textMuted }]}>

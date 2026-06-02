@@ -8,6 +8,8 @@ import { useLanguage } from './I18n';
 import { useOnlineGame } from './useOnlineGame';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
+import CrystalTable from './CrystalTable';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -781,6 +783,9 @@ export default function BilootGameScreen({ onBack, currentUser, onGameEnd, onGam
           </View>
         )}
 
+        {/* ── طاولة اللعب البلورية ── */}
+        <CrystalTable style={st.crystalTable} />
+
         {/* ── منطقة الحيلة ── */}
         <View style={[st.trickArea, {
           shadowColor: theme.accent || '#f5c518',
@@ -925,6 +930,15 @@ const st = StyleSheet.create({
 
   felt: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: 'transparent' },
 
+  crystalTable: {
+    position: 'absolute',
+    top: '22%',
+    left: SW * 0.08,
+    right: SW * 0.08,
+    height: SH * 0.38,
+    zIndex: 2,
+  },
+
   pTop: {
     position: 'absolute', top: 10, left: 0, right: 0,
     alignItems: 'center', gap: 6, zIndex: 15,
@@ -945,13 +959,13 @@ const st = StyleSheet.create({
   },
 
   miniCard: {
-    width: 22, height: 32, backgroundColor: '#0f2848',
-    borderRadius: 3, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)',
+    width: 22, height: 32, backgroundColor: '#1a237e',
+    borderRadius: 3, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.20)',
     shadowColor: '#000', shadowOffset: { width: 1, height: 1 }, shadowOpacity: 0.4, shadowRadius: 2, elevation: 2,
   },
   miniCardSide: {
-    width: 26, height: 38, backgroundColor: '#0f2848',
-    borderRadius: 3, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)',
+    width: 26, height: 38, backgroundColor: '#1a237e',
+    borderRadius: 3, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.20)',
     shadowColor: '#000', shadowOffset: { width: 1, height: 1 }, shadowOpacity: 0.4, shadowRadius: 2, elevation: 2,
   },
 

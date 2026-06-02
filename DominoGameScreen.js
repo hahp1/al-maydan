@@ -8,6 +8,8 @@ import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
+import CrystalTable from './CrystalTable';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -850,6 +852,9 @@ export default function DominoGameScreen({ onBack, currentUser, players: initial
           <PassBubble visible={passBubble[3]} style={{ bottom: -28, alignSelf: 'center' }} />
         </View>
 
+        {/* ── طاولة اللعب البلورية ── */}
+        <CrystalTable style={styles.crystalTable} />
+
         {/* ── BOARD TILES ── */}
         {boardPositions.map((pos, i) => (
           <BoardTile
@@ -1001,6 +1006,16 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     backgroundColor: 'transparent',
+  },
+
+  // طاولة بلورية
+  crystalTable: {
+    position: 'absolute',
+    top: '18%',
+    left: SW * 0.06,
+    right: SW * 0.06,
+    height: SH * 0.42,
+    zIndex: 2,
   },
 
   // Player positions

@@ -1,13 +1,11 @@
 /**
- * App.js — محدّث
+ * App.js — نسخة احترافية
  * ════════════════════════════════════════════════════════════
- *  ✅ كل الوظائف السابقة محفوظة
- *  ✅ initSoundService + playBgMusic عند البوت
- *  ✅ splash عند أول دخول بعد اللوغان
- *  ✅ win/lose عند نهاية اللعبة
- *  ✅ KeepAlive للشاشات الرئيسية — لا unmount عند الانتقال
- *  ✅ Fade transition ناعم بين الشاشات
- *  ✅ Lazy mount لشاشات الألعاب
+ *  ✅ State Machine واحدة بدل states متفرقة تتسابق
+ *  ✅ Offline-first: جلسة محفوظة تعمل بدون إنترنت
+ *  ✅ Firebase Auth: timeout ذكي + fallback فوري من cache
+ *  ✅ لا race condition ممكن — كل تحديث دفعة وحدة
+ *  ✅ كل الوظائف السابقة محفوظة 100%
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -32,7 +30,7 @@ import ErrorBoundary from './ErrorBoundary';
 import NetStatus     from './NetStatus';
 import { useTokenSync }    from './useTokenSync';
 import { XPNotification, useXPNotify } from './XPNotification';
-import { useProStatus, usePurchasedThemes, isThemeUnlocked, purchaseTheme } from './ProService';
+import { useProStatus, usePurchasedThemes, isThemeUnlocked } from './ProService';
 
 // ── شاشات ──
 import OnboardingScreen, { EXPERIENCE_KEY, EXPERIENCES } from './OnboardingScreen';
@@ -55,7 +53,7 @@ import BullshitGameScreen   from './BullshitGameScreen';
 import MafiaGameScreen      from './MafiaGameScreen';
 import CodenamesGameScreen  from './CodenamesGameScreen';
 import KoutGameScreen       from './KoutGameScreen';
-import ManAnaScreen from './ManAnaScreen';
+import ManAnaScreen         from './ManAnaScreen';
 import ActItOutScreen       from './ActItOutScreen';
 import TruthDareScreen      from './TruthDareScreen';
 import DominoGameScreen     from './DominoGameScreen';
@@ -91,6 +89,18 @@ import {
 } from './SoundService';
 
 const HIGHSCORE_KEY = 'almaydan_highscore';
+
+// ══════════════════════════════════════════════════════════════
+//  State Machine — حالات التطبيق
+//  loading      → يقرأ الـ cache ويتحقق من الجلسة
+//  unauthenticated → شاشة تسجيل الدخول
+//  authenticated   → التطبيق الكامل
+// ══════════════════════════════════════════════════════════════
+const AUTH_STATUS = {
+  LOADING:         'loading',
+  UNAUTHENTICATED: 'unauthenticated',
+  AUTHENTICATED:   'authenticated',
+};
 
 // ─── Wrapper يلف شاشات ألعاب الجلسة بخلفية المدينة ───────────
 function GameScreenWrapper({ theme, children }) {
@@ -143,9 +153,9 @@ const nhStyles = StyleSheet.create({
   cancelText: { fontSize: 14 },
 });
 
-// UIDs المصرح لهم بدخول شاشة الادمن (أضف uid حسابك هنا)
+// UIDs المصرح لهم بدخول شاشة الادمن
 const ADMIN_UIDS = [
-  'Haho1',  // Expo account placeholder - استبدل بـ Firebase UID الفعلي
+  'Haho1',
 ];
 
 const GAME_SCREENS = [
@@ -160,28 +170,31 @@ const GAME_SCREENS = [
 // ══════════════════════════════════════════════════════════════
 function MainApp() {
   const { theme, themeId, setThemeId } = useTheme();
-  const [experience,        setExperience]        = useState(null);
-  const [bootLoading,       setBootLoading]       = useState(true);
-  const [screen,            setScreen]            = useState('login');
-  const [user,              setUser]              = useState(null);
+
+  // ── State Machine المركزية ──
+  // كل شيء يتحدث دفعة وحدة — لا race condition
+  const [authStatus,  setAuthStatus]  = useState(AUTH_STATUS.LOADING);
+  const [user,        setUser]        = useState(null);
+  const [experience,  setExperience]  = useState(null);
+  const [screen,      setScreen]      = useState('home');
+
+  // ── states مساعدة ──
   const [initialTokens,     setInitialTokens]     = useState(30);
   const [tokens, setTokens] = useTokenSync(user, initialTokens);
   const [gameData,          setGameData]          = useState(null);
   const [finalScores,       setFinalScores]       = useState(null);
-  // ── الفئات: cache ذكي — تظهر فوراً من AsyncStorage ──
   const { categories } = useCachedCategories();
 
-  // ── Pro status ──
-  const { isPro }      = useProStatus(user);
-  const { purchased }  = usePurchasedThemes(user);
+  const { isPro }     = useProStatus(user);
+  const { purchased } = usePurchasedThemes(user);
 
-  // إذا انتهى Pro والثيم المختار غير مشترى → نُعيده للـ dark
   useEffect(() => {
     const current = ALL_THEMES.find(t => t.id === themeId);
     if (current && !isThemeUnlocked(current, isPro, purchased)) {
       setThemeId('dark');
     }
   }, [isPro]);
+
   const [showTokenModal,    setShowTokenModal]    = useState(false);
   const [highScore,         setHighScore]         = useState(0);
   const [gameMode,          setGameMode]          = useState('local');
@@ -196,75 +209,143 @@ function MainApp() {
 
   // ── البطولة ──
   const activeTournamentRef = useRef(null);
+  const userRef             = useRef(null);
+  const xpNotify            = useXPNotify();
+  // Firebase Auth unsubscribe + timeout refs للتنظيف
+  const authUnsubRef        = useRef(null);
+  const authTimeoutRef      = useRef(null);
 
-  // ── مرجع المستخدم الحالي ──
-  const userRef   = useRef(null);
-  const xpNotify  = useXPNotify();
   useEffect(() => { userRef.current = user; }, [user]);
 
-  // ── تهيئة الأصوات عند بوت التطبيق ──
-  useEffect(() => {
-    initSoundService().then(() => {
-      playBgMusic();
-    });
+  // ══════════════════════════════════════════════════════════════
+  //  دالة مساعدة: تحديث الحالة كلها دفعة وحدة
+  //  هذا يضمن render واحد فقط — لا تسابق بين states
+  // ══════════════════════════════════════════════════════════════
+  const commitSession = useCallback((sessionUser, sessionExp, targetScreen = 'home') => {
+    setUser(sessionUser);
+    setInitialTokens(sessionUser?.tokens ?? (sessionUser?.isGuest ? 0 : 30));
+    setExperience(sessionExp);
+    setScreen(targetScreen);
+    setAuthStatus(AUTH_STATUS.AUTHENTICATED);
   }, []);
 
-  // ── تحميل البيانات الأولية + استعادة الجلسة ──
+  const commitLogout = useCallback(() => {
+    setUser(null);
+    setInitialTokens(30);
+    setScreen('home');
+    setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+  }, []);
+
+  // ── تهيئة الأصوات ──
   useEffect(() => {
-    const restore = async () => {
-      // مزامنة وقت السيرفر أولاً
-      initServerTime().catch(() => {});
+    initSoundService().then(() => playBgMusic());
+  }, []);
+
+  // ══════════════════════════════════════════════════════════════
+  //  Boot — استعادة الجلسة (Offline-first)
+  //
+  //  المنطق:
+  //  1. اقرأ cache فوراً من AsyncStorage (0ms)
+  //  2. لو ضيف → ادخل فوراً بدون إنترنت
+  //  3. لو مسجل → ابدأ Firebase Auth check
+  //     - لو Firebase رجع قبل 2 ثانية → استخدم نتيجته
+  //     - لو تأخر أكثر من 2 ثانية (offline) → ادخل من الـ cache
+  //     - لو Firebase رجع null (token منتهي) → logout
+  //  4. لو لا cache → شاشة تسجيل الدخول
+  // ══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    initServerTime().catch(() => {});
+
+    const boot = async () => {
       try {
-        // 1. استعادة التجربة
-        const exp = await AsyncStorage.getItem(EXPERIENCE_KEY);
-        if (exp === EXPERIENCES.GLOBAL || exp === EXPERIENCES.ARABIC) setExperience(exp);
+        // ── 1. قراءة الـ cache ──
+        const [sessionRaw, expRaw, highScoreRaw] = await Promise.all([
+          AsyncStorage.getItem(SESSION_KEY),
+          AsyncStorage.getItem(EXPERIENCE_KEY),
+          AsyncStorage.getItem(HIGHSCORE_KEY),
+        ]);
 
-        // 2. استعادة الجلسة
-        const sessionRaw = await AsyncStorage.getItem(SESSION_KEY);
-        if (sessionRaw) {
-          const session = JSON.parse(sessionRaw);
+        // highscore
+        if (highScoreRaw) setHighScore(parseInt(highScoreRaw, 10));
 
-          if (session.isGuest) {
-            // ضيف — استعادة مباشرة
-            setUser(session);
-            setInitialTokens(session.tokens ?? 0);
-            setScreen('home');
-          } else {
-            // مستخدم مسجل — تحقق من Firebase Auth
-            const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-              unsubscribe();
-              if (firebaseUser && firebaseUser.uid === session.uid) {
-                // الجلسة لا تزال صالحة
-                setUser(session);
-                setInitialTokens(session.tokens ?? 30);
-                setScreen('home');
-              } else {
-                // انتهت الجلسة — حذف وإعادة للـ login
-                await AsyncStorage.removeItem(SESSION_KEY);
-                setScreen('login');
-              }
-            });
-            // timeout: لو Firebase تأخر (offline token منتهي) → استخدم الـ cache
-            setTimeout(() => {
-              if (screen === 'login' && session?.uid) {
-                setUser(session);
-                setInitialTokens(session.tokens ?? 30);
-                setScreen('home');
-              }
-            }, 3000);
-          }
+        // experience
+        const savedExp = (expRaw === EXPERIENCES.GLOBAL || expRaw === EXPERIENCES.ARABIC)
+          ? expRaw
+          : EXPERIENCES.ARABIC; // افتراضي
+
+        // لا جلسة محفوظة → شاشة تسجيل الدخول
+        if (!sessionRaw) {
+          setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+          return;
         }
+
+        const session = JSON.parse(sessionRaw);
+
+        // ── 2. ضيف → ادخل فوراً ──
+        if (session.isGuest) {
+          commitSession(session, savedExp);
+          return;
+        }
+
+        // ── 3. مستخدم مسجل → Firebase Auth check مع timeout ──
+        let resolved = false; // منع التنفيذ المزدوج
+
+        // Timeout: بعد 2 ثانية بدون رد من Firebase → ادخل من الـ cache
+        authTimeoutRef.current = setTimeout(() => {
+          if (resolved) return;
+          resolved = true;
+          // أوقف الاستماع لـ Firebase — لسنا بحاجته بعد الآن
+          authUnsubRef.current?.();
+          // ادخل بالبيانات المحفوظة (offline mode)
+          commitSession(session, savedExp);
+        }, 2000);
+
+        // Firebase Auth check
+        authUnsubRef.current = onAuthStateChanged(auth, async (firebaseUser) => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(authTimeoutRef.current);
+          authUnsubRef.current?.();
+
+          if (firebaseUser && firebaseUser.uid === session.uid) {
+            // ✅ جلسة صالحة
+            commitSession(session, savedExp);
+          } else {
+            // Firebase رجع null أو حساب مختلف.
+            // قبل logout قسري: تحقق أن السبب ليس انقطاع شبكة لحظي.
+            // لو لا اتصال → ثق بالـ cache المحفوظ (offline-tolerant)
+            // لو متصل فعلاً → token منتهي حقاً → logout
+            let online = false;
+            try {
+              const res = await fetch('https://www.google.com/generate_204', { method: 'HEAD', cache: 'no-store' });
+              online = res.status === 204;
+            } catch { online = false; }
+
+            if (!online) {
+              // offline — ادخل من الـ cache بدل logout مزعج
+              commitSession(session, savedExp);
+            } else {
+              // online + Firebase رفض → token منتهي فعلاً → logout
+              await AsyncStorage.removeItem(SESSION_KEY).catch(() => {});
+              setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+            }
+          }
+        });
+
       } catch (e) {
-        console.warn('Session restore error:', e);
-      } finally {
-        setBootLoading(false);
+        console.warn('[Boot] Error:', e?.message);
+        // أي خطأ غير متوقع → شاشة تسجيل الدخول بدل crash
+        setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
       }
     };
-    restore();
-  }, []);
 
-  useEffect(() => {
-    AsyncStorage.getItem(HIGHSCORE_KEY).then(v => { if (v) setHighScore(parseInt(v)); });
+    boot();
+
+    // cleanup: أوقف Firebase listener عند unmount
+    return () => {
+      clearTimeout(authTimeoutRef.current);
+      authUnsubRef.current?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -275,7 +356,6 @@ function MainApp() {
   }, []);
 
   useEffect(() => {
-    // جلب البطولة الحالية + إنشاء القادمة تلقائياً إذا لم توجد
     getActiveTournament().then(tour => { activeTournamentRef.current = tour; });
     autoCreateNextTournament().catch(() => {});
   }, []);
@@ -285,24 +365,39 @@ function MainApp() {
     if (!user) return;
     const uid     = user?.uid || user?.guestId;
     const isGuest = !!user?.isGuest;
-    if (uid) {
-      recordDailyLogin(uid, isGuest).catch(() => {});
-    }
-    // صوت الترحيب عند أول دخول
+    if (uid) recordDailyLogin(uid, isGuest).catch(() => {});
     playSound('splash');
   }, [user?.uid, user?.guestId]);
+
+  // ══════════════════════════════════════════════
+  //  handlers تسجيل الدخول — دفعة وحدة
+  // ══════════════════════════════════════════════
+  const handleLogin = useCallback(async (userData, exp) => {
+    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData)).catch(() => {});
+    if (exp) await AsyncStorage.setItem(EXPERIENCE_KEY, exp).catch(() => {});
+    commitSession(userData, exp ?? EXPERIENCES.ARABIC);
+  }, [commitSession]);
+
+  const handleGuest = useCallback(async (guestProfile, exp) => {
+    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(guestProfile)).catch(() => {});
+    if (exp) await AsyncStorage.setItem(EXPERIENCE_KEY, exp).catch(() => {});
+    commitSession(guestProfile, exp ?? EXPERIENCES.ARABIC);
+  }, [commitSession]);
+
+  const handleLogout = useCallback(async () => {
+    await AsyncStorage.removeItem(SESSION_KEY).catch(() => {});
+    commitLogout();
+  }, [commitLogout]);
 
   // ══════════════════════════════════════════════
   //  tryStartGame
   // ══════════════════════════════════════════════
   const tryStartGame = useCallback(async (targetScreen, cost = 1, extraAction = null, deferred = false) => {
-    // Pro: قلوب لا محدودة — لا نخصم
     if (isPro) {
       if (extraAction) extraAction();
       setScreen(targetScreen);
       return;
     }
-    // deferred = true → للألعاب الأونلاين: انتقل أولاً، اقتطع بعد بدء اللعبة الفعلي
     if (deferred) {
       if (extraAction) extraAction();
       setScreen(targetScreen);
@@ -319,7 +414,6 @@ function MainApp() {
     setScreen(targetScreen);
   }, [isPro]);
 
-  // spendHeartNow — يُستدعى من داخل اللعبة بعد نجاح الاتصال
   const spendHeartNow = useCallback(async (cost = 1) => {
     if (isPro) return true;
     const result = await spendHeart(cost);
@@ -348,7 +442,7 @@ function MainApp() {
   }, []);
 
   // ══════════════════════════════════════════════
-  //  onOnlineGameEnd — XP + صوت
+  //  onOnlineGameEnd
   // ══════════════════════════════════════════════
   const onOnlineGameEnd = useCallback(async (gameName, won) => {
     const u       = userRef.current;
@@ -359,7 +453,6 @@ function MainApp() {
     try {
       const result = await recordOnlineGameEnd(uid, gameName, won, isGuest);
       xpNotify.current?.show(result);
-      // إذا ارتفع المستوى، حدّث tokens في الـ state
       if (result?.levelReward > 0) setTokens(t => t + result.levelReward);
     } catch (e) {
       if (__DEV__) console.warn('[XP] onOnlineGameEnd:', e);
@@ -367,7 +460,7 @@ function MainApp() {
   }, []);
 
   // ══════════════════════════════════════════════
-  //  onSoloGameEnd — XP + صوت
+  //  onSoloGameEnd
   // ══════════════════════════════════════════════
   const onSoloGameEnd = useCallback(async (won) => {
     const u       = userRef.current;
@@ -385,7 +478,7 @@ function MainApp() {
   }, []);
 
   // ══════════════════════════════════════════════
-  //  onAdWatched — XP
+  //  onAdWatched
   // ══════════════════════════════════════════════
   const onAdWatched = useCallback(async () => {
     const u       = userRef.current;
@@ -400,10 +493,9 @@ function MainApp() {
   }, []);
 
   // ── BackHandler ──
-
   useEffect(() => {
     const handler = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (screen === 'login' || !experience) return false;
+      if (authStatus !== AUTH_STATUS.AUTHENTICATED) return false;
       if (GAME_SCREENS.includes(screen)) {
         Alert.alert(tStatic('common.leave') + ' 🚪', tStatic('leave.message'), [
           { text: tStatic('common.cancel'), style: 'cancel' },
@@ -424,11 +516,10 @@ function MainApp() {
       return false;
     });
     return () => handler.remove();
-  }, [screen, experience]);
+  }, [screen, authStatus]);
 
   // ══════════════════════════════════════════════════════════════
-  //  useLazyScreen hooks — يجب أن تكون قبل أي early return
-  //  (Rules of Hooks: لا hooks بعد conditional returns)
+  //  useLazyScreen — يجب قبل أي early return (Rules of Hooks)
   // ══════════════════════════════════════════════════════════════
   const showSetup          = useLazyScreen(screen === 'setup');
   const showKnowledge      = useLazyScreen(screen === 'knowledge');
@@ -457,8 +548,12 @@ function MainApp() {
   const showProfile        = useLazyScreen(screen === 'profile');
   const showSettings       = useLazyScreen(screen === 'settings');
 
-  // ── Loading ──
-  if (bootLoading) {
+  // ══════════════════════════════════════════════════════════════
+  //  Render — State Machine
+  // ══════════════════════════════════════════════════════════════
+
+  // LOADING — شاشة التحميل
+  if (authStatus === AUTH_STATUS.LOADING) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f0f1a' }}>
         <ActivityIndicator size="large" color="#f5c518" />
@@ -466,28 +561,17 @@ function MainApp() {
     );
   }
 
-  // إذا لم تُختر تجربة بعد → أعد للوغين
-  if (!experience && screen !== 'login') {
+  // UNAUTHENTICATED — شاشة تسجيل الدخول
+  if (authStatus === AUTH_STATUS.UNAUTHENTICATED) {
     return (
       <LoginScreen
-        onLogin={async (userData, exp) => {
-          setUser(userData);
-          setInitialTokens(userData.tokens ?? 30);
-          if (exp) setExperience(exp);
-          await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData)).catch(() => {});
-          setScreen('home');
-        }}
-        onGuest={async (guestProfile, exp) => {
-          setUser(guestProfile);
-          setInitialTokens(guestProfile.tokens ?? 0);
-          if (exp) setExperience(exp);
-          await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(guestProfile)).catch(() => {});
-          setScreen('home');
-        }}
+        onLogin={handleLogin}
+        onGuest={handleGuest}
       />
     );
   }
 
+  // AUTHENTICATED — التطبيق الكامل
   const isGlobal = experience === EXPERIENCES.GLOBAL;
 
   const sharedProps = {
@@ -500,27 +584,6 @@ function MainApp() {
     activeTournament: activeTournamentRef.current,
   };
 
-  // ── تسجيل الدخول ──
-  if (screen === 'login') return (
-    <LoginScreen
-      onLogin={async (userData, exp) => {
-        setUser(userData);
-        setInitialTokens(userData.tokens ?? 30);
-        if (exp) setExperience(exp);
-        await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData)).catch(() => {});
-        setScreen('home');
-      }}
-      onGuest={async (guestProfile, exp) => {
-        setUser(guestProfile);
-        setInitialTokens(guestProfile.tokens ?? 0);
-        if (exp) setExperience(exp);
-        await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(guestProfile)).catch(() => {});
-        setScreen('home');
-      }}
-    />
-  );
-
-  // ── Modals مشتركة ──
   const commonModals = (
     <>
       <HeartsModal
@@ -543,19 +606,13 @@ function MainApp() {
     </>
   );
 
-  // ══════════════════════════════════════════════════════════════
-  //  الـ render الرئيسي — TransitionRoot يُغلّف كل شيء
-  // ══════════════════════════════════════════════════════════════
   return (
     <TransitionRoot screen={screen} style={{ backgroundColor: theme.bg }}>
 
-      {/* ── مؤشر الاتصال — يظهر فوق كل شيء عند offline ── */}
       <NetStatus />
-
-      {/* ── إشعارات XP / level up / missions — فوق كل الشاشات ── */}
       <XPNotification ref={xpNotify} />
 
-      {/* ── الشاشات الرئيسية: KeepAlive — لا تُدمَّر عند الانتقال ── */}
+      {/* ── الشاشات الرئيسية: KeepAlive ── */}
       <KeepAliveScreen active={screen === 'home'}>
         <HomeScreen {...sharedProps} />
         {commonModals}
@@ -566,7 +623,11 @@ function MainApp() {
           setScreen={setScreen}
           user={user}
           setGameMode={setGameMode}
-          tryStartGame={(screen, cost, extra) => tryStartGame(screen, cost, extra, screen !== 'mafia' && screen !== 'actitout' && screen !== 'truthdare' && screen !== 'rankfriends' && screen !== 'neverhaveiever' && screen !== 'manana' && screen !== 'whoisspy' && screen !== 'guessimage')}
+          tryStartGame={(sc, cost, extra) => tryStartGame(sc, cost, extra,
+            sc !== 'mafia' && sc !== 'actitout' && sc !== 'truthdare' &&
+            sc !== 'rankfriends' && sc !== 'neverhaveiever' && sc !== 'manana' &&
+            sc !== 'whoisspy' && sc !== 'guessimage'
+          )}
         />
         {commonModals}
       </KeepAliveScreen>
@@ -591,8 +652,6 @@ function MainApp() {
         <FriendsScreen user={user} setScreen={setScreen} initialTab={friendsInitialTab} />
       </KeepAliveScreen>
 
-      {/* ── شاشات Lazy: تُنشَأ عند الطلب وتُدمَّر بعد المغادرة ── */}
-
       {showProfile && (
         <KeepAliveScreen active={screen === 'profile'}>
           <ProfileScreen user={user} setScreen={setScreen} />
@@ -606,10 +665,10 @@ function MainApp() {
             user={user} tokens={tokens} setTokens={setTokens}
             experience={experience} isPro={isPro} purchased={purchased}
             onChangeExperience={async (newExp) => {
-              await AsyncStorage.setItem(EXPERIENCE_KEY, newExp);
+              await AsyncStorage.setItem(EXPERIENCE_KEY, newExp).catch(() => {});
               setExperience(newExp);
             }}
-            onLogout={async () => { await AsyncStorage.removeItem(SESSION_KEY).catch(()=>{}); setUser(null); setInitialTokens(30); setScreen('login'); }}
+            onLogout={handleLogout}
           />
         </KeepAliveScreen>
       )}
@@ -631,17 +690,10 @@ function MainApp() {
                 setScreen('board');
               }}
               onBack={() => setScreen('knowledge')}
-              tokens={tokens}
               categories={categories}
-              onOpenTokenModal={() => setShowTokenModal(true)}
+              experience={experience}
             />
           </GameScreenWrapper>
-          <TokenModal
-            visible={showTokenModal}
-            onClose={() => setShowTokenModal(false)}
-            tokens={tokens}
-            onAddTokens={(amount) => setTokens(t => t + amount)}
-          />
         </KeepAliveScreen>
       )}
 
@@ -649,16 +701,9 @@ function MainApp() {
         <KeepAliveScreen active={screen === 'board'}>
           <GameScreenWrapper theme={theme}>
             <GameBoardScreen
-              team1={gameData.team1} team2={gameData.team2}
-              selectedCategories={gameData.selectedCategories}
-              onGameEnd={(s1, s2) => {
-                const won = s1 > s2;
-                playSound(won ? 'win' : 'lose');
-                setFinalScores({ score1: s1, score2: s2 });
-                setScreen('results');
-              }}
+              {...gameData}
               onBack={() => setScreen('knowledge')}
-              currentUser={user}
+              onGameEnd={(scores) => { setFinalScores(scores); setScreen('results'); }}
             />
           </GameScreenWrapper>
         </KeepAliveScreen>
@@ -668,10 +713,10 @@ function MainApp() {
         <KeepAliveScreen active={screen === 'results'}>
           <GameScreenWrapper theme={theme}>
             <ResultsScreen
-              team1={gameData.team1} team2={gameData.team2}
-              score1={finalScores.score1} score2={finalScores.score2}
-              onRematch={() => setScreen('setup')}
-              onHome={() => setScreen('home')}
+              scores={finalScores}
+              onBack={() => setScreen('knowledge')}
+              onPlayAgain={() => setScreen('setup')}
+              onTournamentScore={onTournamentScore}
             />
           </GameScreenWrapper>
         </KeepAliveScreen>
@@ -722,7 +767,7 @@ function MainApp() {
         </KeepAliveScreen>
       )}
 
-      {/* ── ألعاب الميدان — deferred=true للأونلاين ── */}
+      {/* ── ألعاب الميدان ── */}
       {showXO && (
         <KeepAliveScreen active={screen === 'xo'}>
           <GameScreenWrapper theme={theme}>

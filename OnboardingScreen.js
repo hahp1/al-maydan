@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from './ThemeContext';
 import { useLanguage } from './I18n';
 import LanguageSelector from './LanguageSelector';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 export const EXPERIENCE_KEY = 'arena_experience';
 
@@ -93,18 +94,7 @@ export default function OnboardingScreen({ onSelect }) {
         <Animated.View
           style={{ opacity: fadeAnim, transform: [{ translateY: card1Y }] }}
         >
-          <TouchableOpacity
-            style={[
-              styles.card,
-              {
-                backgroundColor: theme.bgCard,
-                borderColor: theme.purple + '55',
-              },
-            ]}
-            onPress={() => handleSelect(EXPERIENCES.GLOBAL)}
-            activeOpacity={0.85}
-            disabled={selecting}
-          >
+          <ThemedCard onPress={() => !selecting && handleSelect(EXPERIENCES.GLOBAL)} radius={20} padding={20} variant="default">
             <Text style={styles.cardIcon}>🌍</Text>
             <View style={styles.cardContent}>
               <Text style={[styles.cardTitle, { color: theme.purple }]}>
@@ -126,25 +116,14 @@ export default function OnboardingScreen({ onSelect }) {
               </View>
             </View>
             <Text style={[styles.arrow, { color: theme.purple }]}>›</Text>
-          </TouchableOpacity>
+          </ThemedCard>
         </Animated.View>
 
         {/* التجربة العربية */}
         <Animated.View
           style={{ opacity: fadeAnim, transform: [{ translateY: card2Y }] }}
         >
-          <TouchableOpacity
-            style={[
-              styles.card,
-              {
-                backgroundColor: theme.bgCard,
-                borderColor: theme.accentBorder,
-              },
-            ]}
-            onPress={() => handleSelect(EXPERIENCES.ARABIC)}
-            activeOpacity={0.85}
-            disabled={selecting}
-          >
+          <ThemedCard onPress={() => !selecting && handleSelect(EXPERIENCES.ARABIC)} radius={20} padding={20} variant="accent">
             <Text style={styles.cardIcon}>🕌</Text>
             <View style={styles.cardContent}>
               <Text style={[styles.cardTitle, styles.arTitle, { color: theme.accent }]}>
@@ -166,7 +145,7 @@ export default function OnboardingScreen({ onSelect }) {
               </View>
             </View>
             <Text style={[styles.arrow, { color: theme.accent }]}>›</Text>
-          </TouchableOpacity>
+          </ThemedCard>
         </Animated.View>
       </View>
 

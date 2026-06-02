@@ -9,6 +9,8 @@ import { useLanguage } from './I18n';
 import { useOnlineGame } from './useOnlineGame';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
+import CrystalTable from './CrystalTable';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -1046,6 +1048,9 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
           </View>
         )}
 
+        {/* ── طاولة اللعب البلورية ── */}
+        <CrystalTable style={styles.crystalTable} />
+
         {/* ── TRICK AREA CENTER ── */}
         {/* All 4 trick cards displayed horizontally (no rotation) arranged in 2x2 grid */}
         <View style={[styles.trickArea, {
@@ -1285,6 +1290,16 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     backgroundColor: 'transparent',
+  },
+
+  /* ── طاولة بلورية ── */
+  crystalTable: {
+    position: 'absolute',
+    top: '22%',
+    left: SW * 0.08,
+    right: SW * 0.08,
+    height: SH * 0.40,
+    zIndex: 2,
   },
 
   /* ── TOP PLAYER ── */

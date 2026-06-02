@@ -22,6 +22,7 @@ import { useTheme, THEME_GROUPS } from './ThemeContext';
 import { EXPERIENCES } from './OnboardingScreen';
 import { purchaseTheme, isThemeUnlocked } from './ProService';
 import ExitButton from './ExitButton';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const PACKAGES = [
   { amount: 200,  price: '0.99$' },
@@ -36,14 +37,11 @@ const { width: SW, height: SH } = Dimensions.get('window');
 // ══════════════════════════════════════════════════════════════
 
 const PackCard = memo(({ amount, price, onPress, theme }) => (
-  <TouchableOpacity
-    style={[styles.packCard, { backgroundColor: theme.bgInput, borderColor: theme.accentBorder }]}
-    onPress={onPress} activeOpacity={0.8}
-  >
+  <ThemedCard onPress={onPress} radius={12} padding={12} variant="accent" style={{alignItems:'center'}}>
     <Text style={[styles.packAmount, { color: theme.accent }]}>{amount}</Text>
     <Text style={styles.packCoin}>🪙</Text>
     <Text style={[styles.packPrice, { color: theme.textSecondary }]}>{price}</Text>
-  </TouchableOpacity>
+  </ThemedCard>
 ));
 
 const SettingRow = memo(({ label, sub, value, onChange, theme }) => (
@@ -64,9 +62,9 @@ const SettingRow = memo(({ label, sub, value, onChange, theme }) => (
 const Section = memo(({ title, children, theme }) => (
   <View style={styles.section}>
     <Text style={[styles.sectionTitle, { color: theme.accent }]}>{title}</Text>
-    <View style={[styles.card, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+    <ThemedCard radius={16} padding={0} style={{overflow:'hidden'}}>
       {children}
-    </View>
+    </ThemedCard>
   </View>
 ));
 
@@ -210,34 +208,19 @@ const PreviewModal = memo(({ item, visible, onClose, onSelect, onBuy, isActive, 
 
           {/* زرّا الإجراء */}
           <View style={styles.previewActions}>
-            <TouchableOpacity style={[styles.previewBtn, styles.previewBtnCancel]} onPress={onClose}>
-              <Text style={styles.previewBtnCancelText}>{isRtl ? 'إغلاق' : 'Close'}</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={onClose}
+              label={isRtl?'إغلاق':'Close'}
+              variant="secondary" size="medium" fullWidth={false} style={{flex:1}} />
             {isLocked ? (
-              // زر الشراء
-              <TouchableOpacity
-                style={[styles.previewBtn, styles.previewBtnSelect, { backgroundColor: item.previewAccent }]}
+              <ThemedButton
                 onPress={() => { onBuy(item); onClose(); }}
-              >
-                <Text style={styles.previewBtnSelectText}>
-                  {isRtl ? `🪙 شراء بـ ${item.price}` : `🪙 Buy for ${item.price}`}
-                </Text>
-              </TouchableOpacity>
+                label={isRtl ? `🪙 شراء بـ ${item.price}` : `🪙 Buy for ${item.price}`}
+                variant="primary" size="medium" fullWidth={false} style={{flex:1}} />
             ) : (
-              // زر الاختيار
-              <TouchableOpacity
-                style={[
-                  styles.previewBtn, styles.previewBtnSelect,
-                  { backgroundColor: item.previewAccent },
-                  isActive && { opacity: 0.5 },
-                ]}
+              <ThemedButton
                 onPress={() => { onSelect(item.id); onClose(); }}
-                disabled={isActive}
-              >
-                <Text style={styles.previewBtnSelectText}>
-                  {isActive ? (isRtl ? '✓ مختار' : '✓ Selected') : (isRtl ? 'اختر هذا الثيم' : 'Apply Theme')}
-                </Text>
-              </TouchableOpacity>
+                label={isActive ? (isRtl?'✓ مختار':'✓ Selected') : (isRtl?'اختر هذا الثيم':'Apply Theme')}
+                variant="primary" size="medium" disabled={isActive} fullWidth={false} style={{flex:1}} />
             )}
           </View>
 
@@ -259,14 +242,11 @@ const ThemeRow = memo(({ item, isActive, unlocked = true, isPro = false, onSelec
   const isLocked = item.price > 0 && !unlocked;
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.themeRow,
-        { backgroundColor: isActive ? item.previewAccent + '18' : theme.bgElevated },
-        { borderColor: isActive ? item.previewAccent : theme.border },
-      ]}
+    <ThemedCard
       onPress={() => unlocked ? onSelect(item.id) : onBuy(item)}
-      activeOpacity={0.82}
+      radius={14} padding={12}
+      variant={isActive?'accent':'default'}
+      style={[styles.themeRow, isActive && {borderColor:item.previewAccent}]}
     >
       {/* صورة الثيم */}
       <TouchableOpacity
@@ -320,7 +300,7 @@ const ThemeRow = memo(({ item, isActive, unlocked = true, isPro = false, onSelec
           {isActive && <View style={[styles.themeRadioFill, { backgroundColor: item.previewAccent }]} />}
         </View>
       )}
-    </TouchableOpacity>
+    </ThemedCard>
   );
 });
 

@@ -29,6 +29,7 @@ import {
 } from 'react-native';
 import { useTheme } from './ThemeContext';
 import { DAILY_MISSIONS_POOL } from './XPService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
 
 // ════════════════════════════════════════════════════════════
 //  XP Toast — يطير لأعلى ويختفي بعد 1.8 ثانية

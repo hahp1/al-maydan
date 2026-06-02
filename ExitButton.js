@@ -11,7 +11,6 @@ import { memo } from 'react';
 import { TouchableOpacity, View, StyleSheet } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 import { useTheme } from './ThemeContext';
-import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
 
 const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 

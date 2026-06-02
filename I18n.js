@@ -332,6 +332,9 @@ const T = {
   'games.poker_title':           { ar: 'بوكر',             en: 'Poker' },
   'games.poker_desc':            { ar: 'بوكر تكساس — قريباً', en: "Texas Hold'em — Coming soon" },
   'games.poker_players':         { ar: '2–6 لاعبين',      en: '2–6 players' },
+  'games.guessimage_title':      { ar: 'تخمين الصورة',    en: 'Guess the Image' },
+  'games.guessimage_desc':       { ar: 'صورة أمامك — خصمك يسأل وأنت تجيب', en: 'Image on your face — opponent asks yes/no' },
+  'games.guessimage_players':    { ar: 'لاعبان',           en: '2 players' },
 
   // ── XO ─────────────────────────────────────────────────────
   'xo.youWon':        { ar: '🎉 فزت!',               en: '🎉 You Won!' },

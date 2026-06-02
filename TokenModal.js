@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from './ThemeContext';
 import ExitButton from './ExitButton';
 import { useT } from './I18n';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const MAX_ADS   = 10;  // ✅ 10 إعلانات/يوم للتوكنز
 const AD_REWARD = 15;  // ✅ 15 توكن لكل إعلان
@@ -123,14 +124,14 @@ export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
               <Text style={[styles.sectionTitle, { color: theme.accent }]}>{t('tokens.upgradePremium')}</Text>
               <View style={styles.plansCol}>
                 {PLANS.map((plan) => (
-                  <TouchableOpacity key={plan.id} style={[styles.planCard, { backgroundColor: theme.bgElevated, borderColor: theme.accentBorder }]} onPress={() => handlePlan(plan)}>
+                  <ThemedCard key={plan.id} onPress={() => handlePlan(plan)} radius={14} padding={14} variant="accent">
                     <Text style={styles.planIcon}>{plan.icon}</Text>
                     <View style={styles.planInfo}>
                       <Text style={[styles.planName, { color: theme.textPrimary }]}>{t(plan.nameKey)}</Text>
                       <Text style={[styles.planDuration, { color: theme.textSecondary }]}>{t(plan.subKey)}</Text>
                     </View>
                     <Text style={[styles.planPrice, { color: theme.accent }]}>{plan.price}</Text>
-                  </TouchableOpacity>
+                  </ThemedCard>
                 ))}
               </View>
             </View>
@@ -140,14 +141,14 @@ export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
               <Text style={[styles.sectionTitle, { color: theme.accent }]}>{t('tokens.buyCoins')}</Text>
               <View style={styles.packagesGrid}>
                 {PACKAGES.map((pkg) => (
-                  <TouchableOpacity key={pkg.id} style={[styles.packCard, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]} onPress={() => handlePackage(pkg)}>
+                  <ThemedCard key={pkg.id} onPress={() => handlePackage(pkg)} radius={12} padding={12}>
                     <Text style={[styles.packAmount, { color: theme.accent }]}>{pkg.amount}</Text>
                     <Text style={styles.packCoin}>🪙</Text>
                     <Text style={[styles.packLabel, { color: theme.textSecondary }]}>{t(pkg.labelKey)}</Text>
                     <View style={[styles.packPriceTag, { backgroundColor: theme.accent }]}>
                       <Text style={[styles.packPrice, { color: theme.textOnAccent }]}>{pkg.price}</Text>
                     </View>
-                  </TouchableOpacity>
+                  </ThemedCard>
                 ))}
               </View>
             </View>

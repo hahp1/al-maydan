@@ -65,6 +65,7 @@ import NeverHaveIEver       from './NeverHaveIEverScreen';
 import DrawGuessScreen      from './DrawGuessGameScreen';
 import WordleGameScreen     from './WordleGameScreen';
 import WhoIsSpyScreen       from './WhoIsSpyScreen';
+import GuessImageScreen     from './GuessImageScreen';
 import { CityBackground }   from './GameEngraving';
 
 // ── القلوب ──
@@ -151,7 +152,7 @@ const GAME_SCREENS = [
   'xo', 'bullshit', 'mafia', 'codenames', 'kout', 'manana', 'actitout',
   'wordle', 'truthdare', 'dominoes', 'biloot', 'rankfriends',
   'neverhaveiever', 'drawguess', 'board', 'solo', 'soloTournament', 'online',
-  'whoisspy',
+  'whoisspy', 'guessimage',
 ];
 
 // ══════════════════════════════════════════════════════════════
@@ -451,6 +452,7 @@ function MainApp() {
   const showRankFriends    = useLazyScreen(screen === 'rankfriends');
   const showNeverHaveIEver = useLazyScreen(screen === 'neverhaveiever');
   const showWhoIsSpy       = useLazyScreen(screen === 'whoisspy');
+  const showGuessImage     = useLazyScreen(screen === 'guessimage');
   const showAdmin          = useLazyScreen(screen === 'admin');
   const showProfile        = useLazyScreen(screen === 'profile');
   const showSettings       = useLazyScreen(screen === 'settings');
@@ -564,7 +566,7 @@ function MainApp() {
           setScreen={setScreen}
           user={user}
           setGameMode={setGameMode}
-          tryStartGame={(screen, cost, extra) => tryStartGame(screen, cost, extra, screen !== 'mafia' && screen !== 'actitout' && screen !== 'truthdare' && screen !== 'rankfriends' && screen !== 'neverhaveiever' && screen !== 'manana' && screen !== 'whoisspy')}
+          tryStartGame={(screen, cost, extra) => tryStartGame(screen, cost, extra, screen !== 'mafia' && screen !== 'actitout' && screen !== 'truthdare' && screen !== 'rankfriends' && screen !== 'neverhaveiever' && screen !== 'manana' && screen !== 'whoisspy' && screen !== 'guessimage')}
         />
         {commonModals}
       </KeepAliveScreen>
@@ -837,6 +839,19 @@ function MainApp() {
         <KeepAliveScreen active={screen === 'whoisspy'}>
           <GameScreenWrapper theme={theme}>
             <WhoIsSpyScreen onBack={() => setScreen('games')} currentUser={user} />
+          </GameScreenWrapper>
+        </KeepAliveScreen>
+      )}
+
+      {!isGlobal && showGuessImage && (
+        <KeepAliveScreen active={screen === 'guessimage'}>
+          <GameScreenWrapper theme={theme}>
+            <GuessImageScreen
+              onBack={() => setScreen('games')}
+              currentUser={user}
+              onGameEnd={(won) => onOnlineGameEnd('guessimage', won)}
+              onGameReady={() => spendHeartNow(1)}
+            />
           </GameScreenWrapper>
         </KeepAliveScreen>
       )}

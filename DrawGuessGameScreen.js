@@ -43,6 +43,7 @@ import { useTheme } from './ThemeContext';
 import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
 
 // ══════════════════════════════════════════════════════════
 //  Constants
@@ -158,11 +159,7 @@ function WordChoiceModal({ visible, words, onPick, theme, isRTL }) {
             {isRTL ? '🎨 اختر كلمة لترسمها' : '🎨 Choose a word to draw'}
           </Text>
           {words.map(w => (
-            <TouchableOpacity key={w}
-              style={[s.wcBtn, { backgroundColor: theme.bgElevated, borderColor: theme.border }]}
-              onPress={() => onPick(w)} activeOpacity={0.75}>
-              <Text style={[s.wcBtnText, { color: theme.textPrimary }]}>{w}</Text>
-            </TouchableOpacity>
+            <ThemedButton key={w} onPress={() => onPick(w)} label={w} variant="secondary" size="medium" />
           ))}
         </View>
       </View>
@@ -191,11 +188,11 @@ function RoundResult({ result, word, winnerName, isRTL, theme, onNext, nextLabel
           <Text style={[s.resultWordLabel, { color: theme.textSecondary }]}>{isRTL ? 'الكلمة كانت' : 'The word was'}</Text>
           <Text style={[s.resultWordValue, { color: theme.accent }]}>{word}</Text>
         </View>
-        <TouchableOpacity style={[s.nextBtn, { backgroundColor: theme.accent }]} onPress={onNext} activeOpacity={0.8}>
-          <Text style={[s.nextBtnText, { color: theme.textOnAccent }]}>
-            {nextLabel || (isRTL ? 'التالي ←' : 'Next →')}
-          </Text>
-        </TouchableOpacity>
+        <ThemedButton
+          onPress={onNext}
+          label={nextLabel || (isRTL ? 'التالي ←' : 'Next →')}
+          variant="primary" size="large"
+        />
       </Animated.View>
     </View>
   );
@@ -241,9 +238,7 @@ function WaitingLobby({ theme, isRTL, friendCode, isFriend, onCancel }) {
       <Animated.View style={[s.dotsRow, { opacity: da }]}>
         {[0, 1, 2].map(i => <View key={i} style={[s.dot, { backgroundColor: theme.accent }]} />)}
       </Animated.View>
-      <TouchableOpacity style={[s.cancelBtn, { borderColor: theme.border }]} onPress={onCancel}>
-        <Text style={[s.cancelBtnText, { color: theme.textSecondary }]}>{isRTL ? 'إلغاء' : 'Cancel'}</Text>
-      </TouchableOpacity>
+      <ThemedButton onPress={onCancel} label={isRTL?'إلغاء':'Cancel'} variant="ghost" size="medium" />
     </View>
   );
 }
@@ -276,9 +271,7 @@ function GameOver({ players, scores, myUid, isRTL, theme, onBack }) {
             </View>
           ))}
         </View>
-        <TouchableOpacity style={[s.goBtn, { backgroundColor: theme.accent }]} onPress={onBack} activeOpacity={0.8}>
-          <Text style={[s.goBtnText, { color: theme.textOnAccent }]}>{isRTL ? '← خروج' : 'Exit →'}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label={isRTL?'← خروج':'Exit →'} variant="secondary" size="small" fullWidth={false} />
       </Animated.View>
     </View>
   );
@@ -779,39 +772,34 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
           <Text style={[s.bigTitle, { color: theme.textPrimary }]}>{isRTL ? 'رسم وتخمين' : 'Draw & Guess'}</Text>
 
           {/* Local */}
-          <TouchableOpacity style={[s.modeCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-            onPress={() => { setGameMode('local'); setScreen('setup'); }} activeOpacity={0.8}>
+          <ThemedCard onPress={() => { setGameMode('local'); setScreen('setup'); }} radius={16} padding={16} style={s.modeCard}>
             <Text style={s.modeEmoji}>📱</Text>
             <View style={s.modeTxt}>
               <Text style={[s.modeCardTitle, { color: theme.textPrimary }]}>{isRTL ? 'محلي' : 'Local'}</Text>
               <Text style={[s.modeCardSub, { color: theme.textSecondary }]}>{isRTL ? 'لاعبان على نفس الجهاز' : 'Two players, one device'}</Text>
             </View>
             <Text style={[s.modeArr, { color: theme.accent }]}>›</Text>
-          </TouchableOpacity>
+          </ThemedCard>
 
           {/* Random */}
-          <TouchableOpacity style={[s.modeCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-            onPress={startRandom} activeOpacity={0.8}>
+          <ThemedCard onPress={startRandom} radius={16} padding={16} style={s.modeCard}>
             <Text style={s.modeEmoji}>🌐</Text>
             <View style={s.modeTxt}>
               <Text style={[s.modeCardTitle, { color: theme.textPrimary }]}>{isRTL ? 'عشوائي أونلاين' : 'Random Online'}</Text>
               <Text style={[s.modeCardSub, { color: theme.textSecondary }]}>{isRTL ? 'العب مع لاعب عشوائي' : 'Play with a random player'}</Text>
             </View>
             <Text style={[s.modeArr, { color: theme.accent }]}>›</Text>
-          </TouchableOpacity>
+          </ThemedCard>
 
           {/* Friend create */}
-          <TouchableOpacity style={[s.modeCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-            onPress={createFriend} activeOpacity={0.8}>
+          <ThemedCard onPress={createFriend} radius={16} padding={16} style={s.modeCard}>
             <Text style={s.modeEmoji}>🔗</Text>
             <View style={s.modeTxt}>
               <Text style={[s.modeCardTitle, { color: theme.textPrimary }]}>{isRTL ? 'مع صديق — أنشئ غرفة' : 'With Friend — Create'}</Text>
               <Text style={[s.modeCardSub, { color: theme.textSecondary }]}>{isRTL ? 'أنشئ غرفة وشارك الكود' : 'Create a room & share the code'}</Text>
             </View>
             <Text style={[s.modeArr, { color: theme.accent }]}>›</Text>
-          </TouchableOpacity>
-
-          {/* Friend join */}
+          </ThemedCard>
           <View style={[s.joinCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
             <Text style={s.modeEmoji}>🔑</Text>
             <View style={s.modeTxt}>
@@ -830,9 +818,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
               />
               {!!joinErr && <Text style={[s.joinErr, { color: theme.error }]}>{joinErr}</Text>}
             </View>
-            <TouchableOpacity style={[s.joinBtn, { backgroundColor: theme.accent }]} onPress={joinByCode} activeOpacity={0.8}>
-              <Text style={[s.joinBtnTxt, { color: theme.textOnAccent }]}>{isRTL ? 'انضم' : 'Join'}</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={joinByCode} label={isRTL?'انضم':'Join'} variant="primary" size="medium" fullWidth={false} />
           </View>
         </ScrollView>
       </View>
@@ -860,19 +846,17 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
               placeholder={isRTL ? 'الاسم 🤔' : 'Name 🤔'}
               placeholderTextColor={theme.textMuted} value={lp2} onChangeText={setLp2} maxLength={15} />
           </View>
-          <TouchableOpacity
-            style={[s.startBtn, { backgroundColor: canStart ? theme.accent : theme.bgElevated, opacity: canStart ? 1 : 0.5 }]}
-            disabled={!canStart}
+          <ThemedButton
             onPress={() => {
               setLocalPlayers([lp1.trim(), lp2.trim()]);
               setLocalRound(0); setLocalScores([0, 0]);
               setLocalWords(getNewWords(lang, 3)); setLocalPhase('wordchoice');
               setScreen('game');
-            }}>
-            <Text style={[s.startBtnTxt, { color: canStart ? theme.textOnAccent : theme.textMuted }]}>
-              {isRTL ? '🎮 ابدأ' : '🎮 Start'}
-            </Text>
-          </TouchableOpacity>
+            }}
+            label={isRTL ? '🎮 ابدأ' : '🎮 Start'}
+            variant="primary" size="large"
+            disabled={!canStart}
+          />
         </ScrollView>
       </View>
     );
@@ -1006,9 +990,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
                       onSubmitEditing={handleOnlineGuess} returnKeyType="send"
                       autoCorrect={false} autoCapitalize="none"
                     />
-                    <TouchableOpacity style={[s.guessBtn, { backgroundColor: theme.accent }]} onPress={handleOnlineGuess}>
-                      <Text style={[s.guessBtnTxt, { color: theme.textOnAccent }]}>{isRTL ? 'تخمين' : 'Guess'}</Text>
-                    </TouchableOpacity>
+                    <ThemedButton onPress={handleOnlineGuess} label={isRTL?'تخمين':'Guess'} variant="primary" size="small" fullWidth={false} />
                   </Animated.View>
                 </>
               )}
@@ -1096,9 +1078,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
                 onSubmitEditing={handleLocalGuess} returnKeyType="send"
                 autoCorrect={false} autoCapitalize="none"
               />
-              <TouchableOpacity style={[s.guessBtn, { backgroundColor: theme.accent }]} onPress={handleLocalGuess}>
-                <Text style={[s.guessBtnTxt, { color: theme.textOnAccent }]}>{isRTL ? 'تخمين' : 'Guess'}</Text>
-              </TouchableOpacity>
+              <ThemedButton onPress={handleLocalGuess} label={isRTL?'تخمين':'Guess'} variant="primary" size="small" fullWidth={false} />
             </Animated.View>
           </View>
         </ScrollView>

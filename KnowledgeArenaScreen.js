@@ -26,6 +26,7 @@ import LeaveModal from './LeaveModal';
 import HeartIcon from './HeartIcon';
 import { useT } from './I18n';
 import { EXPERIENCE_KEY, EXPERIENCES } from './OnboardingScreen';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 import {
   subscribeToActiveTournament,
   subscribeToLeaderboard,

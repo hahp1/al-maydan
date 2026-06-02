@@ -30,6 +30,7 @@ import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import LeaveModal from './LeaveModal';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const { width: SW } = Dimensions.get('window');
 

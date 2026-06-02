@@ -25,6 +25,7 @@ import { saveUserToFirestore } from './UserService';
 import { useTheme } from './ThemeContext';
 import { useLanguage } from './I18n';
 import { EXPERIENCE_KEY, EXPERIENCES } from './OnboardingScreen';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -158,24 +159,8 @@ function MergeConflictModal({ visible, onContinue, onCancel, theme, lang }) {
             </Text>
           </View>
           <View style={mcStyles.btns}>
-            <TouchableOpacity
-              style={[mcStyles.btn, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
-              onPress={onCancel}
-              activeOpacity={0.8}
-            >
-              <Text style={[mcStyles.btnText, { color: theme.textPrimary }]}>
-                {lang === 'ar' ? '← رجوع' : '← Back'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[mcStyles.btn, { backgroundColor: '#ef444422', borderColor: '#ef444466' }]}
-              onPress={onContinue}
-              activeOpacity={0.8}
-            >
-              <Text style={[mcStyles.btnText, { color: '#ef4444' }]}>
-                {lang === 'ar' ? 'استمرار ←' : 'Continue →'}
-              </Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={onCancel}   label={lang==='ar'?'← رجوع':'← Back'}      variant="secondary" size="medium" fullWidth={false} style={{flex:1}} />
+            <ThemedButton onPress={onContinue} label={lang==='ar'?'استمرار ←':'Continue →'} variant="danger"    size="medium" fullWidth={false} style={{flex:1}} />
           </View>
         </View>
       </View>
@@ -480,41 +465,25 @@ export default function LoginScreen({ onLogin, onGuest }) {
         <Animated.View style={[styles.btnsWrap, { opacity: fadeAnim, transform: [{ translateY: btnY }] }]}>
 
           {/* Google */}
-          <TouchableOpacity
-            style={[styles.googleBtn, { backgroundColor: theme.accent }, (!request || loadingGoogle) && styles.btnDisabled]}
+          <ThemedButton
             onPress={handleGoogle}
+            label={loadingGoogle ? '...' : (lang === 'ar' ? 'تسجيل الدخول بـ Google' : 'Sign in with Google')}
+            emoji="G"
+            variant="primary"
+            size="large"
             disabled={!request || loadingGoogle}
-            activeOpacity={0.85}
-          >
-            {loadingGoogle
-              ? <ActivityIndicator color={theme.textOnAccent} size="small" />
-              : <>
-                  <Text style={[styles.googleIcon, { color: theme.textOnAccent }]}>G</Text>
-                  <Text style={[styles.googleText, { color: theme.textOnAccent }]}>
-                    {lang === 'ar' ? 'تسجيل الدخول بـ Google' : 'Sign in with Google'}
-                  </Text>
-                </>
-            }
-          </TouchableOpacity>
+          />
 
           {/* Apple — iOS فقط */}
           {appleAvailable && (
-            <TouchableOpacity
-              style={[styles.appleBtn, loadingApple && styles.btnDisabled]}
+            <ThemedButton
               onPress={handleApple}
+              label={loadingApple ? '...' : (lang === 'ar' ? 'تسجيل الدخول بـ Apple' : 'Sign in with Apple')}
+              emoji=""
+              variant="primary"
+              size="large"
               disabled={loadingApple}
-              activeOpacity={0.85}
-            >
-              {loadingApple
-                ? <ActivityIndicator color="#ffffff" size="small" />
-                : <>
-                    <Text style={styles.appleIcon}></Text>
-                    <Text style={styles.appleText}>
-                      {lang === 'ar' ? 'تسجيل الدخول بـ Apple' : 'Sign in with Apple'}
-                    </Text>
-                  </>
-              }
-            </TouchableOpacity>
+            />
           )}
 
           {/* فاصل */}
@@ -527,19 +496,18 @@ export default function LoginScreen({ onLogin, onGuest }) {
           </View>
 
           {/* ضيف */}
-          <TouchableOpacity
-            style={[styles.guestBtn, { borderColor: theme.border }]}
+          <ThemedButton
             onPress={handleGuest}
+            label={loadingGuest ? '...' : (lang === 'ar' ? 'متابعة كضيف' : 'Continue as Guest')}
+            emoji="👤"
+            variant="ghost"
+            size="medium"
             disabled={loadingGuest}
-            activeOpacity={0.7}
-          >
-            {loadingGuest
-              ? <ActivityIndicator size="small" color={theme.textMuted} />
-              : <Text style={[styles.guestText, { color: theme.textMuted }]}>
+          />
+          {false && <Text style={[styles.guestText, { color: theme.textMuted }]}>
                   👤 {lang === 'ar' ? 'متابعة كضيف' : 'Continue as Guest'}
                 </Text>
             }
-          </TouchableOpacity>
 
           <Text style={[styles.guestNote, { color: theme.textMuted + '99' }]}>
             {lang === 'ar'

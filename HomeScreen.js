@@ -21,6 +21,8 @@ import ChargingHeart from './ChargingHeart';
 import { getRefillCountdown } from './HeartsService';
 import { LinearGradient } from 'expo-linear-gradient';
 
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
 const STARS = [...Array(18)].map((_, i) => ({
   key: i, top: `${Math.floor((i * 37 + 11) % 90)}%`, left: `${Math.floor((i * 53 + 7) % 92)}%`,
   size: i % 3 === 0 ? 3 : 2, opacity: 0.2 + (i % 4) * 0.1,
@@ -448,7 +450,6 @@ export default function HomeScreen({
   );
 }
 
-const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 
 const styles = StyleSheet.create({
   container:       { flex: 1, alignItems: 'center', justifyContent: 'space-between', paddingVertical: 52, paddingHorizontal: 20 },

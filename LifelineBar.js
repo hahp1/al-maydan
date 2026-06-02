@@ -21,6 +21,7 @@ import {
   Modal, ActivityIndicator, Alert,
 } from 'react-native';
 import { useTheme } from './ThemeContext';
+import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
 
 // مدة تمديد الوقت بالثواني (120 ثانية = دقيقتان)
 const EXTEND_SECS = 120;

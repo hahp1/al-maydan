@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
+import ThemeBackground from './ThemeBackground';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import RippleBackground from './RippleBackground';
 
 // ── ثيمات المدن — مصدر الحقيقة الوحيد هو CityThemes.js ──────
 import {
@@ -615,16 +615,12 @@ export function ThemeProvider({ children }) {
       toggleTheme,
       setDark,
     }}>
-      {theme.isMist ? (
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.bg }]}>
+        <ThemeBackground theme={theme} />
         <View style={StyleSheet.absoluteFill}>
-          <RippleBackground theme={theme} />
-          <View style={StyleSheet.absoluteFill}>
-            {children}
-          </View>
+          {children}
         </View>
-      ) : (
-        children
-      )}
+      </View>
     </ThemeContext.Provider>
   );
 }

@@ -74,14 +74,9 @@ const CategoryCard = memo(({ cat, currentLevel, onPress, theme, t }) => {
   [cat.questions, currentLevel]);
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.catCard,
-        { backgroundColor: theme.bgCard, borderColor: theme.borderCard },
-        qCount === 0 && { opacity: 0.4 },
-      ]}
+    <ThemedCard
       onPress={() => qCount > 0 && onPress(cat)}
-      activeOpacity={0.8}
+      style={[styles.catCard, qCount === 0 && { opacity: 0.4 }]}
     >
       {cat.isSpecial && (
         <View style={[styles.specialBadge, { backgroundColor: theme.accent }]}>
@@ -91,7 +86,7 @@ const CategoryCard = memo(({ cat, currentLevel, onPress, theme, t }) => {
       <CachedCategoryImage imageUrl={cat.imageUrl} emoji={cat.emoji} size={52} />
       <Text style={[styles.catName, { color: theme.textPrimary }]}>{cat.name}</Text>
       <Text style={[styles.catCount, { color: theme.textMuted }]}>{qCount} {t('solo.questions')}</Text>
-    </TouchableOpacity>
+    </ThemedCard>
   );
 });
 
@@ -377,7 +372,7 @@ export default function SoloGameScreen({
   if (phase === 'finished') {
     const isNewRecord = score >= highScore;
     return (
-      <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.container, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <Text style={styles.finishTrophy}>{isNewRecord ? '🏆' : '🎮'}</Text>
         <Text style={[styles.finishTitle, { color: theme.accent }]}>
@@ -399,12 +394,8 @@ export default function SoloGameScreen({
             </View>
           ))}
         </View>
-        <TouchableOpacity style={[styles.playAgainBtn, { backgroundColor: theme.accent }]} onPress={handlePlayAgain} activeOpacity={0.85}>
-          <Text style={[styles.playAgainText, { color: theme.textOnAccent }]}>{t('common.playAgain')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]} onPress={onBack} activeOpacity={0.85}>
-          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={handlePlayAgain} label={t('common.playAgain')} variant='primary' size='large' style={styles.playAgainBtn} />
+        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='medium' style={styles.backBtn} />
       </View>
     );
   }
@@ -412,13 +403,11 @@ export default function SoloGameScreen({
   // ══ شاشة اختيار الفئة ══
   if (phase === 'picking') {
     return (
-      <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.container, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <TouchableOpacity onPress={onBack} style={styles.headerBack} hitSlop={HIT_SLOP}>
-              <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' style={styles.headerBack} />
             <GameInfoButton gameType="solo" lang={lang} />
             <WebScreenButton
               playerUid={currentUser?.uid || 'solo_p0'}
@@ -490,7 +479,7 @@ export default function SoloGameScreen({
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
       <View style={styles.header}>
         <View style={[styles.catChip, { backgroundColor: levelColor }]}>
@@ -540,18 +529,17 @@ export default function SoloGameScreen({
 
         <View style={styles.choicesContainer}>
           {choices.map((choice, i) => (
-            <TouchableOpacity
+            <ThemedCard
               key={i}
-              style={getChoiceStyle(choice)}
               onPress={() => handleAnswer(choice)}
               disabled={isAnswered || eliminated.has(choice)}
-              activeOpacity={0.85}
+              style={getChoiceStyle(choice)}
             >
               <Text style={[styles.choiceLetter, { color: theme.accent }]}>{ARABIC_LETTERS[i]}</Text>
               <Text style={[styles.choiceText, { color: getChoiceTextColor(choice) }]}>{choice}</Text>
               {isAnswered && choice === currentQuestion.correct && <Text>✅</Text>}
               {isAnswered && choice === selectedChoice && choice !== currentQuestion.correct && <Text>❌</Text>}
-            </TouchableOpacity>
+            </ThemedCard>
           ))}
         </View>
 
@@ -565,11 +553,12 @@ export default function SoloGameScreen({
         )}
 
         {isAnswered && (
-          <TouchableOpacity style={[styles.nextBtn, { backgroundColor: theme.accent }]} onPress={handleNext} activeOpacity={0.85}>
-            <Text style={[styles.nextBtnText, { color: theme.textOnAccent }]}>
-              {totalRound >= totalRounds ? t('solo.finish') : t('solo.next')}
-            </Text>
-          </TouchableOpacity>
+          <ThemedButton
+            onPress={handleNext}
+            label={totalRound >= totalRounds ? t('solo.finish') : t('solo.next')}
+            variant='primary' size='large'
+            style={styles.nextBtn}
+          />
         )}
       </ScrollView>
       <LeaveModal

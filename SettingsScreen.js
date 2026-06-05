@@ -73,10 +73,7 @@ const Div = memo(({ theme }) => (
 ));
 
 const LangOption = memo(({ flag, name, sub, active, onPress, theme }) => (
-  <TouchableOpacity
-    style={[styles.langRow, active && { backgroundColor: theme.accentSoft }]}
-    onPress={onPress} activeOpacity={0.8}
-  >
+  <ThemedCard onPress={onPress} style={styles.langRow} variant={active ? 'accent' : 'default'}>
     <View style={styles.langLeft}>
       <Text style={styles.langFlag}>{flag}</Text>
       <View>
@@ -87,11 +84,11 @@ const LangOption = memo(({ flag, name, sub, active, onPress, theme }) => (
     <View style={[styles.radio, { borderColor: active ? theme.accent : theme.borderCard }]}>
       {active && <View style={[styles.radioFill, { backgroundColor: theme.accent }]} />}
     </View>
-  </TouchableOpacity>
+  </ThemedCard>
 ));
 
 const ExperienceRow = memo(({ label, sub, current, onPress, theme }) => (
-  <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.8}>
+  <ThemedCard onPress={onPress} style={styles.row}>
     <View style={{ flex: 1 }}>
       <Text style={[styles.rowLabel, { color: theme.textPrimary }]}>{label}</Text>
       {sub ? <Text style={[styles.rowSub, { color: theme.textSecondary }]}>{sub}</Text> : null}
@@ -100,7 +97,7 @@ const ExperienceRow = memo(({ label, sub, current, onPress, theme }) => (
       <Text style={[styles.rowValue, { color: theme.accent, fontWeight: '700' }]}>{current}</Text>
       <Text style={[styles.arrow, { color: theme.textMuted }]}>‹</Text>
     </View>
-  </TouchableOpacity>
+  </ThemedCard>
 ));
 
 // ══════════════════════════════════════════════════════════════
@@ -123,9 +120,7 @@ const PreviewModal = memo(({ item, visible, onClose, onSelect, onBuy, isActive, 
         <View style={styles.previewContainer}>
 
           {/* زر الإغلاق */}
-          <TouchableOpacity style={styles.previewCloseBtn} onPress={onClose}>
-            <ExitButton onPress={onClose} size={36} />
-          </TouchableOpacity>
+          <ExitButton onPress={onClose} size={36} style={styles.previewCloseBtn} />
 
           {/* محاكاة شاشة الهاتف */}
           <View style={[styles.previewPhone, { backgroundColor: t.bg, borderColor: t.borderCard }]}>
@@ -249,11 +244,9 @@ const ThemeRow = memo(({ item, isActive, unlocked = true, isPro = false, onSelec
       style={[styles.themeRow, isActive && {borderColor:item.previewAccent}]}
     >
       {/* صورة الثيم */}
-      <TouchableOpacity
-        style={[styles.themeThumb, { backgroundColor: item.previewBg }]}
+      <ThemedCard
         onPress={() => onPreview(item)}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        activeOpacity={0.75}
+        style={[styles.themeThumb, { backgroundColor: item.previewBg }]}
       >
         <View style={styles.thumbDots}>
           <View style={[styles.thumbDot, { backgroundColor: item.previewAccent }]} />
@@ -263,9 +256,9 @@ const ThemeRow = memo(({ item, isActive, unlocked = true, isPro = false, onSelec
         <View style={styles.thumbPreviewHint}>
           <Text style={styles.thumbPreviewIcon}>{isLocked ? '🔒' : '👁'}</Text>
         </View>
-      </TouchableOpacity>
+      </ThemedCard>
 
-      {/* اسم الثيم */}
+      {/* اسم الثيم */
       <View style={{ flex: 1, marginHorizontal: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text style={[styles.themeRowName, { color: isActive ? item.previewAccent : theme.textPrimary }]}>
@@ -285,15 +278,12 @@ const ThemeRow = memo(({ item, isActive, unlocked = true, isPro = false, onSelec
       {/* الجانب الأيمن: اختيار / زر شراء / مفتوح */}
       {isLocked ? (
         // زر الشراء
-        <TouchableOpacity
-          style={[styles.buyBtn, { backgroundColor: item.previewAccent + '22', borderColor: item.previewAccent }]}
+        <ThemedButton
           onPress={() => onBuy(item)}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
-          <Text style={[styles.buyBtnPrice, { color: item.previewAccent }]}>
-            🪙 {item.price}
-          </Text>
-        </TouchableOpacity>
+          label={`🪙 ${item.price}`}
+          variant='secondary' size='small'
+          style={styles.buyBtn}
+        />
       ) : (
         // مؤشر الاختيار
         <View style={[styles.themeRadio, { borderColor: isActive ? item.previewAccent : theme.border }]}>
@@ -388,26 +378,14 @@ const ThemedAlert = memo(({ visible, title, message, buttons, onClose, theme }) 
           {message ? <Text style={[taStyles.msg, { color: theme.textSecondary }]}>{message}</Text> : null}
           <View style={taStyles.btns}>
             {(buttons || []).map((btn, i) => (
-              <TouchableOpacity
+              <ThemedButton
                 key={i}
-                style={[
-                  taStyles.btn,
-                  { backgroundColor: btn.style === 'destructive' ? theme.error + '18' : theme.accentSoft,
-                    borderColor:     btn.style === 'destructive' ? theme.error + '55' : theme.accentBorder,
-                    borderWidth: 1.5 },
-                ]}
                 onPress={() => { onClose(); btn.onPress?.(); }}
-                activeOpacity={0.8}
-              >
-                <Text style={[
-                  taStyles.btnTxt,
-                  { color: btn.style === 'destructive' ? theme.error
-                         : btn.style === 'cancel'      ? theme.textMuted
-                         : theme.accent }
-                ]}>
-                  {btn.text}
-                </Text>
-              </TouchableOpacity>
+                label={btn.text}
+                variant={btn.style === 'destructive' ? 'danger' : btn.style === 'cancel' ? 'ghost' : 'primary'}
+                size='medium'
+                style={taStyles.btn}
+              />
             ))}
           </View>
         </Pressable>
@@ -457,28 +435,18 @@ const ExperiencePickerModal = memo(({ visible, current, onSelect, onClose, theme
             <Text style={[expStyles.title, { color: theme.accent }]}>
               {lang === 'ar' ? '🌐 نوع التجربة' : '🌐 Experience'}
             </Text>
-            <TouchableOpacity
-              onPress={onClose}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              style={[expStyles.closeBtn, { backgroundColor: theme.bgElevated }]}
-            >
-              <ExitButton onPress={onClose} size={30} />
-            </TouchableOpacity>
+            <ExitButton onPress={onClose} size={30} style={expStyles.closeBtn} />
           </View>
 
           <View style={expStyles.options}>
             {options.map(opt => {
               const isActive = current === opt.value;
               return (
-                <TouchableOpacity
+                <ThemedCard
                   key={opt.value}
-                  style={[
-                    expStyles.option,
-                    { backgroundColor: isActive ? theme.accentSoft : theme.bgElevated,
-                      borderColor: isActive ? theme.accent : theme.borderCard },
-                  ]}
                   onPress={() => { onSelect(opt.value); onClose(); }}
-                  activeOpacity={0.82}
+                  style={expStyles.option}
+                  variant={isActive ? 'accent' : 'default'}
                 >
                   <Text style={expStyles.optionEmoji}>{opt.emoji}</Text>
                   <View style={{ flex: 1 }}>
@@ -497,7 +465,7 @@ const ExperiencePickerModal = memo(({ visible, current, onSelect, onClose, theme
                       <Text style={expStyles.checkTxt}>✓</Text>
                     </View>
                   )}
-                </TouchableOpacity>
+                </ThemedCard>
               );
             })}
           </View>
@@ -648,14 +616,12 @@ export default function SettingsScreen({
     : t('settings.experienceArabic');
 
   return (
-    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.bg }]}>
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       {/* ─── هيدر ─── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={HIT}>
-          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
         <Text style={[styles.title, { color: theme.accent }]}>{t('settings.title')}</Text>
         <View style={{ width: 60 }} />
       </View>
@@ -683,9 +649,8 @@ export default function SettingsScreen({
             { id: 'sixmonths', icon: '⭐', nameAr: 'الأكثر اختياراً',   nameEn: 'Most Popular', subAr: '٦ أشهر',    subEn: '6 mo',  price: '$9.99',  color: '#f59e0b', badge: true },
             { id: 'yearly',    icon: '🏆', nameAr: 'الأوفر',             nameEn: 'Best Value',   subAr: 'سنة',       subEn: '1 yr',  price: '$15.99', color: '#22c55e' },
           ].map(plan => (
-            <TouchableOpacity
+            <ThemedCard
               key={plan.id}
-              style={[styles.premiumCard, { backgroundColor: theme.bgElevated, borderColor: plan.color + '66' }]}
               onPress={() => showAlert(
                 lang === 'ar' ? `👑 ${plan.nameAr}` : `👑 ${plan.nameEn}`,
                 lang === 'ar'
@@ -716,7 +681,7 @@ Available at official launch.`,
                 {lang === 'ar' ? plan.subAr : plan.subEn}
               </Text>
               <Text style={[styles.premiumPrice, { color: theme.textPrimary }]}>{plan.price}</Text>
-            </TouchableOpacity>
+            </ThemedCard>
           ))}
         </View>
       </Section>
@@ -810,41 +775,32 @@ Available at official launch.`,
 
       {/* ─── عن التطبيق ─── */}
       <Section title={t('settings.aboutSection')} theme={theme}>
-        <TouchableOpacity style={styles.row} onPress={handleAbout}>
+        <ThemedCard onPress={handleAbout} style={styles.row}>
           <Text style={[styles.rowLabel, { color: theme.textPrimary }]}>{t('settings.appInfo')}</Text>
           <View style={styles.rowRight}>
             <Text style={[styles.rowValue, { color: theme.textSecondary }]}>{t('settings.version')}</Text>
             <Text style={[styles.arrow, { color: theme.textMuted }]}>‹</Text>
           </View>
-        </TouchableOpacity>
+        </ThemedCard>
         <Div theme={theme} />
-        <TouchableOpacity style={styles.row} onPress={handleRate}>
+        <ThemedCard onPress={handleRate} style={styles.row}>
           <Text style={[styles.rowLabel, { color: theme.textPrimary }]}>{t('settings.rate')}</Text>
           <Text style={[styles.arrow, { color: theme.textMuted }]}>‹</Text>
-        </TouchableOpacity>
+        </ThemedCard>
         <Div theme={theme} />
-        <TouchableOpacity style={styles.row} onPress={handleTerms}>
+        <ThemedCard onPress={handleTerms} style={styles.row}>
           <Text style={[styles.rowLabel, { color: theme.textPrimary }]}>{t('settings.terms')}</Text>
           <Text style={[styles.arrow, { color: theme.textMuted }]}>‹</Text>
-        </TouchableOpacity>
+        </ThemedCard>
         <Div theme={theme} />
-        <TouchableOpacity style={styles.row} onPress={handleContact}>
+        <ThemedCard onPress={handleContact} style={styles.row}>
           <Text style={[styles.rowLabel, { color: theme.textPrimary }]}>{t('settings.contact')}</Text>
           <Text style={[styles.arrow, { color: theme.textMuted }]}>‹</Text>
-        </TouchableOpacity>
+        </ThemedCard>
       </Section>
 
       {/* ─── تسجيل الخروج ─── */}
-      <TouchableOpacity
-        style={[styles.logoutBtn, {
-          backgroundColor: theme.error + '18',
-          borderColor: theme.error + '44',
-        }]}
-        onPress={handleLogout}
-        activeOpacity={0.85}
-      >
-        <Text style={[styles.logoutText, { color: theme.error }]}>{t('settings.logout')}</Text>
-      </TouchableOpacity>
+      <ThemedButton onPress={handleLogout} label={t('settings.logout')} variant='danger' size='large' style={styles.logoutBtn} />
 
       <Text style={[styles.version, { color: theme.textMuted }]}>
         {t('settings.copyright')}

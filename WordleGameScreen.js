@@ -9,6 +9,7 @@ import { WordleEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
+import OnlineRoomSetup, { OnlineWaitingLobby } from './OnlineRoomSetup';
 
 // ── ثوابت ────────────────────────────────────────────────────
 const MAX_ATTEMPTS  = 7;
@@ -46,9 +47,21 @@ function isValidWord(w, lang) {
 
 // ─────────────────────────────────────────────────────────────
 export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
-  const { theme } = useTheme();
-  const { roomId, isPlayer1, roomData, loading, error, updateRoom, endGame, leaveRoom } =
-    useOnlineGame('wordle', currentUser, onGameReady);
+  const { theme, themeId } = useTheme();
+  const { lang } = useLanguage();
+  const isRTL = lang === 'ar';
+
+  // ── اختيار الوضع ──
+  const [selectedMode,  setSelectedMode]  = useState(null);
+  const [joinCodeInput, setJoinCodeInput] = useState(null);
+
+  const handleModeSelect = (mode, code = null) => {
+    setJoinCodeInput(code);
+    setSelectedMode(mode);
+  };
+
+  const { roomId, isPlayer1, roomData, loading, error, friendCode, updateRoom, endGame, leaveRoom } =
+    useOnlineGame('wordle', currentUser, onGameReady, selectedMode, joinCodeInput);
 
   // المراحل: 'setting' | 'waiting' | 'playing' | 'finished'
   const [phase,        setPhase]        = useState('setting');
@@ -206,9 +219,7 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
   // ── TopBar مشترك ───────────────────────────────────────────
   const TopBar = () => (
     <View style={s.topBar}>
-      <TouchableOpacity onPress={handleQuit} style={[s.quitBtn,{backgroundColor:'rgba(239,68,68,0.12)',borderColor:'rgba(239,68,68,0.3)'}]}>
-        <Text style={{color:'#ef4444',fontSize:16}}>✕</Text>
-      </TouchableOpacity>
+      <ThemedButton onPress={handleQuit} label='✕' variant='ghost' size='small' style={s.quitBtn} />
       <GameInfoButton gameType="wordle" lang="ar" />
       <WebScreenButton
         playerUid={currentUser?.uid}
@@ -216,7 +227,7 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
         gameType="wordle"
         gameRoomId={roomId}
         getPublicData={() => ({ guesses, phase })}
-        themeName={theme.name}
+        themeName={themeId || 'dark'}
       />
       <View style={[s.opponentBar,{backgroundColor:theme.bgCard,borderColor:theme.border}]}>
         <View style={s.avatarWrap}>
@@ -242,20 +253,46 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
     </View>
   );
 
+  // ── شاشة اختيار الوضع ──
+  if (!selectedMode) {
+    return (
+      <OnlineRoomSetup
+        gameEmoji="🔤"
+        gameTitleAr="ووردل"
+        gameTitleEn="Wordle"
+        descAr="خمّن كلمة خصمك قبل أن يخمّن كلمتك"
+        descEn="Guess your opponent's word first"
+        onBack={onBack}
+        onSelect={handleModeSelect}
+      />
+    );
+  }
+
+  if (selectedMode === 'create' && loading) {
+    return (
+      <OnlineWaitingLobby
+        friendCode={friendCode}
+        isFriend={true}
+        isRTL={isRTL}
+        theme={theme}
+        gameEmoji="🔤"
+        onCancel={onBack}
+      />
+    );
+  }
+
   // ── Loading / Error ─────────────────────────────────────────
   if (error) return (
-    <View style={[s.container,{backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg}]}>
+    <View style={[s.container,{backgroundColor: 'transparent'}]}>
       <WordleEngraving theme={theme}/><StatusBar barStyle={theme.statusBar}/>
       <View style={s.center}>
         <Text style={{color:'#ef4444'}}>❌ {error}</Text>
-        <TouchableOpacity onPress={onBack} style={[s.smallBtn,{backgroundColor:theme.bgCard}]}>
-          <Text style={{color:theme.accent}}>رجوع</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label='رجوع' variant='ghost' size='medium' style={s.smallBtn} />
       </View>
     </View>
   );
   if (loading) return (
-    <View style={[s.container,{backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg}]}>
+    <View style={[s.container,{backgroundColor: 'transparent'}]}>
       <WordleEngraving theme={theme}/><StatusBar barStyle={theme.statusBar}/>
       <View style={s.center}>
         <ActivityIndicator size="large" color={theme.accent}/>
@@ -273,7 +310,7 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
     const timerColor = timer > 30 ? '#10b981' : timer > 10 ? '#f59e0b' : '#ef4444';
 
     return (
-      <View style={[s.container,{backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg}]}>
+      <View style={[s.container,{backgroundColor: 'transparent'}]}>
         <WordleEngraving theme={theme}/><StatusBar barStyle={theme.statusBar}/>
         <TopBar/>
 
@@ -317,12 +354,9 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
         {/* تبديل اللغة */}
         <View style={s.langToggleRow}>
           {['ar','en'].map(l=>(
-            <TouchableOpacity key={l} onPress={()=>{setWordLang(l);setWordInput('');setWordError('');}}
-              style={[s.langTab,{backgroundColor:wordLang===l?theme.accent:theme.bgCard,borderColor:wordLang===l?theme.accent:theme.border}]}>
-              <Text style={{color:wordLang===l?(theme.textOnAccent||'#fff'):theme.textSecondary,fontWeight:'700',fontSize:13}}>
-                {l==='ar'?'عربي 🇸🇦':'English 🇺🇸'}
-              </Text>
-            </TouchableOpacity>
+            <ThemedCard key={l} onPress={()=>{setWordLang(l);setWordInput('');setWordError('');}} style={s.langTab} variant={wordLang===l?'accent':'default'}>
+              <Text style={{color:wordLang===l?(theme.textOnAccent||'#fff'):theme.textSecondary,fontWeight:'700',fontSize:13}}>{l==='ar'?'عربي 🇸🇦':'English 🇺🇸'}</Text>
+            </ThemedCard>
           ))}
         </View>
 
@@ -331,24 +365,17 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
           {kbRows.map((row,ri)=>(
             <View key={ri} style={s.kbRow}>
               {row.map(letter=>(
-                <TouchableOpacity key={letter}
-                  onPress={()=>{ if(wordInput.length<12) setWordInput(p=>p+letter); }}
-                  style={[s.key,{backgroundColor:theme.bgCard,borderColor:theme.border}]}>
+                <ThemedCard key={letter} onPress={()=>{ if(wordInput.length<12) setWordInput(p=>p+letter); }} style={s.key}>
                   <Text style={[s.keyText,{color:theme.textPrimary}]}>{letter}</Text>
-                </TouchableOpacity>
+                </ThemedCard>
               ))}
             </View>
           ))}
           <View style={s.kbRow}>
-            <TouchableOpacity onPress={()=>setWordInput(p=>p.slice(0,-1))}
-              style={[s.actionKey,{backgroundColor:'#ef444420',borderColor:'#ef444440'}]}>
+            <ThemedCard onPress={()=>setWordInput(p=>p.slice(0,-1))} style={s.actionKey} variant='danger'>
               <Text style={{color:'#ef4444',fontSize:17}}>⌫</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleSubmitWord}
-              style={[s.submitKey,{backgroundColor:theme.accent,opacity:WLEN<3?0.45:1}]}
-              disabled={WLEN<3}>
-              <Text style={{color:theme.textOnAccent||'#fff',fontWeight:'800',fontSize:14}}>تأكيد الكلمة 🔒</Text>
-            </TouchableOpacity>
+            </ThemedCard>
+            <ThemedButton onPress={handleSubmitWord} disabled={WLEN<3} label='تأكيد الكلمة 🔒' variant='primary' size='medium' style={[s.submitKey,{opacity:WLEN<3?0.45:1}]} />
           </View>
         </View>
       </View>
@@ -359,7 +386,7 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
   // WAITING — انتظار الخصم
   // ════════════════════════════════════════════════════════════
   if (phase === 'waiting') return (
-    <View style={[s.container,{backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg}]}>
+    <View style={[s.container,{backgroundColor: 'transparent'}]}>
       <WordleEngraving theme={theme}/><StatusBar barStyle={theme.statusBar}/>
       <TopBar/>
       <View style={s.center}>
@@ -395,7 +422,7 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
   const kbRows  = activeLang === 'ar' ? KB_AR : KB_EN;
 
   return (
-    <View style={[s.container,{backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg}]}>
+    <View style={[s.container,{backgroundColor: 'transparent'}]}>
       <WordleEngraving theme={theme}/><StatusBar barStyle={theme.statusBar}/>
       <TopBar/>
 
@@ -457,9 +484,7 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
         <View style={[s.resultBox,{backgroundColor:gameResult==='won'?theme.success:theme.error}]}>
           <Text style={s.resultEmoji}>{gameResult==='won'?'🎉':'😢'}</Text>
           <Text style={s.resultText}>{gameResult==='won'?'أحسنت! فزت!':`خسرت! الكلمة: ${secretWord}`}</Text>
-          <TouchableOpacity onPress={handleNewGame} style={[s.newGameBtn,{backgroundColor:'#fff'}]}>
-            <Text style={{color:gameResult==='won'?'#10b981':'#ef4444',fontWeight:'800',fontSize:13}}>🎮 جولة جديدة</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={handleNewGame} label='🎮 جولة جديدة' variant='primary' size='small' style={s.newGameBtn} />
         </View>
       )}
 
@@ -471,21 +496,18 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
               {row.map(letter=>{
                 const kc=getKeyColor(letter);
                 return(
-                  <TouchableOpacity key={letter} onPress={()=>handleKey(letter)}
-                    style={[s.key,{backgroundColor:kc||theme.bgCard,borderColor:kc?'transparent':theme.border}]}>
+                  <ThemedCard key={letter} onPress={()=>handleKey(letter)} style={[s.key,{backgroundColor:kc||undefined}]}>
                     <Text style={[s.keyText,{color:kc?'#fff':theme.textPrimary}]}>{letter}</Text>
-                  </TouchableOpacity>
+                  </ThemedCard>
                 );
               })}
             </View>
           ))}
           <View style={s.kbRow}>
-            <TouchableOpacity onPress={()=>handleKey('⌫')} style={[s.actionKey,{backgroundColor:'#ef444420',borderColor:'#ef444440'}]}>
+            <ThemedCard onPress={()=>handleKey('⌫')} style={s.actionKey} variant='danger'>
               <Text style={{color:'#ef4444',fontSize:17}}>⌫</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleGuess} style={[s.submitKey,{backgroundColor:theme.accent}]}>
-              <Text style={{color:theme.textOnAccent||'#fff',fontWeight:'800',fontSize:14}}>تأكيد ✓</Text>
-            </TouchableOpacity>
+            </ThemedCard>
+            <ThemedButton onPress={handleGuess} label='تأكيد ✓' variant='primary' size='medium' style={s.submitKey} />
           </View>
         </View>
       )}

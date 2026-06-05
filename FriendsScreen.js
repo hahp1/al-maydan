@@ -19,11 +19,7 @@ const TABS = { CHATS: 'chats', FRIENDS: 'friends', REQUESTS: 'requests' };
 
 // ── بطاقة المحادثة ──
 const ConvCard = memo(({ item, onOpen, theme }) => (
-  <TouchableOpacity
-    style={[styles.convCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-    onPress={() => onOpen(item)}
-    activeOpacity={0.8}
-  >
+  <ThemedCard onPress={() => onOpen(item)} style={styles.convCard}>
     <View style={[styles.convAvatar, { backgroundColor: item.type === 'group' ? theme.purpleSoft : theme.accentSoft }]}>
       <Text style={styles.convAvatarEmoji}>{item.type === 'group' ? '👥' : '👤'}</Text>
     </View>
@@ -40,7 +36,7 @@ const ConvCard = memo(({ item, onOpen, theme }) => (
         <Text style={[styles.groupBadgeText, { color: theme.purple }]}>{item.members?.length} 👤</Text>
       </View>
     )}
-  </TouchableOpacity>
+  </ThemedCard>
 ));
 
 const EmptyView = memo(({ emoji, text, hint, theme }) => (
@@ -109,13 +105,7 @@ function AddFriendTab({ user, theme, t, rs }) {
           <Text style={[styles.sentText, { color: theme.success }]}>✓ أُرسل</Text>
         </View>
       ) : (
-        <TouchableOpacity
-          style={[styles.addBtn, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}
-          onPress={() => handleSend(item.uid)}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.addBtnText, { color: theme.accent }]}>＋ إضافة</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={() => handleSend(item.uid)} label='＋ إضافة' variant='secondary' size='small' style={styles.addBtn} />
       )}
     </View>
   ), [sentTo, handleSend, theme]);
@@ -177,12 +167,8 @@ function RequestsTab({ requests, currentUser, theme }) {
       </View>
       <Text style={[styles.requestName, { color: theme.textPrimary }]}>{names[item.from] || '...'}</Text>
       <View style={styles.requestBtns}>
-        <TouchableOpacity style={styles.acceptBtn}  onPress={() => handleAccept(item.id, item.from)} hitSlop={HIT_SLOP}>
-          <Text style={[styles.acceptText, { color: theme.success }]}>✓</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.declineBtn} onPress={() => handleDecline(item.id)} hitSlop={HIT_SLOP}>
-          <Text style={[styles.declineText, { color: theme.error }]}>✕</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={() => handleAccept(item.id, item.from)} label='✓' variant='success' size='small' style={styles.acceptBtn} />
+        <ThemedButton onPress={() => handleDecline(item.id)} label='✕' variant='danger' size='small' style={styles.declineBtn} />
       </View>
     </View>
   ), [names, handleAccept, handleDecline, theme]);
@@ -258,30 +244,18 @@ function ChatScreen({ conv, user, onBack, setScreen, t, rs }) {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.chatContainer, { backgroundColor: theme.bg }]}
+      style={[styles.chatContainer, { backgroundColor: 'transparent' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
     >
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
       <View style={[styles.chatHeader, { borderBottomColor: theme.divider }]}>
-        <TouchableOpacity
-          onPress={onBack}
-          style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
-          hitSlop={HIT_SLOP}
-        >
-          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
         <View style={styles.chatHeaderCenter}>
           <Text style={styles.chatHeaderEmoji}>{conv.type === 'group' ? '👥' : '👤'}</Text>
           <Text style={[styles.chatHeaderName, { color: theme.accent }]} numberOfLines={1}>{convName}</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.startGameBtn, { backgroundColor: theme.purpleSoft, borderColor: theme.purpleBorder }]}
-          onPress={goGames}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.startGameText, { color: theme.purple }]}>🎮 لعبة</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={goGames} label='🎮 لعبة' variant='secondary' size='small' style={styles.startGameBtn} />
       </View>
 
       <FlatList
@@ -297,7 +271,7 @@ function ChatScreen({ conv, user, onBack, setScreen, t, rs }) {
         ListEmptyComponent={<EmptyView emoji="👋" text="قل مرحباً!" theme={theme} />}
       />
 
-      <View style={[styles.inputRow, { backgroundColor: theme.bg, borderTopColor: theme.divider }]}>
+      <View style={[styles.inputRow, { backgroundColor: 'transparent', borderTopColor: theme.divider }]}>
         <TextInput
           style={[styles.msgInput, { backgroundColor: theme.bgCard, borderColor: theme.border, color: theme.textPrimary }, rs.textInput]}
           placeholder="اكتب رسالة..."
@@ -308,14 +282,7 @@ function ChatScreen({ conv, user, onBack, setScreen, t, rs }) {
           returnKeyType="send"
           multiline
         />
-        <TouchableOpacity
-          style={[styles.sendBtn, { backgroundColor: theme.accent }, !text.trim() && { backgroundColor: theme.accentBorder }]}
-          onPress={handleSend}
-          disabled={!text.trim()}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.sendBtnText, { color: theme.textOnAccent }]}>↑</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={handleSend} disabled={!text.trim()} label='↑' variant='primary' size='small' style={styles.sendBtn} />
       </View>
     </KeyboardAvoidingView>
   );
@@ -357,14 +324,10 @@ function CreateGroupScreen({ user, conversations, onBack, onCreated, theme, t, r
   const renderItem   = useCallback(({ item }) => {
     const isSelected = selected.includes(item.uid);
     return (
-      <TouchableOpacity
-        style={[
-          styles.friendSelectCard,
-          { backgroundColor: theme.bgCard, borderColor: theme.border },
-          isSelected && { borderColor: theme.accentBorder, backgroundColor: theme.accentSoft },
-        ]}
+      <ThemedCard
         onPress={() => toggle(item.uid)}
-        activeOpacity={0.8}
+        style={styles.friendSelectCard}
+        variant={isSelected ? 'accent' : 'default'}
       >
         <View style={[styles.userAvatar, { backgroundColor: theme.accentSoft }]}>
           <Text style={[styles.userAvatarText, { color: theme.accent }]}>{friendNames[item.uid]?.[0] || '؟'}</Text>
@@ -373,22 +336,16 @@ function CreateGroupScreen({ user, conversations, onBack, onCreated, theme, t, r
           {friendNames[item.uid] || '...'}
         </Text>
         {isSelected && <Text style={[styles.checkMark, { color: theme.accent }]}>✓</Text>}
-      </TouchableOpacity>
+      </ThemedCard>
     );
   }, [selected, friendNames, toggle, theme]);
 
   const canCreate = groupName.trim() && selected.length > 0;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={onBack}
-          style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
-          hitSlop={HIT_SLOP}
-        >
-          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
         <Text style={[styles.headerTitle, { color: theme.accent }]}>➕ مجموعة جديدة</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -413,19 +370,14 @@ function CreateGroupScreen({ user, conversations, onBack, onCreated, theme, t, r
         showsVerticalScrollIndicator={false}
       />
 
-      <TouchableOpacity
-        style={[styles.createBtn, { backgroundColor: canCreate ? theme.accent : theme.bgCard }, !canCreate && styles.btnDisabled]}
+      <ThemedButton
         onPress={handleCreate}
         disabled={!canCreate || loading}
-        activeOpacity={0.85}
-      >
-        {loading
-          ? <ActivityIndicator color={theme.textOnAccent} size="small" />
-          : <Text style={[styles.createBtnText, { color: canCreate ? theme.textOnAccent : theme.textMuted }]}>
-              إنشاء المجموعة ({selected.length} أصدقاء)
-            </Text>
-        }
-      </TouchableOpacity>
+        label={loading ? '...' : `إنشاء المجموعة (${selected.length} أصدقاء)`}
+        variant={canCreate ? 'primary' : 'secondary'}
+        size='large'
+        style={styles.createBtn}
+      />
     </View>
   );
 }
@@ -483,38 +435,22 @@ export default function FriendsScreen({ user, setScreen, initialTab = TABS.CHATS
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-        <TouchableOpacity
-          onPress={goHome}
-          style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
-          hitSlop={HIT_SLOP}
-        >
-          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={goHome} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
         <Text style={[styles.headerTitle, { color: theme.accent }]}>👥 الأصدقاء</Text>
-        <TouchableOpacity
-          onPress={openGroup}
-          style={[styles.addGroupBtn, { backgroundColor: theme.purpleSoft, borderColor: theme.purpleBorder }]}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.addGroupText, { color: theme.purple }]}>＋ مجموعة</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={openGroup} label='＋ مجموعة' variant='secondary' size='small' style={styles.addGroupBtn} />
       </Animated.View>
 
       <Animated.View style={[styles.tabs, { opacity: fadeAnim }]}>
         {TABS_LIST.map(tb => (
-          <TouchableOpacity
+          <ThemedCard
             key={tb.key}
-            style={[
-              styles.tabBtn,
-              { backgroundColor: theme.bgCard, borderColor: theme.border },
-              tab === tb.key && { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder },
-            ]}
             onPress={() => setTab(tb.key)}
-            activeOpacity={0.8}
+            style={styles.tabBtn}
+            variant={tab === tb.key ? 'accent' : 'default'}
           >
             <Text style={[
               styles.tabText,
@@ -523,7 +459,7 @@ export default function FriendsScreen({ user, setScreen, initialTab = TABS.CHATS
             ]}>
               {tb.label}
             </Text>
-          </TouchableOpacity>
+          </ThemedCard>
         ))}
       </Animated.View>
 

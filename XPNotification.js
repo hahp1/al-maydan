@@ -124,13 +124,7 @@ function LevelUpModal({ data, onClose, theme }) {
               </Text>
             </View>
           )}
-          <TouchableOpacity
-            style={[styles.closeBtn, { backgroundColor: theme.accent }]}
-            onPress={onClose}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.closeBtnText, { color: theme.bg }]}>رائع! 🎉</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onClose} label='رائع! 🎉' variant='primary' size='large' style={styles.closeBtn} />
         </Animated.View>
       </View>
     </Modal>

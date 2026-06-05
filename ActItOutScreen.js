@@ -145,20 +145,14 @@ const SetupScreen = memo(({ onStart, onBack, theme, t, rs, isGlobal }) => {
     <View style={{ flex: 1 }}>
       {/* Header with back button top-left */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={onBack}
-          style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]}
-          hitSlop={HIT_SLOP}
-        >
-          <Text style={{ color: theme.accent, fontSize: 20, fontWeight: '700' }}>←</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label='←' variant='ghost' size='small' style={styles.backBtn} />
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
           {isGlobal ? 'Act It Out 🎭' : 'مثّلها 🎭'}
         </Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.setupContent, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.setupContent, { backgroundColor: 'transparent' }]}>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
           {isGlobal ? 'Act it out — no talking, no sounds!' : 'مثّل الكلمة — بدون كلام وبدون أصوات!'}
         </Text>
@@ -207,11 +201,7 @@ const SetupScreen = memo(({ onStart, onBack, theme, t, rs, isGlobal }) => {
           )}
         </View>
 
-        <TouchableOpacity style={[styles.startBtn, { backgroundColor: theme.accent }]} onPress={handleStart} activeOpacity={0.85}>
-          <Text style={styles.startText}>
-            {isGlobal ? 'Start Game 🎭' : 'ابدأ اللعبة 🎭'}
-          </Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={handleStart} label={isGlobal ? 'Start Game 🎭' : 'ابدأ اللعبة 🎭'} variant='primary' size='large' style={styles.startBtn} />
       </ScrollView>
     </View>
   );
@@ -375,7 +365,7 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
   if (phase === 'done') {
     const winner = scores[0] > scores[1] ? team1Name : scores[1] > scores[0] ? team2Name : null;
     return (
-      <View style={[styles.centerContainer, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.centerContainer, { backgroundColor: 'transparent' }]}>
         <Text style={styles.bigEmoji}>🏆</Text>
         <Text style={[styles.winnerTitle, { color: theme.accent }]}>
           {winner
@@ -393,9 +383,7 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
             <Text style={[styles.finalScore, { color: scores[1] > scores[0] ? theme.accent : theme.textPrimary }]}>{scores[1]}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.actionBtn} onPress={onBack} activeOpacity={0.85}>
-          <Text style={styles.actionText}>{isGlobal ? 'Return Home' : t('common.returnHome')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label={isGlobal ? 'Return Home' : t('common.returnHome')} variant='primary' size='large' style={styles.actionBtn} />
       </View>
     );
   }
@@ -405,12 +393,10 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
   // ══════════════════════════════════════════════════════════════
   if (phase === 'steal') {
     return (
-      <View style={[styles.fullScreen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.fullScreen, { backgroundColor: 'transparent' }]}>
         {/* back btn top-left */}
         <View style={styles.floatBackRow}>
-          <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
-            <Text style={{ color: theme.accent, fontSize: 20, fontWeight: '700' }}>←</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onBack} label='←' variant='ghost' size='small' style={styles.floatBack} />
           <GameInfoButton gameType="act_it_out" lang={lang} />
           <WebScreenButton
             playerUid="act_p0"
@@ -467,31 +453,25 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
           {/* الأزرار الثلاثة */}
           <View style={styles.stealBtns}>
             {/* الفريق الأول أجاب */}
-            <TouchableOpacity style={[styles.stealBtn, { backgroundColor: theme.success + '22', borderColor: theme.success + '44' }]} onPress={stealTeam1Answered} activeOpacity={0.85}>
+            <ThemedCard onPress={stealTeam1Answered} style={styles.stealBtn} variant='success'>
               <Text style={styles.stealBtnEmoji}>✅</Text>
-              <Text style={[styles.stealBtnLabel, { color: '#4aff4a' }]}>
-                {isGlobal ? `${t1}\nAnswered` : `أجاب\n${t1}`}
-              </Text>
+              <Text style={[styles.stealBtnLabel, { color: '#4aff4a' }]}>{isGlobal ? `${t1}\nAnswered` : `أجاب\n${t1}`}</Text>
               <Text style={[styles.stealBtnPts, { color: '#4aff4a' }]}>+{cfg.pts}</Text>
-            </TouchableOpacity>
+            </ThemedCard>
 
             {/* الفريق الثاني سرق */}
-            <TouchableOpacity style={[styles.stealBtn, { backgroundColor: theme.purple + '22', borderColor: theme.purple + '44' }]} onPress={stealSuccess} activeOpacity={0.85}>
+            <ThemedCard onPress={stealSuccess} style={styles.stealBtn} variant='accent'>
               <Text style={styles.stealBtnEmoji}>🔥</Text>
-              <Text style={[styles.stealBtnLabel, { color: '#818cf8' }]}>
-                {isGlobal ? `${t2}\nStole!` : `سرق\n${t2}`}
-              </Text>
+              <Text style={[styles.stealBtnLabel, { color: '#818cf8' }]}>{isGlobal ? `${t2}\nStole!` : `سرق\n${t2}`}</Text>
               <Text style={[styles.stealBtnPts, { color: '#818cf8' }]}>+{cfg.stealPts}</Text>
-            </TouchableOpacity>
+            </ThemedCard>
 
             {/* لم يجب أحد */}
-            <TouchableOpacity style={[styles.stealBtn, { backgroundColor: theme.error + '22', borderColor: theme.error + '44' }]} onPress={handleNoAnswer} activeOpacity={0.85}>
+            <ThemedCard onPress={handleNoAnswer} style={styles.stealBtn} variant='danger'>
               <Text style={styles.stealBtnEmoji}>❌</Text>
-              <Text style={[styles.stealBtnLabel, { color: '#ff6666' }]}>
-                {isGlobal ? 'No one\nAnswered' : 'لم يجب\nأحد'}
-              </Text>
+              <Text style={[styles.stealBtnLabel, { color: '#ff6666' }]}>{isGlobal ? 'No one\nAnswered' : 'لم يجب\nأحد'}</Text>
               <Text style={[styles.stealBtnPts, { color: '#ff6666' }]}>+0</Text>
-            </TouchableOpacity>
+            </ThemedCard>
           </View>
         </View>
       </View>
@@ -503,12 +483,10 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
   // ══════════════════════════════════════════════════════════════
   if (phase === 'ready') {
     return (
-      <View style={[styles.fullScreen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.fullScreen, { backgroundColor: 'transparent' }]}>
         {/* back btn top-left */}
         <View style={styles.floatBackRow}>
-          <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
-            <Text style={{ color: theme.accent, fontSize: 20, fontWeight: '700' }}>←</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onBack} label='←' variant='ghost' size='small' style={styles.floatBack} />
           <GameInfoButton gameType="act_it_out" lang={lang} />
           <WebScreenButton
             playerUid="act_p0"
@@ -560,11 +538,7 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
               : `الممثل فقط يضغط "اكشف"\nوالباقين يغمضون أعينهم 🙈\n\nالكلمة تظهر ١٠ ثواني ثم تختفي`}
           </Text>
 
-          <TouchableOpacity style={styles.actionBtn} onPress={startReveal} activeOpacity={0.85}>
-            <Text style={styles.actionText}>
-              {isGlobal ? 'Reveal 👁️' : 'اكشف الكلمة 👁️'}
-            </Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={startReveal} label={isGlobal ? 'Reveal 👁️' : 'اكشف الكلمة 👁️'} variant='primary' size='large' style={styles.actionBtn} />
         </View>
       </View>
     );
@@ -575,7 +549,7 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
   // ══════════════════════════════════════════════════════════════
   if (phase === 'revealing') {
     return (
-      <View style={[styles.centerContainer, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.centerContainer, { backgroundColor: 'transparent' }]}>
         {wordVisible ? (
           <>
             <Text style={[styles.revealHint, { color: theme.textMuted }]}>
@@ -603,12 +577,10 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
   // PHASE: acting
   // ══════════════════════════════════════════════════════════════
   return (
-    <View style={[styles.fullScreen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[styles.fullScreen, { backgroundColor: 'transparent' }]}>
       {/* back btn top-left */}
       <View style={styles.floatBackRow}>
-        <TouchableOpacity onPress={onBack} style={[styles.floatBack, { backgroundColor: theme.bgCard, borderColor: '#ec489930' }]} hitSlop={HIT_SLOP}>
-          <Text style={{ color: theme.accent, fontSize: 20, fontWeight: '700' }}>←</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label='←' variant='ghost' size='small' style={styles.floatBack} />
         <GameInfoButton gameType="act_it_out" lang={lang} />
         <WebScreenButton
           playerUid="act_p0"
@@ -663,11 +635,7 @@ function PlayScreen({ onBack, team1Name, team2Name, theme, t, isGlobal }) {
         </View>
 
         {/* زر الإكمال */}
-        <TouchableOpacity style={styles.guessedBtn} onPress={teamGuessed} activeOpacity={0.85}>
-          <Text style={styles.guessedText}>
-            {isGlobal ? `${t1} Guessed It! ✓` : `أجاب فريق ${t1} ✓`}
-          </Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={teamGuessed} label={isGlobal ? `${t1} Guessed It! ✓` : `أجاب فريق ${t1} ✓`} variant='success' size='large' style={styles.guessedBtn} />
       </View>
     </View>
   );
@@ -690,7 +658,7 @@ export default function ActItOutScreen({ onBack, experience }) {
   }, [config, onBack]);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[styles.root, { backgroundColor: 'transparent' }]}>
       <ActItOutEngraving theme={theme} />
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
       {!config

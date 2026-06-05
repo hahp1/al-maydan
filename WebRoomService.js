@@ -12,8 +12,8 @@
  * ═══════════════════════════════════════════════════════
  */
 
-import { getDatabase, ref, set, update, remove, onDisconnect } from 'firebase/database';
-import { getApp } from 'firebase/app';
+import { ref, set, update, remove, onDisconnect } from 'firebase/database';
+import { rtdb } from './firebaseConfig';
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import {
@@ -21,8 +21,6 @@ import {
   StyleSheet, Pressable, Platform,
 } from 'react-native';
 
-// ── RTDB instance (lazy — لا يحتاج export من firebaseConfig) ──
-const getRtdb = () => getDatabase(getApp());
 
 // ══════════════════════════════════════════════════════════
 // توليد الكود:  W  +  6 عناصر عشوائية
@@ -279,8 +277,6 @@ class WebRoomService {
     gameType, gameRoomId = '', playerUid, playerName,
     publicData = {}, theme = 'dark',
   }) {
-    const rtdb = getRtdb();
-
     // احذف الكود القديم لو موجود
     if (this._rooms[playerUid]) {
       try { await remove(this._rooms[playerUid].ref); } catch (_) {}

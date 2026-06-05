@@ -258,7 +258,7 @@ const ThemeRow = memo(({ item, isActive, unlocked = true, isPro = false, onSelec
         </View>
       </ThemedCard>
 
-      {/* اسم الثيم */
+      {/* اسم الثيم */}
       <View style={{ flex: 1, marginHorizontal: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text style={[styles.themeRowName, { color: isActive ? item.previewAccent : theme.textPrimary }]}>

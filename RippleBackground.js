@@ -1,30 +1,29 @@
 /**
  * RippleBackground.js
- * موجات ماء متحركة لثيمات Mist — تظهر تلقائياً في كل الشاشات
- * مدمجة في ThemeProvider
+ * موجات ماء متحركة لثيمات Mist — خفيفة، لا تتراكم، لا تسبب crash
+ * تُستخدم داخل كل شاشة مباشرة (وليس في ThemeProvider)
  */
 
 import React, { useEffect, useRef, memo } from 'react';
 import { Animated, Easing, StyleSheet, View, Dimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-// إعدادات كل ثيم Mist — ألوان حقيقية من ThemeContext
 const MIST_CFG = {
-  truemist:   { accent:'#8898a8', secondary:'rgba(104,120,144,0.35)', light:'#b0c0d0', cycle:18000 },
-  bluemist:   { accent:'#5878d0', secondary:'rgba(56,88,176,0.30)',   light:'#8aabf0', cycle:15000 },
-  greenmist:  { accent:'#3a9058', secondary:'rgba(40,96,64,0.30)',    light:'#60b878', cycle:16000 },
-  orangemist: { accent:'#c05814', secondary:'rgba(152,64,16,0.28)',   light:'#e07838', cycle:14000 },
-  blackmist:  { accent:'#607080', secondary:'rgba(72,88,104,0.25)',   light:'#8090a0', cycle:20000 },
+  truemist:   { accent: '#8898a8', secondary: 'rgba(104,120,144,0.25)', light: '#b0c0d0', cycle: 20000, gradients: ['#e8eaec', '#d8dcdf'] },
+  bluemist:   { accent: '#5878d0', secondary: 'rgba(56,88,176,0.20)',   light: '#8aabf0', cycle: 18000, gradients: ['#121e3e', '#0a1228'] },
+  greenmist:  { accent: '#3a9058', secondary: 'rgba(40,96,64,0.20)',    light: '#60b878', cycle: 19000, gradients: ['#0e2418', '#071510'] },
+  orangemist: { accent: '#c05814', secondary: 'rgba(152,64,16,0.18)',   light: '#e07838', cycle: 17000, gradients: ['#1a0c02', '#0e0a04'] },
+  blackmist:  { accent: '#607080', secondary: 'rgba(72,88,104,0.15)',   light: '#8090a0', cycle: 22000, gradients: ['#0e0a08', '#080504'] },
 };
 
-// النواة ثابتة في الوسط الذهبي
-const CX = SW * 0.52;
-const CY = SH * 0.44;
-const MAX_R = SW * 0.92;
+const CX = SW * 0.5;
+const CY = SH * 0.42;
+const MAX_R = SW * 0.88;
 
-// ── حلقة واحدة ──
-const RippleRing = memo(({ delay, cycle, maxR, accent, secondary }) => {
+// حلقة واحدة خفيفة — useNativeDriver دائماً
+const RippleRing = memo(({ delay, cycle, size, accent, secondary }) => {
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -32,9 +31,9 @@ const RippleRing = memo(({ delay, cycle, maxR, accent, secondary }) => {
       Animated.sequence([
         Animated.delay(delay),
         Animated.timing(anim, {
-          toValue:        1,
-          duration:       cycle,
-          easing:         Easing.linear,
+          toValue: 1,
+          duration: cycle,
+          easing: Easing.linear,
           useNativeDriver: true,
         }),
       ])
@@ -43,55 +42,70 @@ const RippleRing = memo(({ delay, cycle, maxR, accent, secondary }) => {
     return () => loop.stop();
   }, []);
 
-  const scale = anim.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [0.02, 1],
-  });
-
-  const opacity = anim.interpolate({
-    inputRange:  [0, 0.08, 0.55, 1],
-    outputRange: [0,  0.55, 0.18, 0],
-  });
+  const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0.05, 1] });
+  const opacity = anim.interpolate({ inputRange: [0, 0.1, 0.6, 1], outputRange: [0, 0.45, 0.12, 0] });
 
   return (
     <Animated.View
       pointerEvents="none"
       style={{
-        position:        'absolute',
-        left:            CX - maxR,
-        top:             CY - maxR,
-        width:           maxR * 2,
-        height:          maxR * 2,
-        borderRadius:    maxR,
-        borderWidth:     1,
-        borderColor:     accent,
-        backgroundColor: secondary,
+        position: 'absolute',
+        left: CX - size,
+        top:  CY - size,
+        width:  size * 2,
+        height: size * 2,
+        borderRadius: size,
+        borderWidth: 1,
+        borderColor: accent,
         opacity,
-        transform:       [{ scale }],
+        transform: [{ scale }],
       }}
     />
   );
 });
 
-// ── المكوّن الرئيسي ──
+// نواة الضوء — كرة صغيرة بلون مغاير
+const MistCore = memo(({ accent, light }) => (
+  <View
+    pointerEvents="none"
+    style={{
+      position: 'absolute',
+      left: CX - 18,
+      top:  CY - 18,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: light + '28',
+      shadowColor: accent,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.8,
+      shadowRadius: SW * 0.06,
+      elevation: 0,
+    }}
+  />
+));
+
 const RippleBackground = memo(({ theme }) => {
   if (!theme?.isMist) return null;
-
   const cfg = MIST_CFG[theme.id];
   if (!cfg) return null;
 
-  // 4 حلقات — أقطار متزايدة طبيعياً
   const rings = [
-    { maxR: MAX_R * 0.55, delay: 0                    },
-    { maxR: MAX_R * 0.70, delay: cfg.cycle * 0.25     },
-    { maxR: MAX_R * 0.82, delay: cfg.cycle * 0.50     },
-    { maxR: MAX_R * 0.92, delay: cfg.cycle * 0.75     },
+    { size: MAX_R * 0.45, delay: 0 },
+    { size: MAX_R * 0.62, delay: cfg.cycle * 0.25 },
+    { size: MAX_R * 0.78, delay: cfg.cycle * 0.50 },
+    { size: MAX_R * 0.92, delay: cfg.cycle * 0.75 },
   ];
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {/* خلفية الثيم */}
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.bg }]} />
+      {/* خلفية gradient */}
+      <LinearGradient
+        colors={cfg.gradients}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.3, y: 0 }}
+        end={{ x: 0.7, y: 1 }}
+      />
 
       {/* الحلقات */}
       {rings.map((r, i) => (
@@ -99,40 +113,24 @@ const RippleBackground = memo(({ theme }) => {
           key={i}
           delay={r.delay}
           cycle={cfg.cycle}
-          maxR={r.maxR}
+          size={r.size}
           accent={cfg.accent}
           secondary={cfg.secondary}
         />
       ))}
 
-      {/* نواة الضوء الثابتة */}
-      <View
-        pointerEvents="none"
-        style={{
-          position:        'absolute',
-          left:            CX - SW * 0.055,
-          top:             CY - SW * 0.055,
-          width:           SW * 0.11,
-          height:          SW * 0.11,
-          borderRadius:    SW * 0.055,
-          backgroundColor: cfg.light + '18',
-          shadowColor:     cfg.accent,
-          shadowOffset:    { width: 0, height: 0 },
-          shadowOpacity:   0.9,
-          shadowRadius:    SW * 0.07,
-          elevation:       0,
-        }}
-      />
+      {/* نواة الضوء — كرة بلون مغاير */}
+      <MistCore accent={cfg.accent} light={cfg.light} />
 
       {/* ضباب ناعم */}
       <View
         pointerEvents="none"
         style={{
-          position:        'absolute',
+          position: 'absolute',
           left: 0, right: 0,
-          top:             SH * 0.30,
-          height:          SH * 0.40,
-          backgroundColor: '#ffffff04',
+          top: SH * 0.28,
+          height: SH * 0.44,
+          backgroundColor: '#ffffff03',
         }}
       />
     </View>

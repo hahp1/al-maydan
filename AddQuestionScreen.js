@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, TextInput, StatusBar, ScrollView, Alert } from 'react-native';
 import { useTheme } from './ThemeContext';
+import { ThemedButton, ThemedCard, ThemedInput } from './ThemedComponents';
 
 export default function AddQuestionScreen({ category, onBack, onSave, onRename }) {
   const { theme } = useTheme();
@@ -65,13 +66,11 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
   };
 
   return (
-    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.bg }]}>
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={[styles.backText, { color: theme.accent }]}>→ رجوع</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label='→ رجوع' variant='ghost' size='small' />
         <Text style={[styles.title, { color: theme.accent }]}>{catEmoji} {catName}</Text>
         <View style={[styles.countBadge, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
           <Text style={[styles.countText, { color: theme.accent }]}>{questions.length} سؤال</Text>
@@ -80,14 +79,7 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
 
       {/* تعديل اسم الفئة */}
       <View style={styles.section}>
-        <TouchableOpacity
-          style={[styles.renameToggle, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
-          onPress={() => setEditingName(!editingName)}
-        >
-          <Text style={[styles.renameToggleText, { color: theme.accent }]}>
-            {editingName ? '🔼 إخفاء تعديل الفئة' : '✏️ تعديل اسم الفئة'}
-          </Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={() => setEditingName(!editingName)} label={editingName ? '🔼 إخفاء تعديل الفئة' : '✏️ تعديل اسم الفئة'} variant='secondary' size='small' />
 
         {editingName && (
           <View style={styles.renameRow}>
@@ -151,16 +143,9 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
         />
 
         <View style={styles.formButtons}>
-          <TouchableOpacity
-            style={[styles.addBtn, { backgroundColor: theme.accent }, (!question.trim() || !answer.trim()) && { backgroundColor: theme.bgElevated }]}
-            onPress={handleAdd}
-          >
-            <Text style={[styles.addBtnText, { color: theme.textOnAccent }]}>{editingId ? '💾 حفظ التعديل' : '➕ إضافة السؤال'}</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={handleAdd} label={editingId ? '💾 حفظ التعديل' : '➕ إضافة السؤال'} variant='primary' size='medium' disabled={!question.trim() || !answer.trim()} />
           {editingId && (
-            <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: theme.bgElevated, borderColor: theme.error + "55" }]} onPress={() => { setEditingId(null); setQuestion(''); setAnswer(''); }}>
-              <Text style={[styles.cancelBtnText, { color: theme.error }]}>❌ إلغاء</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={() => { setEditingId(null); setQuestion(''); setAnswer(''); }} label='❌ إلغاء' variant='danger' size='medium' />
           )}
         </View>
       </View>
@@ -170,7 +155,7 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.accent }]}>📋 الأسئلة ({questions.length})</Text>
           {questions.map((q) => (
-            <View key={q.id} style={[styles.questionCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+            <ThemedCard key={q.id} style={styles.questionCard}>
               <View style={[styles.diffBadge, { backgroundColor: difficultyColors[q.difficulty] }]}>
                 <Text style={styles.diffBadgeText}>{q.difficulty}</Text>
               </View>
@@ -186,14 +171,12 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
                   <Text style={styles.deleteIcon}>🗑️</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </ThemedCard>
           ))}
         </View>
       )}
 
-      <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.bgCard, borderColor: theme.success + "66" }]} onPress={handleSaveAll}>
-        <Text style={[styles.saveBtnText, { color: theme.success }]}>💾 حفظ الكل ({questions.length})</Text>
-      </TouchableOpacity>
+      <ThemedButton onPress={handleSaveAll} label={`💾 حفظ الكل (${questions.length})`} variant='success' size='large' style={{ marginBottom: 20 }} />
 
     </ScrollView>
   );

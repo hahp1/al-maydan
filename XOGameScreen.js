@@ -10,6 +10,7 @@ import { useLanguage } from './I18n';
 import { XOEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
+import OnlineRoomSetup, { OnlineWaitingLobby } from './OnlineRoomSetup';
 
 const LINES = [
   [0,1,2],[3,4,5],[6,7,8],
@@ -91,16 +92,28 @@ const TOTAL_ROUNDS = 7;
 export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
+  const isRTL = lang === 'ar';
+
+  // ── اختيار الوضع قبل البدء ──
+  const [selectedMode,  setSelectedMode]  = useState(null);
+  const [joinCodeInput, setJoinCodeInput] = useState(null);
+
+  const handleModeSelect = (mode, code = null) => {
+    setJoinCodeInput(code);
+    setSelectedMode(mode);
+  };
+
   const {
     roomId,
     isPlayer1,
     roomData,
     loading,
     error,
+    friendCode,
     updateRoom,
     endGame,
     leaveRoom,
-  } = useOnlineGame('xo', currentUser, onGameReady);
+  } = useOnlineGame('xo', currentUser, onGameReady, selectedMode, joinCodeInput);
 
   const [board, setBoard]             = useState(Array(9).fill(null));
   const [gameStatus, setGameStatus]   = useState('waiting');
@@ -287,23 +300,50 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
   };
 
   // ── شاشات التحميل / الخطأ ────────────────────────────────────
+  // ── شاشة اختيار الوضع ──
+  if (!selectedMode) {
+    return (
+      <OnlineRoomSetup
+        gameEmoji="✕○"
+        gameTitleAr="XO"
+        gameTitleEn="XO"
+        descAr="العب XO ضد منافس حقيقي"
+        descEn="Play XO against a real opponent"
+        onBack={onBack}
+        onSelect={handleModeSelect}
+      />
+    );
+  }
+
+  // ── شاشة انتظار الصديق ──
+  if (selectedMode === 'create' && loading) {
+    return (
+      <OnlineWaitingLobby
+        friendCode={friendCode}
+        isFriend={true}
+        isRTL={isRTL}
+        theme={theme}
+        gameEmoji="✕○"
+        onCancel={onBack}
+      />
+    );
+  }
+
   if (error) {
     return (
-      <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[s.container, { backgroundColor: 'transparent' }]}>
         <XOEngraving theme={theme} />
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.center}>
           <Text style={{ color: '#ef4444', fontSize: 15 }}>❌ {error}</Text>
-          <TouchableOpacity onPress={onBack} style={[s.smallBtn, { backgroundColor: theme.bgCard, marginTop: 16 }]}>
-            <Text style={{ color: theme.accent }}>رجوع</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onBack} label='→ رجوع' variant='ghost' size='medium' style={[s.smallBtn, { marginTop: 16 }]} />
         </View>
       </View>
     );
   }
   if (loading) {
     return (
-      <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[s.container, { backgroundColor: 'transparent' }]}>
         <XOEngraving theme={theme} />
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.center}>
@@ -315,14 +355,12 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
   }
   if (!roomId) {
     return (
-      <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[s.container, { backgroundColor: 'transparent' }]}>
         <XOEngraving theme={theme} />
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.center}>
           <Text style={{ color: theme.textPrimary }}>لا توجد غرفة</Text>
-          <TouchableOpacity onPress={onBack} style={[s.smallBtn, { backgroundColor: theme.bgCard, marginTop: 16 }]}>
-            <Text style={{ color: theme.accent }}>رجوع</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onBack} label='→ رجوع' variant='ghost' size='medium' style={[s.smallBtn, { marginTop: 16 }]} />
         </View>
       </View>
     );
@@ -332,7 +370,7 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
   if (matchOver) {
     const matchWinner = getMatchWinnerName();
     return (
-      <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[s.container, { backgroundColor: 'transparent' }]}>
         <XOEngraving theme={theme} />
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.center}>
@@ -347,12 +385,7 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
             <Text style={[s.finalScoreNum, { color: theme.accent }]}>{myScore} — {oppScore}</Text>
             <Text style={[s.finalScoreLabel, { color: theme.textSecondary }]}>{opponentName}</Text>
           </View>
-          <TouchableOpacity
-            onPress={handleQuit}
-            style={[s.smallBtn, { backgroundColor: theme.bgCard, borderColor: theme.border, borderWidth: 1, marginTop: 20 }]}
-          >
-            <Text style={{ color: theme.textPrimary, fontWeight: '700' }}>خروج</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={handleQuit} label='خروج' variant='ghost' size='medium' style={[s.smallBtn, { marginTop: 20 }]} />
         </View>
       </View>
     );
@@ -360,7 +393,7 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
 
   // ── الشاشة الرئيسية ───────────────────────────────────────────
   return (
-    <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[s.container, { backgroundColor: 'transparent' }]}>
       <XOEngraving theme={theme} />
       <StatusBar barStyle={theme.statusBar} />
 
@@ -426,14 +459,7 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
             {roundResult === 'draw' ? 'تعادل الجولة!' : `${getRoundWinnerName()} فاز بالجولة!`}
           </Text>
           {currentRound < TOTAL_ROUNDS && isPlayer1 && (
-            <TouchableOpacity
-              style={[s.resetBtn, { backgroundColor: theme.accent }]}
-              onPress={handleNextRound}
-            >
-              <Text style={{ color: theme.textOnAccent, fontWeight: '900', fontSize: 14 }}>
-                الجولة التالية ←
-              </Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={handleNextRound} label='الجولة التالية ←' variant='primary' size='medium' style={s.resetBtn} />
           )}
           {currentRound < TOTAL_ROUNDS && !isPlayer1 && (
             <Text style={[s.waitingForNext, { color: theme.textSecondary }]}>بانتظار الجولة التالية...</Text>
@@ -465,20 +491,19 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
         {board.map((cell, index) => {
           const isWinCell = winLine.includes(index);
           return (
-            <TouchableOpacity
+            <ThemedCard
               key={index}
+              onPress={() => handleMove(index)}
               style={[
                 s.cell,
-                { backgroundColor: theme.bgCard, borderColor: theme.border },
                 isWinCell && s.cellWin,
               ]}
-              onPress={() => handleMove(index)}
               disabled={!!roundResult || isWaiting || matchOver}
             >
               <Text style={[s.cellText, { opacity: cell ? 1 : 0.04 }]}>
                 {cell === 'X' ? '❌' : '⭕'}
               </Text>
-            </TouchableOpacity>
+            </ThemedCard>
           );
         })}
       </View>

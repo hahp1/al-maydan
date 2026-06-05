@@ -82,10 +82,9 @@ function OptionPicker({ label, options, selected, onSelect, theme }) {
   const selectedOpt = options.find(o => o.value === selected) || options[0];
   return (
     <View style={{ width: '100%' }}>
-      <TouchableOpacity
-        style={[pick.btn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
+      <ThemedCard
         onPress={() => setOpen(v => !v)}
-        activeOpacity={0.8}
+        style={pick.btn}
       >
         <Text style={[pick.label, { color: theme.textMuted }]}>{label}</Text>
         <View style={pick.right}>
@@ -94,15 +93,15 @@ function OptionPicker({ label, options, selected, onSelect, theme }) {
           </Text>
           <Text style={[pick.arrow, { color: theme.textMuted }]}>{open ? '▲' : '▼'}</Text>
         </View>
-      </TouchableOpacity>
+      </ThemedCard>
       {open && (
         <View style={[pick.dropdown, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
           {options.map(opt => (
-            <TouchableOpacity
+            <ThemedCard
               key={opt.value}
-              style={[pick.option, opt.value === selected && { backgroundColor: theme.accentSoft }]}
               onPress={() => { onSelect(opt.value); setOpen(false); }}
-              activeOpacity={0.8}
+              style={pick.option}
+              variant={opt.value === selected ? 'accent' : 'default'}
             >
               <View style={{ flex: 1 }}>
                 <Text style={[pick.optionText, { color: opt.value === selected ? theme.accent : theme.textPrimary }]}>
@@ -115,7 +114,7 @@ function OptionPicker({ label, options, selected, onSelect, theme }) {
               {opt.value === selected && (
                 <Text style={{ color: theme.accent, fontSize: 14 }}>✓</Text>
               )}
-            </TouchableOpacity>
+            </ThemedCard>
           ))}
         </View>
       )}
@@ -411,7 +410,7 @@ export default function LoginScreen({ onLogin, onGuest }) {
   ];
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       {/* نجوم الخلفية */}

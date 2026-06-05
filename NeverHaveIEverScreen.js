@@ -152,7 +152,7 @@ const TXT = {
 // ══════════════════════════════════════════════════════════════
 function ModeScreen({ onPickMode, theme, tx }) {
   return (
-    <ScrollView contentContainerStyle={[styles.modeContainer, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <ScrollView contentContainerStyle={[styles.modeContainer, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
       <Text style={[styles.bigEmoji]}>☝️</Text>
       <Text style={[styles.pageTitle, { color: GREEN }]}>{tx('title')}</Text>
@@ -162,11 +162,7 @@ function ModeScreen({ onPickMode, theme, tx }) {
         {tx('modeTitle')}
       </Text>
 
-      <TouchableOpacity
-        style={[styles.modeCard, { backgroundColor: theme.bgCard, borderColor: GREEN_LINE }]}
-        onPress={() => onPickMode('default')}
-        activeOpacity={0.85}
-      >
+      <ThemedCard onPress={() => onPickMode('default')} style={styles.modeCard} variant='accent'>
         <Text style={styles.modeEmoji}>🎲</Text>
         <View style={{ flex: 1 }}>
           <Text style={[styles.modeName, { color: theme.textPrimary }]}>{tx('modeDefault')}</Text>
@@ -175,13 +171,9 @@ function ModeScreen({ onPickMode, theme, tx }) {
         <View style={[styles.modeArrowBadge, { backgroundColor: GREEN_SOFT }]}>
           <Text style={[styles.modeArrow, { color: GREEN }]}>←</Text>
         </View>
-      </TouchableOpacity>
+      </ThemedCard>
 
-      <TouchableOpacity
-        style={[styles.modeCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-        onPress={() => onPickMode('custom')}
-        activeOpacity={0.85}
-      >
+      <ThemedCard onPress={() => onPickMode('custom')} style={styles.modeCard}>
         <Text style={styles.modeEmoji}>✍️</Text>
         <View style={{ flex: 1 }}>
           <Text style={[styles.modeName, { color: theme.textPrimary }]}>{tx('modeCustom')}</Text>
@@ -190,7 +182,7 @@ function ModeScreen({ onPickMode, theme, tx }) {
         <View style={[styles.modeArrowBadge, { backgroundColor: theme.bgElevated || theme.bgCard }]}>
           <Text style={[styles.modeArrow, { color: theme.textMuted }]}>←</Text>
         </View>
-      </TouchableOpacity>
+      </ThemedCard>
     </ScrollView>
   );
 }
@@ -231,7 +223,7 @@ function DefaultSetupScreen({ onStart, theme, tx, lang }) {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={[styles.setupContainer, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.setupContainer, { backgroundColor: 'transparent' }]} keyboardShouldPersistTaps="handled">
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <Text style={styles.setupEmoji}>🎲</Text>
         <Text style={[styles.pageTitle, { color: GREEN }]}>{tx('modeDefault')}</Text>
@@ -250,14 +242,7 @@ function DefaultSetupScreen({ onStart, theme, tx, lang }) {
             returnKeyType="done"
             maxLength={20}
           />
-          <TouchableOpacity
-            style={[styles.addPlayerBtn, { backgroundColor: GREEN, opacity: playerName.trim() ? 1 : 0.4 }]}
-            onPress={addPlayer}
-            activeOpacity={0.8}
-            disabled={!playerName.trim()}
-          >
-            <Text style={styles.addPlayerBtnText}>＋</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={addPlayer} disabled={!playerName.trim()} label='＋' variant='primary' size='small' style={[styles.addPlayerBtn, { opacity: playerName.trim() ? 1 : 0.4 }]} />
         </View>
 
         {/* قائمة اللاعبين */}
@@ -268,33 +253,13 @@ function DefaultSetupScreen({ onStart, theme, tx, lang }) {
                 <Text style={styles.chipNumText}>{i + 1}</Text>
               </View>
               <Text style={[styles.chipName, { color: theme.textPrimary }]}>{p.name}</Text>
-              <TouchableOpacity
-                style={styles.chipRemove}
-                onPress={() => removePlayer(p.id)}
-                hitSlop={HIT}
-              >
-                <Text style={styles.chipRemoveText}>✕</Text>
-              </TouchableOpacity>
+              <ThemedButton onPress={() => removePlayer(p.id)} label='✕' variant='ghost' size='small' style={styles.chipRemove} />
             </View>
           ))}
         </View>
 
         {/* زر البدء */}
-        <TouchableOpacity
-          style={[styles.startBtn, {
-            backgroundColor: canStart ? GREEN : theme.bgCard,
-            borderWidth: canStart ? 0 : 1.5,
-            borderColor: theme.border,
-            marginTop: 8,
-          }]}
-          onPress={handleStart}
-          activeOpacity={0.85}
-          disabled={!canStart}
-        >
-          <Text style={[styles.startBtnText, { color: canStart ? '#fff' : theme.textMuted }]}>
-            {canStart ? tx('startGame') : `${tx('minPlayers')}`}
-          </Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={handleStart} disabled={!canStart} label={canStart ? tx('startGame') : tx('minPlayers')} variant={canStart ? 'success' : 'secondary'} size='large' style={[styles.startBtn, { marginTop: 8 }]} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -358,7 +323,7 @@ function CustomSetupScreen({ onStart, theme, tx, lang, maxStatements }) {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
-        contentContainerStyle={[styles.setupContainer, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}
+        contentContainerStyle={[styles.setupContainer, { backgroundColor: 'transparent' }]}
         keyboardShouldPersistTaps="handled"
       >
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
@@ -378,14 +343,7 @@ function CustomSetupScreen({ onStart, theme, tx, lang, maxStatements }) {
             returnKeyType="done"
             maxLength={20}
           />
-          <TouchableOpacity
-            style={[styles.addPlayerBtn, { backgroundColor: GREEN, opacity: playerName.trim() ? 1 : 0.4 }]}
-            onPress={addPlayer}
-            activeOpacity={0.8}
-            disabled={!playerName.trim()}
-          >
-            <Text style={styles.addPlayerBtnText}>＋</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={addPlayer} disabled={!playerName.trim()} label='＋' variant='primary' size='small' style={[styles.addPlayerBtn, { opacity: playerName.trim() ? 1 : 0.4 }]} />
         </View>
         <View style={styles.playersList}>
           {players.map((p, i) => (
@@ -394,9 +352,7 @@ function CustomSetupScreen({ onStart, theme, tx, lang, maxStatements }) {
                 <Text style={styles.chipNumText}>{i + 1}</Text>
               </View>
               <Text style={[styles.chipName, { color: theme.textPrimary }]}>{p.name}</Text>
-              <TouchableOpacity style={styles.chipRemove} onPress={() => removePlayer(p.id)} hitSlop={HIT}>
-                <Text style={styles.chipRemoveText}>✕</Text>
-              </TouchableOpacity>
+              <ThemedButton onPress={() => removePlayer(p.id)} label='✕' variant='ghost' size='small' style={styles.chipRemove} />
             </View>
           ))}
         </View>
@@ -428,16 +384,7 @@ function CustomSetupScreen({ onStart, theme, tx, lang, maxStatements }) {
             returnKeyType="done"
             maxLength={120}
           />
-          <TouchableOpacity
-            style={[styles.addPlayerBtn, {
-              backgroundColor: stmtInput.trim() && statements.length < maxStatements ? GREEN : theme.bgElevated || '#333',
-              opacity: stmtInput.trim() && statements.length < maxStatements ? 1 : 0.4,
-            }]}
-            onPress={addStatement}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.addPlayerBtnText}>＋</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={addStatement} label='＋' variant='primary' size='small' style={styles.addPlayerBtn} />
         </View>
 
         {/* قائمة الجمل المضافة */}
@@ -455,13 +402,7 @@ function CustomSetupScreen({ onStart, theme, tx, lang, maxStatements }) {
                     maxLength={120}
                     autoFocus
                   />
-                  <TouchableOpacity
-                    style={[styles.saveBtn, { backgroundColor: GREEN }]}
-                    onPress={saveEdit}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.saveBtnText}>{tx('saveBtn')}</Text>
-                  </TouchableOpacity>
+                  <ThemedButton onPress={saveEdit} label={tx('saveBtn')} variant='success' size='small' style={styles.saveBtn} />
                 </View>
               ) : (
                 // وضع العرض
@@ -471,20 +412,8 @@ function CustomSetupScreen({ onStart, theme, tx, lang, maxStatements }) {
                   </View>
                   <Text style={[styles.stmtText, { color: theme.textPrimary }]} numberOfLines={3}>{s.text}</Text>
                   <View style={styles.stmtActions}>
-                    <TouchableOpacity
-                      style={[styles.stmtActionBtn, { borderColor: '#f59e0b50', backgroundColor: '#f59e0b10' }]}
-                      onPress={() => startEdit(s)}
-                      hitSlop={HIT}
-                    >
-                      <Text style={[styles.stmtActionText, { color: '#f59e0b' }]}>{tx('editBtn')}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.stmtActionBtn, { borderColor: '#ef444450', backgroundColor: '#ef444410' }]}
-                      onPress={() => deleteStatement(s.id)}
-                      hitSlop={HIT}
-                    >
-                      <Text style={[styles.stmtActionText, { color: '#ef4444' }]}>{tx('deleteBtn')}</Text>
-                    </TouchableOpacity>
+                    <ThemedButton onPress={() => startEdit(s)} label={tx('editBtn')} variant='secondary' size='small' style={styles.stmtActionBtn} />
+                    <ThemedButton onPress={() => deleteStatement(s.id)} label={tx('deleteBtn')} variant='danger' size='small' style={styles.stmtActionBtn} />
                   </View>
                 </>
               )}
@@ -493,25 +422,7 @@ function CustomSetupScreen({ onStart, theme, tx, lang, maxStatements }) {
         </View>
 
         {/* زر البدء */}
-        <TouchableOpacity
-          style={[styles.startBtn, {
-            backgroundColor: canStart ? GREEN : theme.bgCard,
-            borderWidth: canStart ? 0 : 1.5,
-            borderColor: theme.border,
-            marginTop: 16,
-          }]}
-          onPress={handleStart}
-          activeOpacity={0.85}
-          disabled={!canStart}
-        >
-          <Text style={[styles.startBtnText, { color: canStart ? '#fff' : theme.textMuted }]}>
-            {canStart
-              ? tx('startCustom')
-              : statements.length < 5
-                ? tx('minStmts')
-                : tx('minPlayers')}
-          </Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={handleStart} disabled={!canStart} label={canStart ? tx('startCustom') : statements.length < 5 ? tx('minStmts') : tx('minPlayers')} variant={canStart ? 'success' : 'secondary'} size='large' style={[styles.startBtn, { marginTop: 16 }]} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -617,7 +528,7 @@ function GameScreen({ initialPlayers, statements, onBack, theme, tx }) {
 
   if (gameEnded) {
     return (
-      <View style={[styles.endContainer, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.endContainer, { backgroundColor: 'transparent' }]}>
         <NeverHaveIEverEngraving theme={theme} />
         <Text style={styles.finishEmoji}>{loser ? '😢' : '🎉'}</Text>
         <Text style={[styles.finishTitle, { color: GREEN }]}>
@@ -639,15 +550,13 @@ function GameScreen({ initialPlayers, statements, onBack, theme, tx }) {
             </View>
           ))}
         </View>
-        <TouchableOpacity style={[styles.startBtn, { backgroundColor: GREEN }]} onPress={onBack} activeOpacity={0.85}>
-          <Text style={[styles.startBtnText, { color: '#fff' }]}>{tx('playAgain')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label={tx('playAgain')} variant='success' size='large' style={styles.startBtn} />
       </View>
     );
   }
 
   return (
-    <View style={[styles.playRoot, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[styles.playRoot, { backgroundColor: 'transparent' }]}>
       <NeverHaveIEverEngraving theme={theme} />
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
@@ -731,23 +640,15 @@ function GameScreen({ initialPlayers, statements, onBack, theme, tx }) {
 
         {/* زرا الإجابة */}
         <View style={styles.answerBtns}>
-          <TouchableOpacity
-            style={[styles.answerBtn, styles.didItBtn]}
-            onPress={() => handleAnswer(true)}
-            activeOpacity={0.85}
-          >
+          <ThemedCard onPress={() => handleAnswer(true)} style={[styles.answerBtn, styles.didItBtn]} variant='danger'>
             <Text style={styles.answerBtnEmoji}>✋</Text>
             <Text style={[styles.answerBtnText, { color: '#ff6b6b' }]}>{tx('didIt')}</Text>
-          </TouchableOpacity>
+          </ThemedCard>
 
-          <TouchableOpacity
-            style={[styles.answerBtn, styles.didntBtn]}
-            onPress={() => handleAnswer(false)}
-            activeOpacity={0.85}
-          >
+          <ThemedCard onPress={() => handleAnswer(false)} style={[styles.answerBtn, styles.didntBtn]} variant='success'>
             <Text style={styles.answerBtnEmoji}>☝️</Text>
             <Text style={[styles.answerBtnText, { color: '#4ade80' }]}>{tx('didntIt')}</Text>
-          </TouchableOpacity>
+          </ThemedCard>
         </View>
       </Animated.View>
     </View>
@@ -804,7 +705,7 @@ export default function NeverHaveIEver({ onBack, experience }) {
   }, [stage, onBack]);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[styles.root, { backgroundColor: 'transparent' }]}>
       {/* زر رجوع خارج شاشة اللعب */}
       {stage !== 'play' && (
         <ExitButton onPress={handleBack} />

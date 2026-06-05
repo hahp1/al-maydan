@@ -1,5 +1,5 @@
 /**
- * WhoIsLyingScreen.js — من الكاذب؟
+ * WhoIsSpyScreen.js — من الكاذب؟
  * ══════════════════════════════════════════════════════════
  *  نمط 1: جلسة — كل اللاعبين بنفس الجهاز
  *    • كل لاعب يضغط ليرى كلمته بشكل خاص
@@ -396,7 +396,7 @@ const ACCENT_B = '#f9731640';
 //  الشاشة الرئيسية للعبة
 // ══════════════════════════════════════════════════════════
 export default function WhoIsLyingScreen({ onBack, currentUser }) {
-  const { theme } = useTheme();
+  const { theme, themeId } = useTheme();
   // phase: 'menu' | 'local_setup' | 'local_play' | 'online_lobby'
   const [phase, setPhase] = useState('menu');
 
@@ -410,7 +410,7 @@ export default function WhoIsLyingScreen({ onBack, currentUser }) {
   // ── شاشة القائمة ──────────────────────────────────────
   if (phase === 'menu') {
     return (
-      <Animated.View style={[s.flex, { backgroundColor: theme.bg, opacity: fade }]}>
+      <Animated.View style={[s.flex, { backgroundColor: 'transparent', opacity: fade }]}>
         <StatusBar barStyle={theme.statusBar} />
         {/* خلفية زخرفية */}
         <View style={s.bgDeco} pointerEvents="none">
@@ -418,9 +418,7 @@ export default function WhoIsLyingScreen({ onBack, currentUser }) {
         </View>
 
         <SafeHeader>
-          <TouchableOpacity onPress={onBack} style={[s.backBtn, { backgroundColor: theme.bgCard, borderColor: ACCENT_B }]}>
-            <Text style={{ color: ACCENT, fontSize: 18 }}>→</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onBack} label="→" variant="ghost" size="small" style={s.backBtn} />
           <GameInfoButton gameType="who_lying" lang="ar" style={[s.headerIcon, { backgroundColor: theme.bgCard, borderColor: ACCENT_B }]} />
         </SafeHeader>
 
@@ -431,26 +429,18 @@ export default function WhoIsLyingScreen({ onBack, currentUser }) {
 
           <View style={s.modeRow}>
             {/* جلسة */}
-            <TouchableOpacity
-              style={[s.modeCard, { backgroundColor: ACCENT_S, borderColor: ACCENT_B }]}
-              onPress={() => setPhase('local_setup')}
-              activeOpacity={0.82}
-            >
+            <ThemedCard onPress={() => setPhase('local_setup')} style={s.modeCard} variant='accent'>
               <Text style={s.modeCardEmoji}>🏠</Text>
               <Text style={[s.modeCardTitle, { color: ACCENT }]}>جلسة</Text>
               <Text style={[s.modeCardDesc, { color: theme.textMuted }]}>نفس الجهاز{'\n'}بدون إنترنت</Text>
-            </TouchableOpacity>
+            </ThemedCard>
 
             {/* أونلاين */}
-            <TouchableOpacity
-              style={[s.modeCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-              onPress={() => setPhase('online_lobby')}
-              activeOpacity={0.82}
-            >
+            <ThemedCard onPress={() => setPhase('online_lobby')} style={s.modeCard}>
               <Text style={s.modeCardEmoji}>🌐</Text>
               <Text style={[s.modeCardTitle, { color: theme.textPrimary }]}>روم</Text>
               <Text style={[s.modeCardDesc, { color: theme.textMuted }]}>كل شخص{'\n'}بجهازه</Text>
-            </TouchableOpacity>
+            </ThemedCard>
           </View>
 
           {/* نظام النقاط */}
@@ -549,15 +539,13 @@ function LocalSetupPhase({ theme, onBack, onStart }) {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={[s.flex, { backgroundColor: theme.bg }]}
+      style={[s.flex, { backgroundColor: 'transparent' }]}
     >
       <Animated.View style={{ flex: 1, opacity: fade }}>
         <StatusBar barStyle={theme.statusBar} />
 
         <SafeHeader>
-          <TouchableOpacity onPress={onBack} style={[s.backBtn, { backgroundColor: theme.bgCard, borderColor: ACCENT_B }]}>
-            <Text style={{ color: ACCENT, fontSize: 18 }}>→</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onBack} label="→" variant="ghost" size="small" style={s.backBtn} />
           <Text style={[s.headerTitle, { color: ACCENT }]}>🏠 جلسة</Text>
           <View style={{ width: 40 }} />
         </SafeHeader>
@@ -569,17 +557,16 @@ function LocalSetupPhase({ theme, onBack, onStart }) {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
             <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 2 }}>
               {CATEGORIES.map(cat => (
-                <TouchableOpacity
+                <ThemedCard
                   key={cat.id}
-                  style={[s.catChip, { backgroundColor: theme.bgCard, borderColor: theme.border },
-                    catId === cat.id && { backgroundColor: ACCENT_S, borderColor: ACCENT }]}
                   onPress={() => setCatId(cat.id)}
-                  activeOpacity={0.8}
+                  style={s.catChip}
+                  variant={catId === cat.id ? 'accent' : 'default'}
                 >
                   <Text style={[s.catChipText, { color: catId === cat.id ? ACCENT : theme.textMuted }]}>
                     {cat.label}
                   </Text>
-                </TouchableOpacity>
+                </ThemedCard>
               ))}
             </View>
           </ScrollView>
@@ -598,9 +585,7 @@ function LocalSetupPhase({ theme, onBack, onStart }) {
               onSubmitEditing={addPlayer}
               returnKeyType="done"
             />
-            <TouchableOpacity style={[s.addBtn, { backgroundColor: ACCENT }]} onPress={addPlayer} activeOpacity={0.85}>
-              <Text style={s.addBtnText}>＋</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={addPlayer} label='＋' variant='primary' size='small' style={s.addBtn} />
           </View>
 
           <View style={s.playersList}>
@@ -616,13 +601,7 @@ function LocalSetupPhase({ theme, onBack, onStart }) {
           </View>
 
           {players.length >= 3 && (
-            <TouchableOpacity
-              style={[s.startBtn, { backgroundColor: ACCENT }]}
-              onPress={() => onStart(players, catId)}
-              activeOpacity={0.85}
-            >
-              <Text style={s.startBtnText}>ابدأ اللعبة ←</Text>
-            </TouchableOpacity>
+              <ThemedButton onPress={() => onStart(players, catId)} label='ابدأ اللعبة ←' variant='primary' size='large' style={s.startBtn} />
           )}
         </ScrollView>
       </Animated.View>
@@ -780,7 +759,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
     const isLiar  = revealIdx === lyingIdx;
 
     return (
-      <Animated.View style={[s.flex, { backgroundColor: theme.bg, opacity: fade }]}>
+      <Animated.View style={[s.flex, { backgroundColor: 'transparent', opacity: fade }]}>
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.gameHeader}>
           <TouchableOpacity onPress={() => Alert.alert('خروج', 'هل تريد الخروج؟', [
@@ -802,13 +781,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
           <View style={[s.revealCard, { backgroundColor: theme.bgCard, borderColor: ACCENT_B }]}>
             <Text style={[s.revealPlayerName, { color: ACCENT }]}>{current}</Text>
             {!revealed ? (
-              <TouchableOpacity
-                style={[s.bigBtn, { backgroundColor: ACCENT }]}
-                onPress={() => setRevealed(true)}
-                activeOpacity={0.85}
-              >
-                <Text style={s.bigBtnText}>🫣 أرِني</Text>
-              </TouchableOpacity>
+              <ThemedButton onPress={() => setRevealed(true)} label='🫣 أرِني' variant='primary' size='large' style={s.bigBtn} />
             ) : (
               <View style={s.wordRevealBox}>
                 <Text style={[s.wordRevealLabel, { color: theme.textMuted }]}>
@@ -818,22 +791,12 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
                   {isLiar ? wordPair.fake : wordPair.common}
                 </Text>
 
-                <TouchableOpacity
-                  style={[s.bigBtn, { backgroundColor: theme.bgElevated, marginTop: 16 }]}
-                  onPress={() => {
-                    setRevealed(false);
-                    if (revealIdx + 1 >= players.length) {
-                      setLocalPhase('discuss');
-                    } else {
-                      setRevealIdx(r => r + 1);
-                    }
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[s.bigBtnText, { color: theme.textPrimary }]}>
-                    {revealIdx + 1 >= players.length ? 'الجميع رأى — ابدأ النقاش ←' : 'التالي ←'}
-                  </Text>
-                </TouchableOpacity>
+                <ThemedButton
+                  onPress={() => { setRevealed(false); if (revealIdx + 1 >= players.length) { setLocalPhase('discuss'); } else { setRevealIdx(r => r + 1); } }}
+                  label={revealIdx + 1 >= players.length ? 'الجميع رأى — ابدأ النقاش ←' : 'التالي ←'}
+                  variant='secondary' size='large'
+                  style={{ marginTop: 16 }}
+                />
               </View>
             )}
           </View>
@@ -864,7 +827,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
     const isLastStep    = qStep + 1 >= totalQuestions;
 
     return (
-      <Animated.View style={[s.flex, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, opacity: fade }]}>
+      <Animated.View style={[s.flex, { backgroundColor: 'transparent', opacity: fade }]}>
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.gameHeader}>
           <TouchableOpacity onPress={() => Alert.alert('خروج', 'هل تريد الخروج؟', [
@@ -907,16 +870,12 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
             </View>
           </View>
 
-          <TouchableOpacity
-            style={[s.bigBtn, { backgroundColor: ACCENT, marginTop: 24, width: '80%' }]}
-            onPress={() => {
-              if (isLastStep) { startVoting(); }
-              else { setQStep(q => q + 1); }
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={s.bigBtnText}>🗳️ ابدأ التصويت</Text>
-          </TouchableOpacity>
+          <ThemedButton
+            onPress={() => { if (isLastStep) { startVoting(); } else { setQStep(q => q + 1); } }}
+            label='🗳️ ابدأ التصويت'
+            variant='primary' size='large'
+            style={{ marginTop: 24, width: '80%' }}
+          />
         </View>
       </Animated.View>
     );
@@ -932,7 +891,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
     const timerColor = voteTimer > 20 ? '#10b981' : voteTimer > 10 ? '#f59e0b' : '#ef4444';
 
     return (
-      <Animated.View style={[s.flex, { backgroundColor: theme.bg, opacity: fade }]}>
+      <Animated.View style={[s.flex, { backgroundColor: 'transparent', opacity: fade }]}>
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.gameHeader}>
           <View style={[s.quitBtn, { backgroundColor: theme.bgCard, opacity: 0.3 }]} />
@@ -959,31 +918,27 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
 
           <View style={s.voteChoices}>
             {choices.map(name => (
-              <TouchableOpacity
+              <ThemedCard
                 key={name}
-                style={[s.voteChoice, { backgroundColor: theme.bgCard, borderColor: theme.border },
-                  selectedVote === name && { backgroundColor: ACCENT_S, borderColor: ACCENT }]}
                 onPress={() => setSelVote(name)}
-                activeOpacity={0.8}
+                style={s.voteChoice}
+                variant={selectedVote === name ? 'accent' : 'default'}
               >
                 <Text style={[s.voteChoiceName, { color: selectedVote === name ? ACCENT : theme.textPrimary }]}>
                   {name}
                 </Text>
                 {selectedVote === name && <Text style={{ fontSize: 18 }}>🎯</Text>}
-              </TouchableOpacity>
+              </ThemedCard>
             ))}
           </View>
 
-          <TouchableOpacity
-            style={[s.bigBtn, { backgroundColor: selectedVote ? ACCENT : theme.bgCard,
-              borderWidth: selectedVote ? 0 : 1, borderColor: theme.border, width: '80%' }]}
+          <ThemedButton
             onPress={() => handleVoteSubmit(selectedVote)}
-            activeOpacity={0.85}
-          >
-            <Text style={[s.bigBtnText, { color: selectedVote ? '#fff' : theme.textMuted }]}>
-              {selectedVote ? `✓ صوّت على ${selectedVote}` : 'تخطّ (بدون صوت)'}
-            </Text>
-          </TouchableOpacity>
+            label={selectedVote ? `✓ صوّت على ${selectedVote}` : 'تخطّ (بدون صوت)'}
+            variant={selectedVote ? 'primary' : 'ghost'}
+            size='large'
+            style={{ width: '80%' }}
+          />
         </View>
       </Animated.View>
     );
@@ -994,7 +949,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
   // ────────────────────────────────────────────────────
   if (localPhase === 'liar_guess') {
     return (
-      <Animated.View style={[s.flex, { backgroundColor: theme.bg, opacity: fade }]}>
+      <Animated.View style={[s.flex, { backgroundColor: 'transparent', opacity: fade }]}>
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.voteContent}>
           <Text style={s.discussEmoji}>🤥</Text>
@@ -1005,19 +960,18 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
 
           <View style={s.voteChoices}>
             {guessOptions.map(opt => (
-              <TouchableOpacity
+              <ThemedCard
                 key={opt}
-                style={[s.voteChoice, { backgroundColor: theme.bgCard, borderColor: theme.border },
-                  lyingGuess === opt && { backgroundColor: ACCENT_S, borderColor: ACCENT }]}
                 onPress={() => !lyingGuess && handleLiarGuess(opt)}
-                activeOpacity={0.8}
+                style={s.voteChoice}
+                variant={lyingGuess === opt ? 'accent' : 'default'}
               >
                 <Text style={[s.voteChoiceName, { color: lyingGuess === opt ? ACCENT : theme.textPrimary }]}>
                   {opt}
                 </Text>
                 {lyingGuess && opt === wordPair.common && <Text style={{ fontSize: 18 }}>✅</Text>}
                 {lyingGuess && opt !== wordPair.common && lyingGuess === opt && <Text style={{ fontSize: 18 }}>❌</Text>}
-              </TouchableOpacity>
+              </ThemedCard>
             ))}
           </View>
         </View>
@@ -1038,7 +992,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
     const liarGuessedRight = lyingGuess === wordPair.common;
 
     return (
-      <Animated.View style={[s.flex, { backgroundColor: theme.bg, opacity: fade }]}>
+      <Animated.View style={[s.flex, { backgroundColor: 'transparent', opacity: fade }]}>
         <StatusBar barStyle={theme.statusBar} />
         <ScrollView contentContainerStyle={s.resultContent}>
 
@@ -1090,15 +1044,12 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
             </View>
           ))}
 
-          <TouchableOpacity
-            style={[s.bigBtn, { backgroundColor: ACCENT, marginTop: 20, width: '80%', alignSelf: 'center' }]}
+          <ThemedButton
             onPress={nextRound}
-            activeOpacity={0.85}
-          >
-            <Text style={s.bigBtnText}>
-              {round >= totalRounds ? '🏆 النتيجة النهائية' : `جولة ${round + 1} →`}
-            </Text>
-          </TouchableOpacity>
+            label={round >= totalRounds ? '🏆 النتيجة النهائية' : `جولة ${round + 1} →`}
+            variant='primary' size='large'
+            style={{ marginTop: 20, width: '80%', alignSelf: 'center' }}
+          />
         </ScrollView>
       </Animated.View>
     );
@@ -1111,7 +1062,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
     const sorted = [...players].sort((a, b) => (scores[b] || 0) - (scores[a] || 0));
     const winner = sorted[0];
     return (
-      <Animated.View style={[s.flex, { backgroundColor: theme.bg, opacity: fade }]}>
+      <Animated.View style={[s.flex, { backgroundColor: 'transparent', opacity: fade }]}>
         <StatusBar barStyle={theme.statusBar} />
         <ScrollView contentContainerStyle={s.resultContent}>
           <Text style={[s.finalEmoji]}>🏆</Text>
@@ -1130,13 +1081,12 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
             </View>
           ))}
 
-          <TouchableOpacity
-            style={[s.bigBtn, { backgroundColor: ACCENT, marginTop: 24, width: '80%', alignSelf: 'center' }]}
+          <ThemedButton
             onPress={onBack}
-            activeOpacity={0.85}
-          >
-            <Text style={s.bigBtnText}>🏠 العودة للقائمة</Text>
-          </TouchableOpacity>
+            label='🏠 العودة للقائمة'
+            variant='primary' size='large'
+            style={{ marginTop: 24, width: '80%', alignSelf: 'center' }}
+          />
         </ScrollView>
       </Animated.View>
     );
@@ -1285,12 +1235,10 @@ function OnlineLobbyPhase({ theme, currentUser, onBack }) {
   // ────────────────────────────────────────────────────
   if (lobbyPhase === 'choose') {
     return (
-      <Animated.View style={[s.flex, { backgroundColor: theme.bg, opacity: fade }]}>
+      <Animated.View style={[s.flex, { backgroundColor: 'transparent', opacity: fade }]}>
         <StatusBar barStyle={theme.statusBar} />
         <SafeHeader>
-          <TouchableOpacity onPress={onBack} style={[s.backBtn, { backgroundColor: theme.bgCard, borderColor: ACCENT_B }]}>
-            <Text style={{ color: ACCENT, fontSize: 18 }}>→</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onBack} label="→" variant="ghost" size="small" style={s.backBtn} />
           <Text style={[s.headerTitle, { color: ACCENT }]}>🌐 روم</Text>
           <View style={{ width: 40 }} />
         </SafeHeader>
@@ -1301,25 +1249,17 @@ function OnlineLobbyPhase({ theme, currentUser, onBack }) {
           </Text>
 
           <View style={s.modeRow}>
-            <TouchableOpacity
-              style={[s.modeCard, { backgroundColor: ACCENT_S, borderColor: ACCENT_B }]}
-              onPress={() => setLobbyPhase('create')}
-              activeOpacity={0.82}
-            >
+            <ThemedCard onPress={() => setLobbyPhase('create')} style={s.modeCard} variant='accent'>
               <Text style={s.modeCardEmoji}>＋</Text>
               <Text style={[s.modeCardTitle, { color: ACCENT }]}>أنشئ روم</Text>
               <Text style={[s.modeCardDesc, { color: theme.textMuted }]}>تأخذ كود{'\n'}وتشارك الأصدقاء</Text>
-            </TouchableOpacity>
+            </ThemedCard>
 
-            <TouchableOpacity
-              style={[s.modeCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-              onPress={() => setLobbyPhase('join')}
-              activeOpacity={0.82}
-            >
+            <ThemedCard onPress={() => setLobbyPhase('join')} style={s.modeCard}>
               <Text style={s.modeCardEmoji}>🔑</Text>
               <Text style={[s.modeCardTitle, { color: theme.textPrimary }]}>انضم بكود</Text>
               <Text style={[s.modeCardDesc, { color: theme.textMuted }]}>أدخل كود{'\n'}من صديقك</Text>
-            </TouchableOpacity>
+            </ThemedCard>
           </View>
 
           <View style={[s.heartNote, { backgroundColor: theme.bgCard, borderColor: ACCENT_B }]}>
@@ -1334,12 +1274,10 @@ function OnlineLobbyPhase({ theme, currentUser, onBack }) {
 
   if (lobbyPhase === 'create') {
     return (
-      <Animated.View style={[s.flex, { backgroundColor: theme.bg, opacity: fade }]}>
+      <Animated.View style={[s.flex, { backgroundColor: 'transparent', opacity: fade }]}>
         <StatusBar barStyle={theme.statusBar} />
         <SafeHeader>
-          <TouchableOpacity onPress={() => setLobbyPhase('choose')} style={[s.backBtn, { backgroundColor: theme.bgCard, borderColor: ACCENT_B }]}>
-            <Text style={{ color: ACCENT, fontSize: 18 }}>→</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={() => setLobbyPhase('choose')} label='→' variant='ghost' size='small' style={s.backBtn} />
           <Text style={[s.headerTitle, { color: ACCENT }]}>إنشاء روم</Text>
           <View style={{ width: 40 }} />
         </SafeHeader>
@@ -1351,13 +1289,7 @@ function OnlineLobbyPhase({ theme, currentUser, onBack }) {
           {loading ? (
             <ActivityIndicator size="large" color={ACCENT} />
           ) : (
-            <TouchableOpacity
-              style={[s.bigBtn, { backgroundColor: ACCENT, width: '80%' }]}
-              onPress={createRoom}
-              activeOpacity={0.85}
-            >
-              <Text style={s.bigBtnText}>＋ أنشئ الروم</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={createRoom} label='＋ أنشئ الروم' variant='primary' size='large' style={{ width: '80%' }} />
           )}
         </View>
       </Animated.View>
@@ -1366,13 +1298,11 @@ function OnlineLobbyPhase({ theme, currentUser, onBack }) {
 
   if (lobbyPhase === 'join') {
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[s.flex, { backgroundColor: theme.bg }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[s.flex, { backgroundColor: 'transparent' }]}>
         <Animated.View style={{ flex: 1, opacity: fade }}>
           <StatusBar barStyle={theme.statusBar} />
           <SafeHeader>
-            <TouchableOpacity onPress={() => setLobbyPhase('choose')} style={[s.backBtn, { backgroundColor: theme.bgCard, borderColor: ACCENT_B }]}>
-              <Text style={{ color: ACCENT, fontSize: 18 }}>→</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={() => setLobbyPhase('choose')} label='→' variant='ghost' size='small' style={s.backBtn} />
             <Text style={[s.headerTitle, { color: ACCENT }]}>انضم بكود</Text>
             <View style={{ width: 40 }} />
           </SafeHeader>
@@ -1393,13 +1323,7 @@ function OnlineLobbyPhase({ theme, currentUser, onBack }) {
             {loading ? (
               <ActivityIndicator size="large" color={ACCENT} style={{ marginTop: 16 }} />
             ) : (
-              <TouchableOpacity
-                style={[s.bigBtn, { backgroundColor: ACCENT, marginTop: 16, width: '80%' }]}
-                onPress={joinRoom}
-                activeOpacity={0.85}
-              >
-                <Text style={s.bigBtnText}>🔑 انضم</Text>
-              </TouchableOpacity>
+              <ThemedButton onPress={joinRoom} label='🔑 انضم' variant='primary' size='large' style={{ marginTop: 16, width: '80%' }} />
             )}
           </View>
         </Animated.View>
@@ -1413,14 +1337,10 @@ function OnlineLobbyPhase({ theme, currentUser, onBack }) {
     const catId = roomData?.catId || CATEGORIES[0].id;
 
     return (
-      <Animated.View style={[s.flex, { backgroundColor: theme.bg, opacity: fade }]}>
+      <Animated.View style={[s.flex, { backgroundColor: 'transparent', opacity: fade }]}>
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.gameHeader}>
-          <TouchableOpacity
-            onPress={() => { if (unsubRef.current) unsubRef.current(); onBack(); }}
-            style={[s.quitBtn, { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)' }]}>
-            <Text style={{ color: '#ef4444', fontSize: 20, fontWeight: '700' }}>✕</Text>
-          </TouchableOpacity>
+          <ExitButton onPress={() => { if (unsubRef.current) unsubRef.current(); onBack(); }} size={36} />
           <View style={[s.roundPill, { backgroundColor: theme.bgCard }]}>
             <Text style={{ color: ACCENT, fontWeight: '800' }}>غرفة الانتظار</Text>
           </View>
@@ -1456,33 +1376,28 @@ function OnlineLobbyPhase({ theme, currentUser, onBack }) {
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   {CATEGORIES.map(cat => (
-                    <TouchableOpacity
+                    <ThemedCard
                       key={cat.id}
-                      style={[s.catChip, { backgroundColor: theme.bgCard, borderColor: theme.border },
-                        catId === cat.id && { backgroundColor: ACCENT_S, borderColor: ACCENT }]}
                       onPress={() => updateDoc(doc(db, 'whoLyingRooms', roomCode), { catId: cat.id })}
-                      activeOpacity={0.8}
+                      style={s.catChip}
+                      variant={catId === cat.id ? 'accent' : 'default'}
                     >
                       <Text style={[s.catChipText, { color: catId === cat.id ? ACCENT : theme.textMuted }]}>
                         {cat.label}
                       </Text>
-                    </TouchableOpacity>
+                    </ThemedCard>
                   ))}
                 </View>
               </ScrollView>
 
-              <TouchableOpacity
-                style={[s.bigBtn, { backgroundColor: playerList.length >= 3 ? ACCENT : theme.bgCard,
-                  borderWidth: playerList.length < 3 ? 1 : 0, borderColor: theme.border,
-                  marginTop: 24, width: '80%', alignSelf: 'center' }]}
+              <ThemedButton
                 onPress={startGame}
                 disabled={playerList.length < 3}
-                activeOpacity={0.85}
-              >
-                <Text style={[s.bigBtnText, { color: playerList.length >= 3 ? '#fff' : theme.textMuted }]}>
-                  {playerList.length < 3 ? `انتظر 3 لاعبين (${playerList.length})` : 'ابدأ اللعبة ←'}
-                </Text>
-              </TouchableOpacity>
+                label={playerList.length < 3 ? `انتظر 3 لاعبين (${playerList.length})` : 'ابدأ اللعبة ←'}
+                variant={playerList.length >= 3 ? 'primary' : 'secondary'}
+                size='large'
+                style={{ marginTop: 24, width: '80%', alignSelf: 'center' }}
+              />
             </>
           )}
 
@@ -1657,7 +1572,7 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
     const playerNames = Object.values(players).map(p => p.name);
 
     return (
-      <View style={[s.flex, { backgroundColor: theme.bg }]}>
+      <View style={[s.flex, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.gameHeader}>
           <ExitButton onPress={onBack} />
@@ -1670,7 +1585,7 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
             gameType="who_lying"
             gameRoomId={roomCode}
             getPublicData={() => ({ phase, round, catId: roomData.catId })}
-            themeName={theme.name}
+            themeName={themeId || 'dark'}
           />
         </View>
 
@@ -1682,17 +1597,16 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
 
           {/* كلمة اللاعب */}
           {!wordSeen ? (
-            <TouchableOpacity
-              style={[s.revealCard, { backgroundColor: theme.bgCard, borderColor: ACCENT_B, margin: 16 }]}
+            <ThemedCard
               onPress={() => setWordSeen(true)}
-              activeOpacity={0.85}
+              style={[s.revealCard, { margin: 16 }]}
             >
               <Text style={[s.revealPlayerName, { color: ACCENT }]}>كلمتك</Text>
               <Text style={[s.revealInstruction, { color: theme.textMuted }]}>
                 اضغط لترى كلمتك وحدك
               </Text>
               <Text style={{ fontSize: 40, marginTop: 8 }}>🫣</Text>
-            </TouchableOpacity>
+            </ThemedCard>
           ) : (
             <View style={[s.revealCard, { backgroundColor: amLiar ? '#ef444418' : ACCENT_S,
               borderColor: amLiar ? '#ef444440' : ACCENT_B, margin: 16 }]}>
@@ -1721,13 +1635,12 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
 
           {/* المضيف يبدأ التصويت */}
           {isHost && (
-            <TouchableOpacity
-              style={[s.bigBtn, { backgroundColor: ACCENT, width: '80%', alignSelf: 'center', marginBottom: 24 }]}
+            <ThemedButton
               onPress={() => updateDoc(doc(db, 'whoLyingRooms', roomCode), { phase: 'voting', votes: {} })}
-              activeOpacity={0.85}
-            >
-              <Text style={s.bigBtnText}>🗳️ ابدأ التصويت</Text>
-            </TouchableOpacity>
+              label='🗳️ ابدأ التصويت'
+              variant='primary' size='large'
+              style={{ width: '80%', alignSelf: 'center', marginBottom: 24 }}
+            />
           )}
         </ScrollView>
       </View>
@@ -1742,7 +1655,7 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
     const totalPlayers = Object.keys(players).length;
 
     return (
-      <View style={[s.flex, { backgroundColor: theme.bg }]}>
+      <View style={[s.flex, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.gameHeader}>
           <View style={[s.quitBtn, { opacity: 0 }]} />
@@ -1778,30 +1691,26 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
               <Text style={[s.voteQuestion, { color: theme.textPrimary }]}>من تظن أنه الكاذب؟</Text>
               <View style={s.voteChoices}>
                 {playerEntries.map(([uid, p]) => (
-                  <TouchableOpacity
+                  <ThemedCard
                     key={uid}
-                    style={[s.voteChoice, { backgroundColor: theme.bgCard, borderColor: theme.border },
-                      myVote === uid && { backgroundColor: ACCENT_S, borderColor: ACCENT }]}
                     onPress={() => setMyVote(uid)}
-                    activeOpacity={0.8}
+                    style={s.voteChoice}
+                    variant={myVote === uid ? 'accent' : 'default'}
                   >
                     <Text style={[s.voteChoiceName, { color: myVote === uid ? ACCENT : theme.textPrimary }]}>
                       {p.name}
                     </Text>
                     {myVote === uid && <Text style={{ fontSize: 18 }}>🎯</Text>}
-                  </TouchableOpacity>
+                  </ThemedCard>
                 ))}
               </View>
-              <TouchableOpacity
-                style={[s.bigBtn, { backgroundColor: myVote ? ACCENT : theme.bgCard,
-                  borderWidth: myVote ? 0 : 1, borderColor: theme.border, width: '80%' }]}
+              <ThemedButton
                 onPress={() => submitVote(myVote)}
-                activeOpacity={0.85}
-              >
-                <Text style={[s.bigBtnText, { color: myVote ? '#fff' : theme.textMuted }]}>
-                  {myVote ? '✓ تأكيد التصويت' : 'تخطّ'}
-                </Text>
-              </TouchableOpacity>
+                label={myVote ? '✓ تأكيد التصويت' : 'تخطّ'}
+                variant={myVote ? 'primary' : 'ghost'}
+                size='large'
+                style={{ width: '80%' }}
+              />
             </>
           )}
         </View>
@@ -1814,7 +1723,7 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
     const opts = roomData.guessOptions || [wordPair.common];
 
     return (
-      <View style={[s.flex, { backgroundColor: theme.bg }]}>
+      <View style={[s.flex, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.voteContent}>
           <Text style={s.discussEmoji}>🤥</Text>
@@ -1826,17 +1735,16 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
               </Text>
               <View style={s.voteChoices}>
                 {opts.map(opt => (
-                  <TouchableOpacity
+                  <ThemedCard
                     key={opt}
-                    style={[s.voteChoice, { backgroundColor: theme.bgCard, borderColor: theme.border },
-                      liarGuess === opt && { backgroundColor: ACCENT_S, borderColor: ACCENT }]}
                     onPress={() => !liarGuess && submitLiarGuess(opt)}
-                    activeOpacity={0.8}
+                    style={s.voteChoice}
+                    variant={liarGuess === opt ? 'accent' : 'default'}
                   >
                     <Text style={[s.voteChoiceName, { color: liarGuess === opt ? ACCENT : theme.textPrimary }]}>
                       {opt}
                     </Text>
-                  </TouchableOpacity>
+                  </ThemedCard>
                 ))}
               </View>
             </>
@@ -1861,7 +1769,7 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
     const sortedPlayers = Object.entries(players).sort(([,a],[,b]) => (b.score||0) - (a.score||0));
 
     return (
-      <View style={[s.flex, { backgroundColor: theme.bg }]}>
+      <View style={[s.flex, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} />
         <ScrollView contentContainerStyle={s.resultContent}>
           <View style={[s.resultHeader, { backgroundColor: liarCaught ? '#ef444418' : '#10b98118',
@@ -1897,15 +1805,12 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
           ))}
 
           {isHost && (
-            <TouchableOpacity
-              style={[s.bigBtn, { backgroundColor: ACCENT, marginTop: 20, width: '80%', alignSelf: 'center' }]}
+            <ThemedButton
               onPress={nextOnlineRound}
-              activeOpacity={0.85}
-            >
-              <Text style={s.bigBtnText}>
-                {round >= TOTAL_ROUNDS ? '🏆 النتيجة النهائية' : `جولة ${round + 1} →`}
-              </Text>
-            </TouchableOpacity>
+              label={round >= TOTAL_ROUNDS ? '🏆 النتيجة النهائية' : `جولة ${round + 1} →`}
+              variant='primary' size='large'
+              style={{ marginTop: 20, width: '80%', alignSelf: 'center' }}
+            />
           )}
           {!isHost && (
             <View style={[s.waitingNote, { backgroundColor: theme.bgCard, borderColor: ACCENT_B }]}>
@@ -1924,7 +1829,7 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
     const winnerName = sortedPlayers[0]?.[1]?.name || '?';
 
     return (
-      <View style={[s.flex, { backgroundColor: theme.bg }]}>
+      <View style={[s.flex, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} />
         <ScrollView contentContainerStyle={s.resultContent}>
           <Text style={s.finalEmoji}>🏆</Text>
@@ -1945,13 +1850,12 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
             </View>
           ))}
 
-          <TouchableOpacity
-            style={[s.bigBtn, { backgroundColor: ACCENT, marginTop: 24, width: '80%', alignSelf: 'center' }]}
+          <ThemedButton
             onPress={onBack}
-            activeOpacity={0.85}
-          >
-            <Text style={s.bigBtnText}>🏠 العودة</Text>
-          </TouchableOpacity>
+            label='🏠 العودة'
+            variant='primary' size='large'
+            style={{ marginTop: 24, width: '80%', alignSelf: 'center' }}
+          />
         </ScrollView>
       </View>
     );

@@ -25,6 +25,7 @@ import AddQuestionScreen from './AddQuestionScreen';
 import ImportScreen from './ImportScreen';
 import { useTheme } from './ThemeContext';
 import { useT, useRTLStyles } from './I18n';
+import { ThemedButton, ThemedCard } from './ThemedComponents';
 import {
   grantPro, revokePro, getAllProUsers, findUserByEmailOrUsername,
 } from './ProService';
@@ -202,7 +203,7 @@ export default function AdminScreen({ onBack }) {
   // ── شاشة تسجيل الدخول ──
   if (!authenticated) {
     return (
-      <View style={[styles.fullScreen, { backgroundColor: theme.bg }]}>
+      <View style={[styles.fullScreen, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <View style={styles.loginBox}>
           <Text style={styles.lockIcon}>🔐</Text>
@@ -214,12 +215,8 @@ export default function AdminScreen({ onBack }) {
             value={password} onChangeText={setPassword} secureTextEntry
           />
           {error ? <Text style={[styles.error, { color: theme.error }]}>{error}</Text> : null}
-          <TouchableOpacity style={[styles.loginBtn, { backgroundColor: theme.accent }]} onPress={handleLogin}>
-            <Text style={[styles.loginBtnText, { color: theme.textOnAccent }]}>{t('common.start')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.backBtn} onPress={onBack}>
-            <Text style={[styles.backText, { color: theme.accent }]}>{t('common.back')}</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={handleLogin} label={t('common.start')} variant='primary' size='large' style={styles.loginBtn} />
+          <ThemedButton onPress={onBack} label={t('common.back')} variant='ghost' size='small' style={styles.backBtn} />
         </View>
       </View>
     );
@@ -241,17 +238,13 @@ export default function AdminScreen({ onBack }) {
   );
 
   return (
-    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.bg }]}>
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.back')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label={t('common.back')} variant='ghost' size='small' style={styles.backBtn} />
         <Text style={[styles.title, { color: theme.accent }]}>لوحة الإدارة</Text>
-        <TouchableOpacity onPress={() => setAuthenticated(false)} style={styles.logoutBtn}>
-          <Text style={[styles.logoutText, { color: theme.error }]}>{t('common.exit')} 🔒</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={() => setAuthenticated(false)} label={`${t('common.exit')} 🔒`} variant='danger' size='small' style={styles.logoutBtn} />
       </View>
 
       {/* إحصائيات */}
@@ -272,18 +265,8 @@ export default function AdminScreen({ onBack }) {
 
       {/* زران الاستيراد */}
       <View style={styles.importRow}>
-        <TouchableOpacity
-          style={[styles.importBtn, { backgroundColor: theme.purple + '22', borderColor: theme.purple + '55' }]}
-          onPress={() => openImport('ar')}
-        >
-          <Text style={[styles.importBtnText, { color: theme.textOnAccent }]}>🇸🇦 رفع عربي</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.importBtn, { backgroundColor: theme.success + '22', borderColor: theme.success + '55' }]}
-          onPress={() => openImport('en')}
-        >
-          <Text style={[styles.importBtnText, { color: theme.textOnAccent }]}>🌍 رفع عالمي</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={() => openImport('ar')} label='🇸🇦 رفع عربي' variant='secondary' size='large' style={{ flex: 1 }} />
+        <ThemedButton onPress={() => openImport('en')} label='🌍 رفع عالمي' variant='success' size='large' style={{ flex: 1 }} />
       </View>
 
       {/* إضافة فئة جديدة */}
@@ -291,18 +274,8 @@ export default function AdminScreen({ onBack }) {
         <Text style={[styles.sectionTitle, { color: theme.accent }]}>➕ إضافة فئة جديدة</Text>
         {/* فلتر اللغة للفئة الجديدة */}
         <View style={styles.langToggle}>
-          <TouchableOpacity
-            style={[styles.langBtn, filterLang !== 'en' && { backgroundColor: theme.accent }]}
-            onPress={() => setFilterLang('ar')}
-          >
-            <Text style={[styles.langBtnText, { color: filterLang !== 'en' ? theme.textOnAccent : theme.textMuted }]}>🇸🇦 عربي</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.langBtn, filterLang === 'en' && { backgroundColor: theme.success }]}
-            onPress={() => setFilterLang('en')}
-          >
-            <Text style={[styles.langBtnText, { color: filterLang === 'en' ? '#fff' : theme.textMuted }]}>🌍 عالمي</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={() => setFilterLang('ar')} label='🇸🇦 عربي' variant={filterLang !== 'en' ? 'primary' : 'ghost'} size='small' style={styles.langBtn} />
+          <ThemedButton onPress={() => setFilterLang('en')} label='🌍 عالمي' variant={filterLang === 'en' ? 'success' : 'ghost'} size='small' style={styles.langBtn} />
         </View>
         <View style={styles.addRow}>
           <TextInput
@@ -315,9 +288,7 @@ export default function AdminScreen({ onBack }) {
             placeholder="🎯" placeholderTextColor={theme.textMuted}
             value={newCatEmoji} onChangeText={setNewCatEmoji} textAlign="center"
           />
-          <TouchableOpacity style={[styles.addBtn, { backgroundColor: theme.accent }]} onPress={handleAddCategory}>
-            <Text style={[styles.addBtnText, { color: theme.textOnAccent }]}>إضافة</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={handleAddCategory} label='إضافة' variant='primary' size='small' style={styles.addBtn} />
         </View>
       </View>
 
@@ -327,15 +298,14 @@ export default function AdminScreen({ onBack }) {
           <Text style={[styles.sectionTitle, { color: theme.accent }]}>📚 الفئات الحالية</Text>
           <View style={styles.filterRow}>
             {['all', 'ar', 'en'].map(l => (
-              <TouchableOpacity
+              <ThemedButton
                 key={l}
-                style={[styles.filterBtn, filterLang === l && { backgroundColor: theme.accent }]}
                 onPress={() => setFilterLang(l)}
-              >
-                <Text style={[styles.filterBtnText, { color: filterLang === l ? theme.textOnAccent : theme.textMuted }]}>
-                  {l === 'all' ? 'الكل' : l === 'ar' ? '🇸🇦' : '🌍'}
-                </Text>
-              </TouchableOpacity>
+                label={l === 'all' ? 'الكل' : l === 'ar' ? '🇸🇦' : '🌍'}
+                variant={filterLang === l ? 'primary' : 'ghost'}
+                size='small'
+                style={styles.filterBtn}
+              />
             ))}
           </View>
         </View>
@@ -347,15 +317,15 @@ export default function AdminScreen({ onBack }) {
         ) : (
           displayedCats.map((cat) => (
             <View key={cat.id} style={[styles.catRow, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
-              <TouchableOpacity
-                style={[styles.catImageBox, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
+              <ThemedCard
                 onPress={() => handleUploadImage(cat.id)}
+                style={styles.catImageBox}
               >
                 {cat.imageUrl
                   ? <ExpoImage source={{ uri: cat.imageUrl }} style={styles.catImage} cachePolicy="disk" contentFit="cover" />
                   : <Text style={styles.catEmoji}>{cat.emoji}</Text>}
                 <Text style={styles.uploadHint}>📷</Text>
-              </TouchableOpacity>
+              </ThemedCard>
               <View style={styles.catInfo}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={[styles.catName, { color: theme.textPrimary }]}>{cat.name}</Text>
@@ -365,12 +335,8 @@ export default function AdminScreen({ onBack }) {
                 {cat.isSpecial && <Text style={[styles.specialTag, { color: theme.accent }]}>{t('solo.special')}</Text>}
               </View>
               <View style={styles.catActions}>
-                <TouchableOpacity style={[styles.editBtn, { backgroundColor: theme.purple + '33' }]} onPress={() => setSelectedCategory(cat)}>
-                  <Text style={[styles.editBtnText, { color: theme.textOnAccent }]}>✏️ أسئلة</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.deleteBtn, { backgroundColor: theme.error + '22' }]} onPress={() => handleDeleteCategory(cat.id, cat.name)}>
-                  <Text style={styles.deleteBtnText}>🗑️</Text>
-                </TouchableOpacity>
+                <ThemedButton onPress={() => setSelectedCategory(cat)} label='✏️ أسئلة' variant='secondary' size='small' style={styles.editBtn} />
+                <ThemedButton onPress={() => handleDeleteCategory(cat.id, cat.name)} label='🗑️' variant='danger' size='small' style={styles.deleteBtn} />
               </View>
             </View>
           ))
@@ -391,15 +357,7 @@ export default function AdminScreen({ onBack }) {
             autoCapitalize="none"
             keyboardType="email-address"
           />
-          <TouchableOpacity
-            style={[styles.proSearchBtn, { backgroundColor: theme.accent }]}
-            onPress={handleProSearch}
-            disabled={proSearching}
-          >
-            <Text style={{ color: theme.bg, fontWeight: '800', fontSize: 14 }}>
-              {proSearching ? '...' : '🔍'}
-            </Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={handleProSearch} disabled={proSearching} label={proSearching ? '...' : '🔍'} variant='primary' size='small' style={styles.proSearchBtn} />
         </View>
 
         {/* نتيجة البحث */}
@@ -415,18 +373,13 @@ export default function AdminScreen({ onBack }) {
             </Text>
             <Text style={[styles.proFoundEmail, { color: theme.textMuted }]}>{proFound.email}</Text>
             <TextInput
-              style={[styles.input, { color: theme.textPrimary, borderColor: theme.borderCard, backgroundColor: theme.bg, marginTop: 8 }]}
+              style={[styles.input, { color: theme.textPrimary, borderColor: theme.borderCard, backgroundColor: 'transparent', marginTop: 8 }]}
               placeholder="ملاحظة (اختياري)"
               placeholderTextColor={theme.textMuted}
               value={proNote}
               onChangeText={setProNote}
             />
-            <TouchableOpacity
-              style={[styles.proGrantBtn, { backgroundColor: '#16a34a' }]}
-              onPress={handleGrantPro}
-            >
-              <Text style={styles.proGrantText}>⭐ تفعيل Pro</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={handleGrantPro} label='⭐ تفعيل Pro' variant='success' size='medium' style={styles.proGrantBtn} />
           </View>
         )}
 
@@ -452,12 +405,7 @@ export default function AdminScreen({ onBack }) {
                       </Text>
                     )}
                   </View>
-                  <TouchableOpacity
-                    style={[styles.deleteBtn, { backgroundColor: '#ef444422' }]}
-                    onPress={() => handleRevokePro(p.id, p.name)}
-                  >
-                    <Text style={{ color: '#ef4444', fontWeight: '800' }}>إلغاء</Text>
-                  </TouchableOpacity>
+                  <ThemedButton onPress={() => handleRevokePro(p.id, p.name)} label='إلغاء' variant='danger' size='small' style={styles.deleteBtn} />
                 </View>
               ))
         }
@@ -485,7 +433,7 @@ function AddQuestionScreenWrapper({ category, onBack, onSave }) {
   }, []);
 
   if (loading) return (
-    <View style={[styles.fullScreen, { backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+    <View style={[styles.fullScreen, { backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }]}>
       <Text style={[styles.loadingText, { color: theme.accent, fontSize: 18 }]}>{t('common.loading')}</Text>
     </View>
   );

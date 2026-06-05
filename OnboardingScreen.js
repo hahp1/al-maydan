@@ -62,7 +62,7 @@ export default function OnboardingScreen({ onSelect }) {
   }, [onSelect, selecting]);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       {/* أيقونة اللغة */}

@@ -164,15 +164,9 @@ const ClassicMode = memo(({
             <View style={styles.whoAnswered}>
               <Text style={[styles.whoLabel, { color: theme.textPrimary }]}>{t('question.whoAnswered')}</Text>
               <View style={styles.whoButtons}>
-                <TouchableOpacity style={[styles.btnTeam1, { backgroundColor: '#3b82f622', borderColor: '#3b82f655' }]} onPress={handleTeam1}>
-                  <Text style={[styles.btnTeamText, { color: theme.textPrimary }]}>✅ {team1}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.btnTeam2, { backgroundColor: theme.success + '22', borderColor: theme.success + '55' }]} onPress={handleTeam2}>
-                  <Text style={[styles.btnTeamText, { color: theme.textPrimary }]}>✅ {team2}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.btnNone, { backgroundColor: theme.error + '18', borderColor: theme.error + '44' }]} onPress={handleNone}>
-                  <Text style={[styles.btnNoneText, { color: theme.error }]}>❌ {t('question.nobody')}</Text>
-                </TouchableOpacity>
+                <ThemedButton onPress={handleTeam1} label={`✅ ${team1}`} variant='secondary' size='medium' style={styles.btnTeam1} />
+                <ThemedButton onPress={handleTeam2} label={`✅ ${team2}`} variant='success' size='medium' style={styles.btnTeam2} />
+                <ThemedButton onPress={handleNone} label={`❌ ${t('question.nobody')}`} variant='danger' size='medium' style={styles.btnNone} />
               </View>
             </View>
           )}
@@ -281,32 +275,26 @@ const MCQMode = memo(({
 
       <View style={styles.choicesContainer}>
         {choices.map((choice, i) => (
-          <TouchableOpacity
+          <ThemedCard
             key={i}
-            style={getChoiceStyle(choice)}
             onPress={() => {
               if (isAnswered || eliminated.has(choice)) return;
               setSelected(choice);
               onAnswer(choice === displayA ? currentTeam : null, choice === displayA ? points : 0);
             }}
             disabled={isAnswered || eliminated.has(choice)}
-            activeOpacity={0.85}
+            style={getChoiceStyle(choice)}
           >
             <Text style={[styles.choiceLetter, { color: theme.accent }]}>{ARABIC_LETTERS[i]}</Text>
             <Text style={[styles.choiceText, { color: getTextColor(choice) }]}>{choice}</Text>
             {isAnswered && choice === displayA && <Text>✅</Text>}
             {isAnswered && choice === selected && choice !== displayA && <Text>❌</Text>}
-          </TouchableOpacity>
+          </ThemedCard>
         ))}
       </View>
 
       {isAnswered && (
-        <TouchableOpacity
-          style={[styles.continueBtn, { backgroundColor: theme.accent }]}
-          onPress={() => onAnswer(null, 0)}
-        >
-          <Text style={[styles.continueBtnText, { color: theme.textOnAccent }]}>{t('question.returnBoard')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={() => onAnswer(null, 0)} label={t('question.returnBoard')} variant='primary' size='large' style={styles.continueBtn} />
       )}
     </>
   );
@@ -337,13 +325,11 @@ export default function QuestionScreen({
   }, []);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={HIT_SLOP}>
-          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
         <View style={styles.headerCenter}>
           <Text style={[styles.categoryText, { color: theme.textSecondary }]}>{category}</Text>
           <View style={[styles.pointsBadge, { backgroundColor: theme.accent }]}>

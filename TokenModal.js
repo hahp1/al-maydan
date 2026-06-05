@@ -107,15 +107,14 @@ export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
                   <Text style={[styles.adReward, { color: theme.textPrimary }]}>{t('tokens.reward', { n: AD_REWARD })}</Text>
                   <Text style={[styles.adCounter, { color: theme.textSecondary }]}>{t('tokens.adsLeft', { n: adsLeft, t: MAX_ADS })}</Text>
                 </View>
-                <TouchableOpacity
-                  style={[styles.adBtn, { backgroundColor: theme.accent }, (adsLeft <= 0 || watchingAd) && { backgroundColor: theme.bgElevated }]}
+                <ThemedButton
                   onPress={handleWatchAd}
                   disabled={adsLeft <= 0 || watchingAd}
-                >
-                  <Text style={[styles.adBtnText, { color: theme.textOnAccent }, (adsLeft <= 0 || watchingAd) && { color: theme.textMuted }]}>
-                    {watchingAd ? t('tokens.watching') : adsLeft <= 0 ? t('tokens.tomorrow') : t('tokens.watch')}
-                  </Text>
-                </TouchableOpacity>
+                  label={watchingAd ? t('tokens.watching') : adsLeft <= 0 ? t('tokens.tomorrow') : t('tokens.watch')}
+                  variant={adsLeft <= 0 || watchingAd ? 'secondary' : 'primary'}
+                  size='medium'
+                  style={styles.adBtn}
+                />
               </View>
             </View>
 

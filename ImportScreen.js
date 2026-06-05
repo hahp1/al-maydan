@@ -141,7 +141,7 @@ export default function ImportScreen({ onBack, defaultLang = 'ar' }) {
         <Text style={[styles.infoText, { color: theme.textSecondary }]}>• emoji: رمز الفئة</Text>
         <Text style={[styles.infoText, { color: theme.textSecondary }]}>• questions: مصفوفة الأسئلة</Text>
         <Text style={[styles.infoText, { color: theme.textSecondary }]}>• كل سؤال: level + question + correct + wrong[3]</Text>
-      </View>
+      </ThemedCard>
 
       <ThemedCard style={styles.infoBox}>
         <Text style={[styles.infoTitle, { color: theme.accent }]}>📊 تنسيق Excel المطلوب:</Text>

@@ -8,9 +8,10 @@
  */
 
 import { memo } from 'react';
-import { TouchableOpacity, View, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 import { useTheme } from './ThemeContext';
+import { ThemedCard } from './ThemedComponents';
 
 const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 
@@ -20,19 +21,11 @@ function ExitButton({ onPress, size = 36, style }) {
   const pad = size * 0.27;
 
   return (
-    <TouchableOpacity
+    <ThemedCard
       onPress={onPress}
-      hitSlop={HIT_SLOP}
-      activeOpacity={0.7}
       style={[
         styles.btn,
-        {
-          width:           size,
-          height:          size,
-          borderRadius:    size * 0.28,
-          backgroundColor: theme.bgCard,
-          borderColor:     theme.borderCard,
-        },
+        { width: size, height: size, borderRadius: size * 0.28 },
         style,
       ]}
     >
@@ -52,7 +45,7 @@ function ExitButton({ onPress, size = 36, style }) {
           strokeLinecap="round"
         />
       </Svg>
-    </TouchableOpacity>
+    </ThemedCard>
   );
 }
 

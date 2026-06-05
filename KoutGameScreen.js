@@ -10,6 +10,7 @@ import { useOnlineGame } from './useOnlineGame';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
+import OnlineRoomSetup, { OnlineWaitingLobby } from './OnlineRoomSetup';
 import CrystalTable from './CrystalTable';
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -583,8 +584,18 @@ function GameOverModal({ visible, teamA, teamB, onNewGame, onExit }) {
 export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
-  const { roomId, isPlayer1, roomData, loading, error, updateRoom, endGame, leaveRoom } =
-    useOnlineGame('kout', currentUser, onGameReady);
+  // ── اختيار الوضع ──
+  const [selectedMode,  setSelectedMode]  = useState(null);
+  const [joinCodeInput, setJoinCodeInput] = useState(null);
+  const isRTL = lang === 'ar';
+
+  const handleModeSelect = (mode, code = null) => {
+    setJoinCodeInput(code);
+    setSelectedMode(mode);
+  };
+
+  const { roomId, isPlayer1, roomData, loading, error, friendCode, updateRoom, endGame, leaveRoom } =
+    useOnlineGame('kout', currentUser, onGameReady, selectedMode, joinCodeInput);
 
   /* ── Local game state (mirrors Firestore) ── */
   const [phase, setPhase] = useState('waiting'); // waiting|lobby|bidding|hokmChoice|playing|roundEnd|gameOver
@@ -872,6 +883,34 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
   const trickRotations = { 0: '0deg', 1: '90deg', 2: '180deg', 3: '-90deg' };
 
   /* ── error / loading ── */
+  // ── شاشة اختيار الوضع ──
+  if (!selectedMode) {
+    return (
+      <OnlineRoomSetup
+        gameEmoji="🂡"
+        gameTitleAr="كوت"
+        gameTitleEn="Kout"
+        descAr="لعبة الكوت — 4 لاعبين فريقان"
+        descEn="Kout card game — 4 players 2 teams"
+        onBack={onBack}
+        onSelect={handleModeSelect}
+      />
+    );
+  }
+
+  if (selectedMode === 'create' && loading) {
+    return (
+      <OnlineWaitingLobby
+        friendCode={friendCode}
+        isFriend={true}
+        isRTL={isRTL}
+        theme={theme}
+        gameEmoji="🂡"
+        onCancel={onBack}
+      />
+    );
+  }
+
   if (error) {
     return (
       <View style={[styles.container, { backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }]}>

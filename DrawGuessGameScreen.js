@@ -32,8 +32,8 @@ import {
   View, Text, TouchableOpacity, StyleSheet, StatusBar,
   PanResponder, Alert, Animated, TextInput, ScrollView,
   Platform, Dimensions, Modal, ActivityIndicator,
-  Clipboard,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { db } from './firebaseConfig';
 import {
   doc, setDoc, updateDoc, onSnapshot,
@@ -210,7 +210,7 @@ function WaitingLobby({ theme, isRTL, friendCode, isFriend, onCancel }) {
     ])).start();
   }, []);
   return (
-    <View style={[s.lobbyWrap, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[s.lobbyWrap, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} />
       <ExitButton onPress={onCancel} />
       <Text style={s.lobbyBigEmoji}>🎨</Text>
@@ -222,13 +222,12 @@ function WaitingLobby({ theme, isRTL, friendCode, isFriend, onCancel }) {
           <Text style={[s.lobbySub, { color: theme.textSecondary }]}>
             {isRTL ? 'شارك الكود مع صديقك' : 'Share this code with your friend'}
           </Text>
-          <TouchableOpacity
-            style={[s.codeBox, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
-            onPress={() => { Clipboard.setString(friendCode); Alert.alert(isRTL ? 'تم النسخ ✓' : 'Copied ✓', friendCode); }}
-            activeOpacity={0.8}>
+          <ThemedCard
+            onPress={() => { Clipboard.setStringAsync(friendCode); Alert.alert(isRTL ? 'تم النسخ ✓' : 'Copied ✓', friendCode); }}
+            style={s.codeBox}>
             <Text style={[s.codeText, { color: theme.accent }]}>{friendCode}</Text>
             <Text style={[s.codeCopy, { color: theme.textSecondary }]}>{isRTL ? '📋 اضغط للنسخ' : '📋 Tap to copy'}</Text>
-          </TouchableOpacity>
+          </ThemedCard>
         </>
       ) : (
         <Text style={[s.lobbySub, { color: theme.textSecondary }]}>
@@ -255,7 +254,7 @@ function GameOver({ players, scores, myUid, isRTL, theme, onBack }) {
   const sc = useRef(new Animated.Value(0.8)).current;
   useEffect(() => { Animated.spring(sc, { toValue: 1, useNativeDriver: true }).start(); }, []);
   return (
-    <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+    <View style={[s.flex1, { backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }]}>
       <StatusBar barStyle={theme.statusBar} />
       <Animated.View style={[s.goCard, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder, transform: [{ scale: sc }] }]}>
         <Text style={s.goEmoji}>{!winnerUid ? '🤝' : iWon ? '🏆' : '😔'}</Text>
@@ -321,6 +320,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
   const [roomData, setRoomData] = useState(null);
   const unsubRef  = useRef(null);
   const botRef    = useRef(null);
+  const gameEndCalledRef = useRef(false);
 
   // ── Drawing ──
   const [strokes,       setStrokes]       = useState([]);
@@ -729,29 +729,28 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           {BRUSH_SIZES.map(sz => (
-            <TouchableOpacity key={sz}
-              style={[s.brushBtn, { borderColor: brushSize === sz && !isEraser ? theme.accent : theme.border }]}
-              onPress={() => { setBrushSize(sz); setIsEraser(false); }}>
+            <ThemedCard key={sz} onPress={() => { setBrushSize(sz); setIsEraser(false); }} style={s.brushBtn} variant={brushSize === sz && !isEraser ? 'accent' : 'default'}>
               <View style={{ width: sz, height: sz, borderRadius: sz, backgroundColor: theme.textPrimary }} />
-            </TouchableOpacity>
+            </ThemedCard>
           ))}
         </View>
         <View style={{ flexDirection: 'row', gap: 6 }}>
-          <TouchableOpacity style={[s.toolBtn, { backgroundColor: isEraser ? theme.accentSoft : theme.bgElevated, borderColor: isEraser ? theme.accent : theme.border }]}
-            onPress={() => setIsEraser(e => !e)}>
+          <ThemedCard onPress={() => setIsEraser(e => !e)} style={s.toolBtn} variant={isEraser ? 'accent' : 'default'}>
             <Text style={s.toolBtnTxt}>⬜</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.toolBtn, { backgroundColor: theme.bgElevated, borderColor: theme.border }]}
-            onPress={() => setStrokes(prev => prev.slice(0, -1))}>
+          </ThemedCard>
+          <ThemedCard onPress={() => setStrokes(prev => prev.slice(0, -1))} style={s.toolBtn}>
             <Text style={s.toolBtnTxt}>↩</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.toolBtn, { backgroundColor: '#ef444415', borderColor: '#ef444440' }]}
+          </ThemedCard>
+          <ThemedCard
             onPress={() => Alert.alert(isRTL ? 'مسح؟' : 'Clear?', '', [
               { text: isRTL ? 'إلغاء' : 'Cancel', style: 'cancel' },
               { text: isRTL ? 'مسح' : 'Clear', style: 'destructive', onPress: () => setStrokes([]) },
-            ])}>
+            ])}
+            style={s.toolBtn}
+            variant='danger'
+          >
             <Text style={s.toolBtnTxt}>🗑</Text>
-          </TouchableOpacity>
+          </ThemedCard>
         </View>
       </View>
     </>
@@ -764,7 +763,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
   /* ── Mode Select ── */
   if (screen === 'modeSelect') {
     return (
-      <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[s.flex1, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} />
         <ExitButton onPress={onBack} />
         <ScrollView contentContainerStyle={s.modeContent} keyboardShouldPersistTaps="handled">
@@ -829,7 +828,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
   if (screen === 'setup') {
     const canStart = lp1.trim() && lp2.trim();
     return (
-      <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[s.flex1, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} />
         <ExitButton onPress={() => setScreen('modeSelect')} />
         <ScrollView contentContainerStyle={s.modeContent} keyboardShouldPersistTaps="handled">
@@ -865,7 +864,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
   /* ── Joining spinner ── */
   if (screen === 'joining') {
     return (
-      <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+      <View style={[s.flex1, { backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }]}>
         <StatusBar barStyle={theme.statusBar} />
         <ActivityIndicator size="large" color={theme.accent} />
         <Text style={[{ color: theme.textSecondary, marginTop: 16, fontSize: 14 }]}>
@@ -901,12 +900,12 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
       const s1     = sc[ops[0]?.uid] || 0;
       const s2     = sc[ops[1]?.uid] || 0;
       const winUid = s1 > s2 ? ops[0]?.uid : s2 > s1 ? ops[1]?.uid : null;
-      if (onGameEnd) onGameEnd(winUid === myUid);
+      if (onGameEnd && !gameEndCalledRef.current) { gameEndCalledRef.current = true; onGameEnd(winUid === myUid); }
       return <GameOver players={ops} scores={sc} myUid={myUid} isRTL={isRTL} theme={theme} onBack={onBack} />;
     }
     // local — اللاعب 0 هو الإنسان
     const localWon = (localScores[0] || 0) >= (localScores[1] || 0);
-    if (onGameEnd) onGameEnd(localWon);
+    if (onGameEnd && !gameEndCalledRef.current) { gameEndCalledRef.current = true; onGameEnd(localWon); }
     return (
       <GameOver
         players={[{ uid: '0', name: localPlayers[0] }, { uid: '1', name: localPlayers[1] }]}
@@ -931,14 +930,14 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
     if (status === 'wordchoice') {
       if (amIDrawer) {
         return (
-          <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+          <View style={[s.flex1, { backgroundColor: 'transparent' }]}>
             {renderHeader(rl, '', ops2[0]?.name, roomData.scores?.[ops2[0]?.uid] || 0, ops2[1]?.name, roomData.scores?.[ops2[1]?.uid] || 0)}
             <WordChoiceModal visible={true} words={roomData.wordChoices || []} onPick={handleOnlineWordPick} theme={theme} isRTL={isRTL} />
           </View>
         );
       }
       return (
-        <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <View style={[s.flex1, { backgroundColor: 'transparent' }]}>
           <StatusBar barStyle={theme.statusBar} />
           {renderHeader(rl, '', ops2[0]?.name, roomData.scores?.[ops2[0]?.uid] || 0, ops2[1]?.name, roomData.scores?.[ops2[1]?.uid] || 0)}
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
@@ -957,7 +956,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
         ? (isRTL ? '✏️ أنت ترسم' : '✏️ You draw')
         : (isRTL ? '🤔 أنت تخمّن' : '🤔 You guess');
       return (
-        <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <View style={[s.flex1, { backgroundColor: 'transparent' }]}>
           <StatusBar barStyle={theme.statusBar} />
           {renderHeader(rl, roleText, ops2[0]?.name, roomData.scores?.[ops2[0]?.uid] || 0, ops2[1]?.name, roomData.scores?.[ops2[1]?.uid] || 0)}
           <TimerBar timeLeft={onlineTime} total={ROUND_TIME} />
@@ -1005,7 +1004,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
       const wn = ops2.find(p => p.uid === roomData.roundWinnerUid)?.name;
       const isLast = (round + 1) >= TOTAL_ROUNDS;
       return (
-        <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <View style={[s.flex1, { backgroundColor: 'transparent' }]}>
           {renderHeader(rl, '', ops2[0]?.name, roomData.scores?.[ops2[0]?.uid] || 0, ops2[1]?.name, roomData.scores?.[ops2[1]?.uid] || 0)}
           <RoundResult
             result={roomData.roundResult} word={roomData.word}
@@ -1019,7 +1018,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
 
     // fallback
     return (
-      <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+      <View style={[s.flex1, { backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }]}>
         <StatusBar barStyle={theme.statusBar} />
         <ActivityIndicator size="large" color={theme.accent} />
       </View>
@@ -1036,7 +1035,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
     ? (isRTL ? `✏️ ${dn} يرسم` : `✏️ ${dn} draws`) : '';
 
   return (
-    <View style={[s.flex1, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[s.flex1, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} />
       {renderHeader(rl2, roleLocal, localPlayers[0], localScores[0], localPlayers[1], localScores[1])}
 

@@ -16,7 +16,7 @@ const ResultsScreen = memo(function ResultsScreen({ team1, team2, score1, score2
   const handleHome    = useCallback(() => onHome(),    [onHome]);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <Text style={styles.trophy}>🏆</Text>

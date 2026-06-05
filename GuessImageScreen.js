@@ -535,7 +535,6 @@ function PlayScreen({
             size='small'
             style={[styles.blueCardSmall, { opacity: blueUsed ? 0.4 : 1 }]}
           />
-          </TouchableOpacity>
         </View>
 
         {/* نقاطك (يمين) */}

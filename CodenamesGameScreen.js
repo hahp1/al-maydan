@@ -33,6 +33,7 @@ import {
 import { db } from './firebaseConfig';
 import {
   doc, setDoc, updateDoc, onSnapshot, getDoc,
+  collection, query, where, getDocs, limit,
 } from 'firebase/firestore';
 import { useTheme } from './ThemeContext';
 import ExitButton from './ExitButton';
@@ -40,6 +41,7 @@ import { useLanguage } from './I18n';
 import { CodenamesEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
+import OnlineRoomSetup, { OnlineWaitingLobby } from './OnlineRoomSetup';
 
 // ─── صور البطاقات ──────────────────────────────────────────────
 // 4 صور لكل لون: 0-3 أزرق، 4-7 أحمر، 8-11 بيج/محايد
@@ -187,89 +189,110 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
 
   const [roomId,     setRoomId]     = useState(null);
   const [roomData,   setRoomData]   = useState(null);
-  const [loading,    setLoading]    = useState(true);
+  const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState(null);
   const [clueInput,  setClueInput]  = useState('');
   const [clueCount,  setClueCount]  = useState(2);
-  // بطاقة لُمست لكن لم تُؤكَّد بعد (local state)
   const [pendingIdx, setPendingIdx] = useState(null);
-  // بطاقات الصورة المصغَّرة (ضغطة ثانية على المكشوفة)
   const [collapsed,  setCollapsed]  = useState(new Set());
+
+  // ── اختيار الوضع ──
+  const [selectedMode,  setSelectedMode]  = useState(null);
+  const [joinCodeInput, setJoinCodeInput] = useState(null);
+  const [friendCode,    setFriendCode]    = useState(null);
+  const isRTL = lang === 'ar';
 
   const unsubRef = useRef(null);
 
-  useEffect(() => {
-    initRoom();
-    return () => unsubRef.current?.();
-  }, []);
+  const handleModeSelect = (mode, code = null) => {
+    setJoinCodeInput(code);
+    setSelectedMode(mode);
+  };
 
-  // ─── إنشاء / الانضمام ──────────────────────────────────────
-  const initRoom = async () => {
+  useEffect(() => {
+    if (!selectedMode) return;
+    if (selectedMode === 'random') initRoom(null);
+    if (selectedMode === 'create') initRoom('create');
+    if (selectedMode === 'join')   initRoom('join', joinCodeInput);
+    return () => unsubRef.current?.();
+  }, [selectedMode, joinCodeInput]);
+
+  // ─── إنشاء / الانضمام (يدعم عشوائي + صديق) ──────────────────
+  const initRoom = async (mode, joinCode = null) => {
     try {
       setLoading(true);
+      setError(null);
+
+      // وضع الانضمام بكود
+      if (mode === 'join') {
+        const normalCode = (joinCode || '').trim().toUpperCase();
+        if (normalCode.length < 4) { setError('كود غير صحيح'); setLoading(false); return; }
+        const snap = await getDocs(query(collection(db, 'rooms'), where('friendCode','==',normalCode), where('gameType','==','codenames'), where('status','==','lobby')));
+        if (snap.empty) { setError('لم يتم العثور على الغرفة'); setLoading(false); return; }
+        const rData = snap.docs[0].data();
+        const rId   = snap.docs[0].id;
+        const players = rData.players || {};
+        const uids = Object.keys(players);
+        if (uids.length >= 4) { setError('الغرفة ممتلئة'); setLoading(false); return; }
+        await updateDoc(doc(db, 'rooms', rId), {
+          [`players.${myUid}`]: { name: myName, team: uids.length < 2 ? 'red' : 'blue', role: 'op', joinedAt: Date.now() },
+        });
+        setRoomId(rId);
+        listenToRoom(rId);
+        setLoading(false);
+        return;
+      }
+
+      // وضع إنشاء بكود صديق
+      if (mode === 'create') {
+        const code  = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const rId   = `codenames_fr_${code}`;
+        const board = generateBoard(lang);
+        await setDoc(doc(db, 'rooms', rId), {
+          gameType: 'codenames', friendCode: code, mode: 'friend',
+          status: 'lobby',
+          players: { [myUid]: { name: myName, team: 'red', role: 'op', joinedAt: Date.now() } },
+          board, revealed: [], clues: [], currentClue: null,
+          turn: 'red', phase: 'spy', guessesLeft: 0,
+          redLeft: board.filter(c => c.owner === 'red').length,
+          blueLeft: board.filter(c => c.owner === 'blue').length,
+          spyRed: null, spyBlue: null, winner: null,
+          createdAt: Date.now(), lastUpdate: Date.now(),
+        });
+        setFriendCode(code);
+        setRoomId(rId);
+        listenToRoom(rId);
+        setLoading(false);
+        return;
+      }
+
+      // وضع عشوائي — الغرفة المفتوحة
       const roomRef = doc(db, 'rooms', 'codenames_lobby_open');
       const snap    = await getDoc(roomRef);
 
       if (snap.exists()) {
-        const data    = snap.data();
-        const players = data.players || {};
-        const uids    = Object.keys(players);
-
-        if (uids.includes(myUid)) {
-          setRoomId('codenames_lobby_open');
-          listenToRoom('codenames_lobby_open');
-          setLoading(false);
-          return;
-        }
+        const data = snap.data(); const players = data.players || {}; const uids = Object.keys(players);
+        if (uids.includes(myUid)) { setRoomId('codenames_lobby_open'); listenToRoom('codenames_lobby_open'); setLoading(false); return; }
         if (uids.length < 4 && data.status === 'lobby') {
           await updateDoc(roomRef, {
-            [`players.${myUid}`]: {
-              name: myName,
-              team: uids.length < 2 ? 'red' : 'blue',
-              role: 'op',
-              joinedAt: Date.now(),
-            },
+            [`players.${myUid}`]: { name: myName, team: uids.length < 2 ? 'red' : 'blue', role: 'op', joinedAt: Date.now() },
           });
-          setRoomId('codenames_lobby_open');
-          listenToRoom('codenames_lobby_open');
-          setLoading(false);
-          return;
+          setRoomId('codenames_lobby_open'); listenToRoom('codenames_lobby_open'); setLoading(false); return;
         }
       }
-
-      // غرفة جديدة
-      const board    = generateBoard(lang);
-      const redLeft  = board.filter(c => c.owner === 'red').length;
-      const blueLeft = board.filter(c => c.owner === 'blue').length;
-
+      const board = generateBoard(lang);
       await setDoc(roomRef, {
-        gameType: 'codenames',
-        status: 'lobby',
-        players: {
-          [myUid]: { name: myName, team: 'red', role: 'op', joinedAt: Date.now() },
-        },
-        board,
-        revealed: [],
-        clues: [],
-        currentClue: null,
-        turn: 'red',
-        phase: 'spy',
-        guessesLeft: 0,
-        redLeft,
-        blueLeft,
-        spyRed: null,
-        spyBlue: null,
-        winner: null,
-        createdAt: Date.now(),
-        lastUpdate: Date.now(),
+        gameType: 'codenames', mode: 'random', status: 'lobby',
+        players: { [myUid]: { name: myName, team: 'red', role: 'op', joinedAt: Date.now() } },
+        board, revealed: [], clues: [], currentClue: null,
+        turn: 'red', phase: 'spy', guessesLeft: 0,
+        redLeft: board.filter(c => c.owner === 'red').length,
+        blueLeft: board.filter(c => c.owner === 'blue').length,
+        spyRed: null, spyBlue: null, winner: null,
+        createdAt: Date.now(), lastUpdate: Date.now(),
       });
-      setRoomId('codenames_lobby_open');
-      listenToRoom('codenames_lobby_open');
-      setLoading(false);
-    } catch (e) {
-      setError(e.message);
-      setLoading(false);
-    }
+      setRoomId('codenames_lobby_open'); listenToRoom('codenames_lobby_open'); setLoading(false);
+    } catch (e) { setError(e.message); setLoading(false); }
   };
 
   const listenToRoom = (rId) => {
@@ -282,6 +305,34 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
 
   const updateRoom = (updates) =>
     updateDoc(doc(db, 'rooms', roomId), { ...updates, lastUpdate: Date.now() });
+
+  // ── شاشة اختيار الوضع ──
+  if (!selectedMode) {
+    return (
+      <OnlineRoomSetup
+        gameEmoji="🔐"
+        gameTitleAr="كودنيمز"
+        gameTitleEn="Codenames"
+        descAr="فريقان — 4 لاعبين — الجاسوس يعطي الإشارة"
+        descEn="2 teams — 4 players — the spy gives clues"
+        onBack={onBack}
+        onSelect={handleModeSelect}
+      />
+    );
+  }
+
+  if (selectedMode === 'create' && loading) {
+    return (
+      <OnlineWaitingLobby
+        friendCode={friendCode}
+        isFriend={true}
+        isRTL={isRTL}
+        theme={theme}
+        gameEmoji="🔐"
+        onCancel={onBack}
+      />
+    );
+  }
 
   // ─── حراسة ─────────────────────────────────────────────────
   if (!roomId || !roomData) {
@@ -409,7 +460,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
   // ════════════════════════════════════════════════════════════
   if (status === 'lobby') {
     return (
-      <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[s.container, { backgroundColor: 'transparent' }]}>
         <CodenamesEngraving theme={theme} />
         <StatusBar barStyle={theme.statusBar} />
 
@@ -469,12 +520,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
                       <Text style={{ color: tc, fontWeight: 'bold', fontSize: 13 }}>{spyName || '—'}</Text>
                     </View>
                     {canBeSpy && (
-                      <TouchableOpacity
-                        style={[s.spyBtn, { backgroundColor: tc }]}
-                        onPress={() => becomeSpymaster(team)}
-                      >
-                        <Text style={s.spyBtnText}>🕵️ كن الجاسوس</Text>
-                      </TouchableOpacity>
+                      <ThemedButton onPress={() => becomeSpymaster(team)} label='🕵️ كن الجاسوس' variant='primary' size='small' style={s.spyBtn} />
                     )}
                   </View>
                 </View>
@@ -483,17 +529,11 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
           </View>
 
           {!iAmSpymaster && (
-            <TouchableOpacity style={[s.switchBtn, { borderColor: theme.accent }]} onPress={switchTeam}>
-              <Text style={{ color: theme.accent }}>
-                ⇄ انتقل إلى فريق {TEAM_AR[myTeam === 'red' ? 'blue' : 'red']}
-              </Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={switchTeam} label={`⇄ انتقل إلى فريق ${TEAM_AR[myTeam === 'red' ? 'blue' : 'red']}`} variant='secondary' size='medium' style={s.switchBtn} />
           )}
 
           {canStart && (
-            <TouchableOpacity style={[s.startBtn, { backgroundColor: theme.accent }]} onPress={startGame}>
-              <Text style={s.startBtnText}>▶ ابدأ اللعبة</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={startGame} label='▶ ابدأ اللعبة' variant='primary' size='large' style={s.startBtn} />
           )}
         </ScrollView>
       </View>
@@ -507,17 +547,12 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
     const iWon = winner === myTeam;
     if (onGameEnd) onGameEnd(iWon);
     return (
-      <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+      <View style={[s.container, { backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }]}>
         <CodenamesEngraving theme={theme} />
         <StatusBar barStyle={theme.statusBar} />
         <Text style={{ fontSize: 72 }}>{winner === 'red' ? '🔴' : '🔵'}</Text>
         <Text style={[s.winnerText, { color: TEAM_COLOR[winner] }]}>فاز فريق {TEAM_AR[winner]}!</Text>
-        <TouchableOpacity
-          style={[s.startBtn, { backgroundColor: theme.accent, marginTop: 32 }]}
-          onPress={onBack}
-        >
-          <Text style={s.startBtnText}>الخروج</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label='الخروج' variant='primary' size='large' style={[s.startBtn, { marginTop: 32 }]} />
       </View>
     );
   }
@@ -528,7 +563,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
   const pendingWord = pendingIdx !== null ? board[pendingIdx]?.word : null;
 
   return (
-    <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[s.container, { backgroundColor: 'transparent' }]}>
       <CodenamesEngraving theme={theme} />
       <StatusBar barStyle={theme.statusBar} />
 
@@ -607,13 +642,8 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
           <Text style={{ color: theme.textSecondary, fontSize: 12 }}>هل تختار</Text>
           <Text style={[s.confirmWord, { color: TEAM_COLOR[myTeam] }]}>{pendingWord}</Text>
           <Text style={{ color: theme.textSecondary, fontSize: 12 }}>؟</Text>
-          <TouchableOpacity style={[s.confirmYes, { backgroundColor: TEAM_COLOR[myTeam] }]} onPress={confirmCard}>
-            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>✔ تأكيد</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.confirmNo, { borderColor: theme.textSecondary + '66' }]}
-            onPress={() => setPendingIdx(null)}>
-            <Text style={{ color: theme.textSecondary, fontSize: 13 }}>✕</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={confirmCard} label='✔ تأكيد' variant='primary' size='small' style={s.confirmYes} />
+          <ThemedButton onPress={() => setPendingIdx(null)} label='✕' variant='ghost' size='small' style={s.confirmNo} />
         </View>
       )}
 
@@ -631,25 +661,14 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
               onChangeText={setClueInput}
               autoCorrect={false}
             />
-            <TouchableOpacity
-              style={s.countBtn}
-              onPress={() => setClueCount(Math.max(1, clueCount - 1))}
-            >
+            <ThemedCard onPress={() => setClueCount(Math.max(1, clueCount - 1))} style={s.countBtn}>
               <Text style={{ color: theme.textPrimary, fontSize: 16 }}>−</Text>
-            </TouchableOpacity>
+            </ThemedCard>
             <Text style={[s.countNum, { color: TEAM_COLOR[myTeam] }]}>{clueCount}</Text>
-            <TouchableOpacity
-              style={s.countBtn}
-              onPress={() => setClueCount(Math.min(9, clueCount + 1))}
-            >
+            <ThemedCard onPress={() => setClueCount(Math.min(9, clueCount + 1))} style={s.countBtn}>
               <Text style={{ color: theme.textPrimary, fontSize: 16 }}>+</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.sendBtn, { backgroundColor: TEAM_COLOR[myTeam] }]}
-              onPress={sendClue}
-            >
-              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>إرسال</Text>
-            </TouchableOpacity>
+            </ThemedCard>
+            <ThemedButton onPress={sendClue} label='إرسال' variant='primary' size='small' style={s.sendBtn} />
           </View>
         )}
 
@@ -663,9 +682,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
               </View>
             </View>
             <Text style={[s.guessLeft, { color: theme.textSecondary }]}>محاولات: {guessesLeft}</Text>
-            <TouchableOpacity style={[s.endTurnBtn, { borderColor: TEAM_COLOR[turn] }]} onPress={endTurn}>
-              <Text style={{ color: TEAM_COLOR[turn], fontSize: 12 }}>إنهاء الدور</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={endTurn} label='إنهاء الدور' variant='ghost' size='small' style={s.endTurnBtn} />
           </View>
         )}
 
@@ -715,15 +732,14 @@ function CodeCard({
   };
 
   return (
-    <TouchableOpacity
+    <ThemedCard
+      onPress={handlePress}
       style={[
         cc.card,
         { backgroundColor: cardBg, width: CARD_W, height: CARD_H },
         isPending && cc.pending,
         isRevealed && cc.revealed,
       ]}
-      onPress={handlePress}
-      activeOpacity={0.75}
     >
       {/* ── صورة الغطاء (بطاقة مكشوفة + مالك ≠ black) ── */}
       {isRevealed && imgSource && (
@@ -762,7 +778,7 @@ function CodeCard({
           <Text style={{ color: '#111', fontSize: 9, fontWeight: '900' }}>✓</Text>
         </View>
       )}
-    </TouchableOpacity>
+    </ThemedCard>
   );
 }
 
@@ -854,18 +870,16 @@ const cc = StyleSheet.create({
 // ─── شاشتا التحميل والخطأ ─────────────────────────────────────
 function LoadingScreen({ theme }) {
   return (
-    <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+    <View style={[s.container, { backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }]}>
       <ActivityIndicator size="large" color={theme.accent} />
     </View>
   );
 }
 function ErrorScreen({ theme, error, onBack }) {
   return (
-    <View style={[s.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+    <View style={[s.container, { backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }]}>
       <Text style={{ color: theme.error, marginBottom: 16 }}>❌ {error}</Text>
-      <TouchableOpacity onPress={onBack} style={[s.startBtn, { backgroundColor: theme.bgCard }]}>
-        <Text style={{ color: theme.accent }}>رجوع</Text>
-      </TouchableOpacity>
+      <ThemedButton onPress={onBack} label='رجوع' variant='ghost' size='medium' style={s.startBtn} />
     </View>
   );
 }

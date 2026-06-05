@@ -11,6 +11,7 @@ import LeaveModal from './LeaveModal';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
+import OnlineRoomSetup, { OnlineWaitingLobby } from './OnlineRoomSetup';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -97,7 +98,7 @@ function PlayingCard({ card, selected, onPress, theme, disabled, size = 'normal'
     : { elevation: 2 };
 
   return (
-    <TouchableOpacity onPress={handlePress} disabled={disabled} activeOpacity={0.85}>
+    <ThemedCard onPress={handlePress} disabled={disabled}>
       <Animated.View
         style={[
           {
@@ -142,7 +143,7 @@ function PlayingCard({ card, selected, onPress, theme, disabled, size = 'normal'
           </Text>
         </View>
       </Animated.View>
-    </TouchableOpacity>
+    </ThemedCard>
   );
 }
 
@@ -199,16 +200,14 @@ function DeclareButton({ label, selected, onPress, theme }) {
     : {};
 
   return (
-    <TouchableOpacity
+    <ThemedCard
       onPress={() => onPress(label)}
+      variant={selected ? 'accent' : 'default'}
       style={[
         {
           paddingHorizontal: 10,
           paddingVertical: 7,
           borderRadius: 8,
-          backgroundColor: selected ? theme.accent : theme.bgElevated,
-          borderWidth: 1,
-          borderColor: selected ? theme.accent : theme.borderCard,
           alignItems: 'center',
           minWidth: 38,
           margin: 3,
@@ -219,7 +218,7 @@ function DeclareButton({ label, selected, onPress, theme }) {
       <Text style={{ color: selected ? theme.bg : theme.textPrimary, fontWeight: '700', fontSize: 13 }}>
         {label}
       </Text>
-    </TouchableOpacity>
+    </ThemedCard>
   );
 }
 
@@ -314,18 +313,7 @@ function AccusationModal({ accusation, players, myUid, theme, onClose }) {
             </Text>
           )}
 
-          <TouchableOpacity
-            onPress={onClose}
-            style={{
-              marginTop: 20,
-              backgroundColor: theme.accent,
-              borderRadius: 12,
-              paddingVertical: 12,
-              paddingHorizontal: 32,
-            }}
-          >
-            <Text style={{ color: theme.bg, fontWeight: '800', fontSize: 15 }}>استمرار</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onClose} label='استمرار' variant='primary' size='large' style={{ marginTop: 20 }} />
         </Animated.View>
       </View>
     </Modal>
@@ -338,16 +326,28 @@ function AccusationModal({ accusation, players, myUid, theme, onClose }) {
 export default function BullshitGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
+  const isRTL = lang === 'ar';
+
+  // ── اختيار الوضع ──
+  const [selectedMode,  setSelectedMode]  = useState(null);
+  const [joinCodeInput, setJoinCodeInput] = useState(null);
+
+  const handleModeSelect = (mode, code = null) => {
+    setJoinCodeInput(code);
+    setSelectedMode(mode);
+  };
+
   const {
     roomId,
     isPlayer1,
     roomData,
     loading,
     error,
+    friendCode,
     updateRoom,
     endGame,
     leaveRoom,
-  } = useOnlineGame('maktshof', currentUser, onGameReady);
+  } = useOnlineGame('maktshof', currentUser, onGameReady, selectedMode, joinCodeInput);
 
   const [leaveModalVisible, setLeaveModalVisible] = useState(false);
 
@@ -508,11 +508,38 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd, onG
         <StatusBar barStyle={theme.statusBar} />
         <View style={s.center}>
           <Text style={{ color: theme.error, fontSize: 16 }}>❌ {error}</Text>
-          <TouchableOpacity onPress={onBack} style={[s.btn, { backgroundColor: theme.bgCard, marginTop: 16 }]}>
-            <Text style={{ color: theme.accent }}>رجوع</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onBack} label='→ رجوع' variant='ghost' size='medium' />
         </View>
       </View>
+    );
+  }
+
+  // ── شاشة اختيار الوضع ──
+  if (!selectedMode) {
+    return (
+      <OnlineRoomSetup
+        gameEmoji="🃏"
+        gameTitleAr="مكشوف"
+        gameTitleEn="Bullshit"
+        descAr="ألعاب الكوت والبلف"
+        descEn="Bluffing card game"
+        onBack={onBack}
+        onSelect={handleModeSelect}
+      />
+    );
+  }
+
+  // ── انتظار صديق ──
+  if (selectedMode === 'create' && loading) {
+    return (
+      <OnlineWaitingLobby
+        friendCode={friendCode}
+        isFriend={true}
+        isRTL={isRTL}
+        theme={theme}
+        gameEmoji="🃏"
+        onCancel={onBack}
+      />
     );
   }
 
@@ -561,9 +588,7 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd, onG
             {winner?.name || 'فائز'}
           </Text>
           <Text style={{ color: theme.textSecondary, marginTop: 4 }}>أنهى كروته أولاً!</Text>
-          <TouchableOpacity onPress={onBack} style={[s.btn, { backgroundColor: theme.accent, marginTop: 24 }]}>
-            <Text style={{ color: theme.bg, fontWeight: '700' }}>العودة</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onBack} label='→ رجوع' variant='ghost' size='medium' />
         </View>
       </View>
     );
@@ -670,18 +695,7 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd, onG
 
       {/* ── زر التشكيك ── */}
       {!isMyTurn && playHistory.length > 0 && (
-        <TouchableOpacity
-          onPress={handleAccuse}
-          style={[
-            s.accuseBtn,
-            { backgroundColor: accuseColor },
-            theme.isCrystal
-              ? { shadowColor: accuseColor, shadowOpacity: 0.8, shadowRadius: 14, elevation: 14 }
-              : {},
-          ]}
-        >
-          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>🃏 مكشوف</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={handleAccuse} label='🃏 مكشوف' variant='primary' size='large' style={[s.accuseBtn, { backgroundColor: accuseColor }]} />
       )}
 
       {/* ── إعلان الرقم ── */}
@@ -725,34 +739,14 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd, onG
 
       {/* ── زر اللعب ── */}
       {isMyTurn && (
-        <TouchableOpacity
+        <ThemedButton
           onPress={handlePlay}
           disabled={selectedCards.length === 0 || !declaredVal}
-          style={[
-            s.playBtn,
-            {
-              backgroundColor:
-                selectedCards.length > 0 && declaredVal ? theme.accent : theme.bgElevated,
-              borderColor:
-                selectedCards.length > 0 && declaredVal ? theme.accent : theme.borderCard,
-            },
-            theme.isCrystal && selectedCards.length > 0 && declaredVal
-              ? { shadowColor: theme.accent, shadowOpacity: 0.7, shadowRadius: 14, elevation: 14 }
-              : {},
-          ]}
-        >
-          <Text
-            style={{
-              color: selectedCards.length > 0 && declaredVal ? theme.bg : theme.textMuted,
-              fontWeight: '800',
-              fontSize: 16,
-            }}
-          >
-            {selectedCards.length > 0 && declaredVal
-              ? `لعب ${selectedCards.length}× ${declaredVal} 🃏`
-              : 'اختر كرت ورقم'}
-          </Text>
-        </TouchableOpacity>
+          label={selectedCards.length > 0 && declaredVal ? 'العب الكروت ←' : 'اختر كروتاً ورقماً'}
+          variant={selectedCards.length > 0 && declaredVal ? 'primary' : 'secondary'}
+          size='large'
+          style={s.playBtn}
+        />
       )}
 
       {/* ── Modal التشكيك ── */}

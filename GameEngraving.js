@@ -281,8 +281,7 @@ export function CodenamesEngraving({theme }) {
       <Path d="M24,820 L24,786"  stroke={ec} strokeWidth={3} fill="none" opacity={clamp(b * 1.6)}/>
       <Path d="M24,820 L58,820"  stroke={ec} strokeWidth={3} fill="none" opacity={clamp(b * 1.6)}/>
       <Path d="M366,820 L366,786"  stroke={ec} strokeWidth={3} fill="none" opacity={clamp(b * 1.6)}/>
-      <Path d="M366,820 L332,820"  stroke={ec} strokeWidth={3} fill="none" opacity={
-  const { theme } = useTheme();clamp(b * 1.6)}/>
+      <Path d="M366,820 L332,820"  stroke={ec} strokeWidth={3} fill="none" opacity={clamp(b * 1.6)}/>
     </EngrWrap>
   );
 }
@@ -323,8 +322,7 @@ export function XOEngraving({ theme }) {
       {/* تاج */}
       <Path
         d="M140,74 L154,108 L175,94 L195,125 L215,94 L236,108 L250,74 L240,142 L150,142Z"
-        fill={
-  const { theme } = useTheme();ec} opacity={clamp(b * 1.5)}
+        fill={ec} opacity={clamp(b * 1.5)}
       />
     </EngrWrap>
   );
@@ -408,8 +406,7 @@ export function WordleEngraving({ theme }) {
                   fill={bg} opacity={clamp(b * 3.0)}/>
               )}
               <Rect x={tx} y={ty} width={TW} height={TH} rx={6}
-                fill="none" stroke={ec} strokeWidth={
-  const { theme } = useTheme();2} opacity={bordOp}/>
+                fill="none" stroke={ec} strokeWidth={2} opacity={bordOp}/>
             </G>
           );
         })
@@ -461,8 +458,7 @@ export function ManAnaEngraving({ theme }) {
       <Rect x={105} y={468} width={180} height={115} rx={10}
         fill="none" stroke={ec} strokeWidth={2.5} opacity={clamp(b * 1.8)}/>
       <Line x1={105} y1={500} x2={285} y2={500} stroke={ec} strokeWidth={1.5} opacity={clamp(b * 1.2)}/>
-      <SvgText x={195} y={540} fontSize={
-  const { theme } = useTheme();20} fill={ec} textAnchor="middle" opacity={clamp(b * 1.1)}>
+      <SvgText x={195} y={540} fontSize={20} fill={ec} textAnchor="middle" opacity={clamp(b * 1.1)}>
         {"● ● ●"}
       </SvgText>
     </EngrWrap>

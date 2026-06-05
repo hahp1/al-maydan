@@ -90,7 +90,7 @@ export default function LanguageSelector({ compact = false }) {
         </Animated.Text>
       </ThemedCard>
 
-      {/* القائمة المنسدلة كـ Modal */
+      {/* القائمة المنسدلة كـ Modal */}
       <Modal
         visible={open}
         transparent

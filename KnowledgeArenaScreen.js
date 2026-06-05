@@ -67,16 +67,10 @@ const TournamentBanner = memo(({
   const isScoringClosed = tournament.isScoringClosed;
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.88}
+    <ThemedCard
       onPress={onOpenPopup}
-      style={[
-        styles.banner,
-        {
-          backgroundColor: theme.bgCard,
-          borderColor: isScoringClosed ? '#f8717155' : '#f59e0b55',
-        },
-      ]}
+      style={styles.banner}
+      borderColor={isScoringClosed ? '#f8717155' : '#f59e0b55'}
     >
       {/* صف الأعلى: أيقونة + معلومات + عداد */}
       <View style={styles.bannerTop}>
@@ -150,22 +144,11 @@ const TournamentBanner = memo(({
             </Text>
           </View>
         ) : (
-          <TouchableOpacity
-            style={[styles.bannerJoinBtn, { backgroundColor: '#f59e0b' }]}
-            onPress={onJoin}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.bannerJoinText}>⚡ شارك في البطولة</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onJoin} label='⚡ شارك في البطولة' variant='primary' size='small' style={styles.bannerJoinBtn} />
         )}
-        <TouchableOpacity
-          style={[styles.bannerLeaderBtn, { backgroundColor: theme.bgElevated, borderColor: '#f59e0b33' }]}
-          onPress={onOpenPopup}
-        >
-          <Text style={[styles.bannerLeaderText, { color: '#f59e0b' }]}>🏅</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onOpenPopup} label='🏅' variant='ghost' size='small' style={styles.bannerLeaderBtn} />
       </View>
-    </TouchableOpacity>
+    </ThemedCard>
   );
 });
 
@@ -186,7 +169,7 @@ const TournamentPopup = memo(({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.popupOverlay}>
-        <View style={[styles.popupBox, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, borderColor: theme.border }]}>
+        <View style={[styles.popupBox, { backgroundColor: 'transparent', borderColor: theme.border }]}>
 
           {/* هيدر popup */}
           <View style={[styles.popupHeader, { borderBottomColor: theme.divider }]}>
@@ -290,14 +273,11 @@ const TournamentPopup = memo(({
             )}
 
             {/* زر الفائزون السابقون */}
-            <TouchableOpacity
-              style={[styles.pastBtn, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-              onPress={() => setShowPast(true)}
-            >
+            <ThemedCard onPress={() => setShowPast(true)} style={styles.pastBtn}>
               <Text style={{ fontSize: 20 }}>🏅</Text>
               <Text style={[styles.pastBtnText, { color: theme.textSecondary }]}>الفائزون السابقون</Text>
               <Text style={{ color: theme.textMuted, fontSize: 16 }}>←</Text>
-            </TouchableOpacity>
+            </ThemedCard>
 
             <View style={{ height: 20 }} />
           </ScrollView>
@@ -311,12 +291,7 @@ const TournamentPopup = memo(({
                 </Text>
               </View>
             ) : (
-              <TouchableOpacity
-                style={[styles.popupJoinBtn, { backgroundColor: '#f59e0b' }]}
-                onPress={() => { onJoin(); onClose(); }}
-              >
-                <Text style={styles.popupJoinText}>⚡ شارك في البطولة</Text>
-              </TouchableOpacity>
+              <ThemedButton onPress={() => { onJoin(); onClose(); }} label='⚡ شارك في البطولة' variant='primary' size='medium' style={styles.popupJoinBtn} />
             )}
           </View>
         </View>
@@ -325,7 +300,7 @@ const TournamentPopup = memo(({
       {/* Sub-popup: الفائزون السابقون */}
       <Modal visible={showPast} transparent animationType="slide" onRequestClose={() => setShowPast(false)}>
         <View style={styles.popupOverlay}>
-          <View style={[styles.popupBox, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, borderColor: theme.border }]}>
+          <View style={[styles.popupBox, { backgroundColor: 'transparent', borderColor: theme.border }]}>
             <View style={[styles.pastHeader, { borderBottomColor: theme.divider }]}>
               <ExitButton onPress={() => setShowPast(false)} size={32} />
               <Text style={[styles.pastTitle, { color: theme.textPrimary }]}>🏅 الفائزون السابقون</Text>
@@ -375,10 +350,10 @@ const TournamentPopup = memo(({
 // ══════════════════════════════════════════════
 const ModeCard = memo(({ emoji, title, subtitle, heartCost = 1, costColor, costBg, borderColor,
                           disabled, onPress, cardBg, badge }) => (
-  <TouchableOpacity
-    style={[styles.modeCard, { borderColor, backgroundColor: cardBg }, disabled && styles.modeDisabled]}
+  <ThemedCard
     onPress={onPress}
-    activeOpacity={disabled ? 0.6 : 0.82}
+    style={[styles.modeCard, disabled && styles.modeDisabled]}
+    disabled={disabled}
   >
     <View style={styles.modeLeft}>
       <Text style={styles.modeEmoji}>{emoji}</Text>
@@ -398,18 +373,17 @@ const ModeCard = memo(({ emoji, title, subtitle, heartCost = 1, costColor, costB
       <Text style={[styles.modeCost, { color: costColor }]}>{heartCost}</Text>
       <HeartIcon size={16} filled glow={false} />
     </View>
-  </TouchableOpacity>
+  </ThemedCard>
 ));
 
 // ══════════════════════════════════════════════
 //  SubOption
 // ══════════════════════════════════════════════
 const SubOption = memo(({ emoji, title, heartCost, ranked, disabled, onPress, onInfo, theme }) => (
-  <TouchableOpacity
-    style={[styles.subOption, { backgroundColor: theme.bgElevated, borderColor: '#ef444440' }, disabled && { opacity: 0.4 }]}
+  <ThemedCard
     onPress={onPress}
+    style={[styles.subOption, disabled && { opacity: 0.4 }]}
     disabled={disabled}
-    activeOpacity={0.8}
   >
     <Text style={styles.subEmoji}>{emoji}</Text>
     <View style={{ flex: 1 }}>
@@ -428,10 +402,8 @@ const SubOption = memo(({ emoji, title, heartCost, ranked, disabled, onPress, on
         </View>
       </View>
     </View>
-    <TouchableOpacity onPress={onInfo} hitSlop={HIT_SLOP} style={styles.infoBtn}>
-      <Text style={styles.infoBtnText}>ⓘ</Text>
-    </TouchableOpacity>
-  </TouchableOpacity>
+    <ThemedButton onPress={onInfo} label='ⓘ' variant='ghost' size='small' style={styles.infoBtn} />
+  </ThemedCard>
 ));
 
 // ══════════════════════════════════════════════
@@ -467,9 +439,7 @@ const BottomSheet = memo(({ visible, title, hearts, children, onClose, theme }) 
         <Text style={[styles.sheetTitle, { color: theme.textPrimary }]}>{title}</Text>
         <Text style={[styles.sheetTokens, { color: theme.textMuted }]}>قلوبك: {hearts} ❤️</Text>
         <View style={styles.sheetOptions}>{children}</View>
-        <TouchableOpacity style={styles.sheetCancel} onPress={onClose}>
-          <Text style={[styles.sheetCancelText, { color: theme.textMuted }]}>إلغاء</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onClose} label='إلغاء' variant='ghost' size='medium' style={styles.sheetCancel} />
       </Animated.View>
     </Modal>
   );
@@ -525,9 +495,7 @@ const InfoTooltip = memo(({ visible, info, onClose, theme }) => (
                 <Text style={{ color: '#6a6a90', fontSize: 13, fontWeight: '700' }}>لا يُحتسب في البطولة</Text>
               </View>
             )}
-            <TouchableOpacity style={[styles.tooltipClose, { backgroundColor: theme.accent }]} onPress={onClose}>
-              <Text style={{ color: theme.textOnAccent, fontWeight: '800', fontSize: 14 }}>فهمت</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={onClose} label='فهمت' variant='primary' size='medium' style={styles.tooltipClose} />
           </View>
         </TouchableWithoutFeedback>
       </View>
@@ -701,18 +669,12 @@ export default function KnowledgeArenaScreen({
   const rankingDisabled = false; // دائماً مفعّل
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       {/* هيدر */}
       <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-        <TouchableOpacity
-          onPress={() => setScreen('home')}
-          style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
-          hitSlop={HIT_SLOP}
-        >
-          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.backArrow')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={() => setScreen('home')} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>🧠</Text>
           <Text style={[styles.headerTitle, { color: theme.accent }]}>{t('knowledge.title')}</Text>
@@ -803,23 +765,15 @@ export default function KnowledgeArenaScreen({
       {/* شريط القلوب والتوكنز */}
       <Animated.View style={[styles.tokenBar, { opacity: fadeAnim }]}>
         {/* القلوب */}
-        <TouchableOpacity
-          onPress={onOpenHeartsModal}
-          style={[styles.tokenHalf, { backgroundColor: theme.bgCard, borderColor: '#ef444440' }]}
-          hitSlop={HIT_SLOP}
-        >
-          <Text style={[styles.tokenText, { color: '#ef4444' }]}>❤️ {hearts}</Text>
-          <Text style={[styles.tokenAdd, { color: '#ef4444' }]}>+</Text>
-        </TouchableOpacity>
+        <ThemedCard onPress={onOpenHeartsModal} style={styles.tokenHalf}>
+          <Text style={[styles.tokenText, { color: theme.accent }]}>❤️ {hearts}</Text>
+          <Text style={[styles.tokenAdd, { color: theme.accent }]}>+</Text>
+        </ThemedCard>
         {/* التوكنز */}
-        <TouchableOpacity
-          onPress={() => setShowTokenModal(true)}
-          style={[styles.tokenHalf, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
-          hitSlop={HIT_SLOP}
-        >
+        <ThemedCard onPress={() => setShowTokenModal(true)} style={styles.tokenHalf}>
           <Text style={[styles.tokenText, { color: theme.accent }]}>🪙 {tokens}</Text>
           <Text style={[styles.tokenAdd, { color: theme.accent }]}>{t('knowledge.addCoins')}</Text>
-        </TouchableOpacity>
+        </ThemedCard>
       </Animated.View>
 
       {/* Bottom Sheet: تصنيف */}
@@ -916,7 +870,7 @@ export default function KnowledgeArenaScreen({
       <LeaveModal
         visible={leaveVisible}
         onCancel={() => setLeaveVisible(false)}
-        onConfirm={() => { setLeaveVisible(false); onBack(); }}
+        onConfirm={() => { setLeaveVisible(false); setScreen('home'); }}
       />
     </View>
   );

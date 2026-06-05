@@ -1,54 +1,90 @@
 /**
- * useOnlineGame.js — مُصلَح
+ * useOnlineGame.js
  * ════════════════════════════════════════════════
- *  ✅ بدون ServerManager — Firestore مباشرة
- *  ✅ البحث عن غرفة waiting من Firestore
- *  ✅ Bot بعد 60 ثانية
- *  ✅ onSnapshot للمزامنة الفورية
+ *  ✅ ثلاثة أوضاع:
+ *     mode: 'random'        → يبحث عن لاعب تلقائياً (بوت بعد 60 ثانية)
+ *     mode: 'create'        → ينشئ غرفة بكود 6 أحرف وينتظر صديق (لا بوت)
+ *     mode: 'join', code    → ينضم إلى غرفة صديق بالكود
+ *
+ *  ✅ يُعاد تشغيله عند تغيير mode (لا يبدأ تلقائياً إذا mode === null)
+ *  ✅ friendCode متاح للعرض في الـ UI عند وضع create
+ *  ✅ onGameReady يُستدعى مرة واحدة فقط عند بدء اللعبة الفعلي
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { db } from './firebaseConfig';
 import {
   doc, setDoc, updateDoc, onSnapshot, getDoc,
   collection, query, where, limit, getDocs,
 } from 'firebase/firestore';
 
-export const useOnlineGame = (gameType, currentUser, onGameReady) => {
-  const [roomId,    setRoomId]    = useState(null);
-  const [isPlayer1, setIsPlayer1] = useState(false);
-  const [roomData,  setRoomData]  = useState(null);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState(null);
+function genFriendCode() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+export const useOnlineGame = (gameType, currentUser, onGameReady, mode = 'random', joinCode = null) => {
+  const [roomId,     setRoomId]     = useState(null);
+  const [isPlayer1,  setIsPlayer1]  = useState(false);
+  const [roomData,   setRoomData]   = useState(null);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState(null);
+  const [friendCode, setFriendCode] = useState(null); // يُعرض للمنشئ
 
   const unsubRef        = useRef(null);
   const botTimeoutRef   = useRef(null);
   const gameReadyCalled = useRef(false);
-  const roomIdRef     = useRef(null); // مرجع ثابت للـ roomId
+  const roomIdRef       = useRef(null);
+  const modeRef         = useRef(mode);
 
   const myUid  = currentUser?.uid  || `guest_${Math.random().toString(36).slice(2, 10)}`;
   const myName = currentUser?.name || 'لاعب';
 
-  // ── البحث عن غرفة أو إنشاء واحدة ──────────────────────────
-  const findOrCreateRoom = async () => {
+  // ── الاستماع للغرفة ──────────────────────────────────────────
+  const listenToRoom = useCallback((rId) => {
+    unsubRef.current?.();
+    unsubRef.current = onSnapshot(
+      doc(db, 'rooms', rId),
+      (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        setRoomData(data);
+
+        // إلغاء Bot timeout إذا انضم لاعب حقيقي
+        if (data.player2?.uid && data.player2.uid !== 'bot') {
+          clearTimeout(botTimeoutRef.current);
+        }
+
+        // استدعاء onGameReady مرة واحدة فقط
+        if (data.status === 'started' && !gameReadyCalled.current) {
+          gameReadyCalled.current = true;
+          onGameReady?.();
+        }
+      },
+      (err) => {
+        console.error('useOnlineGame listen error:', err);
+        setError(err.message);
+      }
+    );
+  }, [onGameReady]);
+
+  // ── وضع عشوائي ───────────────────────────────────────────────
+  const startRandom = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // ابحث عن غرفة waiting لنفس نوع اللعبة
       const q = query(
         collection(db, 'rooms'),
         where('gameType', '==', gameType),
         where('status',   '==', 'waiting'),
+        where('mode',     '==', 'random'),
         limit(1)
       );
       const snap = await getDocs(q);
 
       if (!snap.empty) {
         // انضم كـ Player2
-        const roomDoc = snap.docs[0];
-        const rId     = roomDoc.id;
-
+        const rId = snap.docs[0].id;
         await updateDoc(doc(db, 'rooms', rId), {
           'player2.uid':   myUid,
           'player2.name':  myName,
@@ -56,44 +92,33 @@ export const useOnlineGame = (gameType, currentUser, onGameReady) => {
           status:          'started',
           lastUpdate:      Date.now(),
         });
-
         roomIdRef.current = rId;
         setRoomId(rId);
         setIsPlayer1(false);
         listenToRoom(rId);
-        setLoading(false);
-
       } else {
-        // أنشئ غرفة جديدة كـ Player1
-        const rId = `${gameType}_${Date.now()}_${myUid.slice(0, 8)}`;
-
-        const newRoom = {
+        // أنشئ غرفة جديدة
+        const rId = `${gameType}_rnd_${Date.now()}_${myUid.slice(0, 8)}`;
+        await setDoc(doc(db, 'rooms', rId), {
           id:        rId,
-          gameType:  gameType,
+          gameType,
+          mode:      'random',
           status:    'waiting',
-          player1: { uid: myUid, name: myName, score: 0, ready: true },
-          player2: { uid: null,  name: null,   score: 0, ready: false },
+          player1:   { uid: myUid, name: myName, score: 0, ready: true },
+          player2:   { uid: null,  name: null,   score: 0, ready: false },
           createdAt:  Date.now(),
           lastUpdate: Date.now(),
-        };
-
-        await setDoc(doc(db, 'rooms', rId), newRoom);
-
+        });
         roomIdRef.current = rId;
         setRoomId(rId);
         setIsPlayer1(true);
         listenToRoom(rId);
-        setLoading(false);
 
-        // Bot بعد 60 ثانية إذا لم يأتِ لاعب
+        // بوت بعد 60 ثانية
         botTimeoutRef.current = setTimeout(async () => {
           try {
-            const roomSnap = await getDoc(doc(db, 'rooms', rId));
-            if (
-              roomSnap.exists() &&
-              roomSnap.data().status === 'waiting' &&
-              !roomSnap.data().player2?.uid
-            ) {
+            const s = await getDoc(doc(db, 'rooms', rId));
+            if (s.exists() && s.data().status === 'waiting' && !s.data().player2?.uid) {
               await updateDoc(doc(db, 'rooms', rId), {
                 'player2.uid':   'bot',
                 'player2.name':  '🤖 Bot',
@@ -102,66 +127,140 @@ export const useOnlineGame = (gameType, currentUser, onGameReady) => {
                 lastUpdate:      Date.now(),
               });
             }
-          } catch (e) {
-            console.error('Bot setup error:', e);
-          }
+          } catch (e) { console.error('bot error:', e); }
         }, 60000);
       }
-
     } catch (e) {
-      console.error('findOrCreateRoom error:', e);
-      setError(e.message || 'حدث خطأ في البحث عن غرفة');
+      console.error('startRandom error:', e);
+      setError(e.message || 'حدث خطأ');
+    } finally {
       setLoading(false);
     }
-  };
+  }, [gameType, myUid, myName, listenToRoom]);
 
-  // ── الاستماع للغرفة ──────────────────────────────────────
-  const listenToRoom = (rId) => {
-    unsubRef.current?.(); // إلغاء أي listener سابق
-    unsubRef.current = onSnapshot(
-      doc(db, 'rooms', rId),
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          setRoomData(data);
-          // إذا انضم لاعب حقيقي → ألغِ Bot timeout
-          if (data.player2?.uid && data.player2.uid !== 'bot') {
-            clearTimeout(botTimeoutRef.current);
-          }
-          // اقتطع القلب عند بدء اللعبة الفعلي (لاعب أو بوت جاهز)
-          if (data.status === 'started' && !gameReadyCalled.current) {
-            gameReadyCalled.current = true;
-            onGameReady?.();
-          }
-        }
-      },
-      (err) => {
-        console.error('Listen error:', err);
-        setError(err.message);
-      }
-    );
-  };
-
-  // ── تحديث الغرفة ─────────────────────────────────────────
-  const updateRoom = async (updates) => {
-    const rId = roomIdRef.current;
-    if (!rId) {
-      setError('لا توجد غرفة');
-      return;
-    }
+  // ── إنشاء غرفة بكود ──────────────────────────────────────────
+  const startCreate = useCallback(async () => {
     try {
-      await updateDoc(doc(db, 'rooms', rId), {
-        ...updates,
+      setLoading(true);
+      setError(null);
+
+      const code = genFriendCode();
+      const rId  = `${gameType}_fr_${code}`;
+
+      await setDoc(doc(db, 'rooms', rId), {
+        id:         rId,
+        gameType,
+        mode:       'friend',
+        friendCode: code,
+        status:     'waiting',
+        player1:    { uid: myUid, name: myName, score: 0, ready: true },
+        player2:    { uid: null,  name: null,   score: 0, ready: false },
+        createdAt:  Date.now(),
         lastUpdate: Date.now(),
       });
+
+      roomIdRef.current = rId;
+      setRoomId(rId);
+      setIsPlayer1(true);
+      setFriendCode(code);
+      listenToRoom(rId);
+      // لا بوت في وضع الصديق
+    } catch (e) {
+      console.error('startCreate error:', e);
+      setError(e.message || 'حدث خطأ');
+    } finally {
+      setLoading(false);
+    }
+  }, [gameType, myUid, myName, listenToRoom]);
+
+  // ── الانضمام بكود ────────────────────────────────────────────
+  const startJoin = useCallback(async (code) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const normalCode = (code || '').trim().toUpperCase();
+      if (normalCode.length < 4) {
+        setError('كود غير صحيح');
+        setLoading(false);
+        return;
+      }
+
+      // ابحث بالكود
+      const q = query(
+        collection(db, 'rooms'),
+        where('friendCode', '==', normalCode),
+        where('status',     '==', 'waiting'),
+        limit(1)
+      );
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        setError('لم يتم العثور على الغرفة — تأكد من الكود');
+        setLoading(false);
+        return;
+      }
+
+      const rId = snap.docs[0].id;
+      const data = snap.docs[0].data();
+
+      // منع انضمام نفس اللاعب مرتين
+      if (data.player1?.uid === myUid) {
+        setError('أنت منشئ هذه الغرفة');
+        setLoading(false);
+        return;
+      }
+
+      await updateDoc(doc(db, 'rooms', rId), {
+        'player2.uid':   myUid,
+        'player2.name':  myName,
+        'player2.ready': true,
+        status:          'started',
+        lastUpdate:      Date.now(),
+      });
+
+      roomIdRef.current = rId;
+      setRoomId(rId);
+      setIsPlayer1(false);
+      listenToRoom(rId);
+    } catch (e) {
+      console.error('startJoin error:', e);
+      setError(e.message || 'حدث خطأ');
+    } finally {
+      setLoading(false);
+    }
+  }, [gameType, myUid, myName, listenToRoom]);
+
+  // ── تشغيل حسب الوضع ─────────────────────────────────────────
+  useEffect(() => {
+    if (!mode) return; // لا تبدأ حتى يختار المستخدم
+    modeRef.current = mode;
+    gameReadyCalled.current = false;
+
+    if (mode === 'random')  startRandom();
+    if (mode === 'create')  startCreate();
+    if (mode === 'join')    startJoin(joinCode);
+
+    return () => {
+      unsubRef.current?.();
+      clearTimeout(botTimeoutRef.current);
+    };
+  }, [mode, joinCode]);
+
+  // ── تحديث الغرفة ─────────────────────────────────────────────
+  const updateRoom = useCallback(async (updates) => {
+    const rId = roomIdRef.current;
+    if (!rId) { setError('لا توجد غرفة'); return; }
+    try {
+      await updateDoc(doc(db, 'rooms', rId), { ...updates, lastUpdate: Date.now() });
     } catch (e) {
       console.error('updateRoom error:', e);
       setError(e.message);
     }
-  };
+  }, []);
 
-  // ── إنهاء اللعبة ──────────────────────────────────────────
-  const endGame = async (scores = {}) => {
+  // ── إنهاء اللعبة ──────────────────────────────────────────────
+  const endGame = useCallback(async (scores = {}) => {
     const rId = roomIdRef.current;
     if (!rId) return;
     try {
@@ -170,16 +269,14 @@ export const useOnlineGame = (gameType, currentUser, onGameReady) => {
         'player1.finalScore':  scores.player1 || 0,
         'player2.finalScore':  scores.player2 || 0,
         ...(scores.extra || {}),
-        finishedAt:            Date.now(),
-        lastUpdate:            Date.now(),
+        finishedAt:  Date.now(),
+        lastUpdate:  Date.now(),
       });
-    } catch (e) {
-      console.error('endGame error:', e);
-    }
-  };
+    } catch (e) { console.error('endGame error:', e); }
+  }, []);
 
-  // ── مغادرة الغرفة ────────────────────────────────────────
-  const leaveRoom = async () => {
+  // ── مغادرة الغرفة ────────────────────────────────────────────
+  const leaveRoom = useCallback(async () => {
     const rId = roomIdRef.current;
     if (!rId) return;
     try {
@@ -188,17 +285,14 @@ export const useOnlineGame = (gameType, currentUser, onGameReady) => {
         abandonedAt: Date.now(),
         lastUpdate:  Date.now(),
       });
-    } catch (e) {
-      console.error('leaveRoom error:', e);
-    }
-  };
+    } catch (e) { console.error('leaveRoom error:', e); }
+  }, []);
 
-  // ── joinAsPlayer2 (للاستخدام اليدوي إذا احتجت) ───────────
-  const joinAsPlayer2 = async () => {
+  // للتوافق مع الاستخدام القديم (joinAsPlayer2)
+  const joinAsPlayer2 = useCallback(async () => {
     const rId = roomIdRef.current;
-    if (!rId) { setError('لا توجد غرفة'); return; }
+    if (!rId) return;
     try {
-      clearTimeout(botTimeoutRef.current);
       await updateDoc(doc(db, 'rooms', rId), {
         'player2.uid':   myUid,
         'player2.name':  myName,
@@ -206,20 +300,8 @@ export const useOnlineGame = (gameType, currentUser, onGameReady) => {
         status:          'started',
         lastUpdate:      Date.now(),
       });
-    } catch (e) {
-      console.error('joinAsPlayer2 error:', e);
-      setError(e.message);
-    }
-  };
-
-  // ── Mount / Unmount ────────────────────────────────────────
-  useEffect(() => {
-    findOrCreateRoom();
-    return () => {
-      unsubRef.current?.();
-      clearTimeout(botTimeoutRef.current);
-    };
-  }, [gameType]);
+    } catch (e) { console.error('joinAsPlayer2 error:', e); }
+  }, [myUid, myName]);
 
   return {
     roomId,
@@ -227,6 +309,7 @@ export const useOnlineGame = (gameType, currentUser, onGameReady) => {
     roomData,
     loading,
     error,
+    friendCode,   // ← الكود المُنشأ (يُعرض للمنشئ)
     updateRoom,
     joinAsPlayer2,
     endGame,

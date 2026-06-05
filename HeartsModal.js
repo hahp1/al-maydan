@@ -59,12 +59,14 @@ export default function HeartsModal({
   }, [visible]);
 
   const handleWatchAd = async () => {
+    if (watchingAd) return;
     if (adsLeft <= 0 && !isPro) {
       setInfoMsg(`وصلت الحد اليومي — ${HEARTS_CONFIG.maxAdDaily} إعلانات/يوم`);
       return;
     }
     setWatchingAd(true);
-    setTimeout(async () => {
+    setInfoMsg('');
+    try {
       const result = await earnHeartFromAd(isPro);
       if (result.success) {
         setHearts(result.hearts);
@@ -73,9 +75,14 @@ export default function HeartsModal({
         bounceHeart();
         playSound('reward_heart_ad');
         if (onAdWatched) onAdWatched();
+      } else {
+        setInfoMsg('حدث خطأ، حاول مرة أخرى');
       }
+    } catch (_) {
+      setInfoMsg('حدث خطأ، حاول مرة أخرى');
+    } finally {
       setWatchingAd(false);
-    }, 2500);
+    }
   };
 
   const handleBuy = async (pkg) => {
@@ -95,7 +102,7 @@ export default function HeartsModal({
     setBuying(false);
   };
 
-  const heartColor = hearts === 0 ? '#888' : hearts <= 1 ? '#ef4444' : '#f87171';
+  const heartColor = hearts === 0 ? theme.textMuted : theme.accent;
   const heartsDisplay = isPro ? '∞' : `${hearts + bonusCount}`;
 
   const renderHeartDots = () => {
@@ -128,7 +135,7 @@ export default function HeartsModal({
       {/* Overlay — يُغلق عند الضغط خارج الشيت */}
       <Pressable style={styles.overlay} onPress={onClose}>
         {/* Sheet — يمنع انتشار الضغط للـ overlay */}
-        <Pressable style={[styles.sheet, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+        <Pressable style={[styles.sheet, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]} onPress={e => e.stopPropagation()}>
 
           {/* ── هيدر ثابت — دائماً ظاهر ── */}
           <View style={styles.headerRow}>

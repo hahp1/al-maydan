@@ -9,7 +9,7 @@ import CachedCategoryImage from './CachedCategoryImage';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const CategoryCard = memo(({ cat, isSelected, isFull, itemSize, onPress, theme }) => (
-  <TouchableOpacity
+  <ThemedCard
     style={[
       styles.catCard,
       { width: itemSize, height: itemSize, backgroundColor: theme.bgCard, borderColor: theme.borderCard },
@@ -31,11 +31,11 @@ const CategoryCard = memo(({ cat, isSelected, isFull, itemSize, onPress, theme }
         <Text style={[styles.checkText, { color: theme.textOnAccent }]}>✓</Text>
       </View>
     )}
-  </TouchableOpacity>
+  </ThemedCard>
 ));
 
 const CountButton = memo(({ num, active, onPress, theme }) => (
-  <TouchableOpacity
+  <ThemedCard
     style={[
       styles.catBtn,
       { backgroundColor: theme.bgCard, borderColor: theme.borderCard },
@@ -45,7 +45,7 @@ const CountButton = memo(({ num, active, onPress, theme }) => (
     activeOpacity={0.8}
   >
     <Text style={[styles.catBtnNum, { color: active ? theme.textOnAccent : theme.accent }]}>{num}</Text>
-  </TouchableOpacity>
+  </ThemedCard>
 ));
 
 // tokens: للعرض فقط — وسائل المساعدة تستهلكها أثناء اللعبة
@@ -89,7 +89,7 @@ export default function GameSetupScreen({ onStart, onBack, tokens = 0, categorie
 
   return (
     <ScrollView
-      contentContainerStyle={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}
+      contentContainerStyle={[styles.container, { backgroundColor: 'transparent' }]}
       keyboardShouldPersistTaps="handled"
     >
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
@@ -101,13 +101,13 @@ export default function GameSetupScreen({ onStart, onBack, tokens = 0, categorie
         </TouchableOpacity>
         <Text style={[styles.title, { color: theme.accent }]}>{t('setup.title')}</Text>
         {/* رصيد التوكنز — قابل للنقر لفتح شاشة الشحن */}
-        <TouchableOpacity
+        <ThemedCard
           style={[styles.tokenBadge, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
           onPress={onOpenTokenModal}
           hitSlop={HIT_SLOP}
         >
           <Text style={[styles.tokenText, { color: theme.accent }]}>🪙 {tokens}</Text>
-        </TouchableOpacity>
+        </ThemedCard>
       </View>
 
       {/* ── الفرق ── */}

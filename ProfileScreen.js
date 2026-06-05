@@ -159,15 +159,7 @@ const MissionCard = memo(({ mission, progress, completed, onClaim, theme, lang }
       ]}>
         {/* زر استلام — يظهر فوق البطاقة عند الإكمال */}
         {isDone && !isClaimed && (
-          <TouchableOpacity
-            style={[missionStyles.claimBtn, { backgroundColor: theme.accent }]}
-            onPress={handleClaim}
-            activeOpacity={0.8}
-          >
-            <Text style={[missionStyles.claimText, { color: theme.textOnAccent }]}>
-              {lang === 'ar' ? `استلام +${mission.xp} XP` : `Claim +${mission.xp} XP`}
-            </Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={handleClaim} label={lang === 'ar' ? `استلام +${mission.xp} XP` : `Claim +${mission.xp} XP`} variant='primary' size='small' style={missionStyles.claimBtn} />
         )}
 
         <View style={missionStyles.row}>
@@ -285,7 +277,7 @@ const achStyles = StyleSheet.create({
 // ══════════════════════════════════════════════════════════════
 //  الشاشة الرئيسية
 // ══════════════════════════════════════════════════════════════
-export default function ProfileScreen({ user, setScreen, onLogin }) {
+export default function ProfileScreen({ user, setScreen, onLogin, onLogout }) {
   const { theme } = useTheme();
   const { lang }  = useLanguage();
   const isGuest   = !user?.uid || user?.isGuest;
@@ -361,7 +353,7 @@ export default function ProfileScreen({ user, setScreen, onLogin }) {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[styles.container, { backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center' }]}>
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <ActivityIndicator size="large" color={theme.accent} />
       </View>
@@ -369,16 +361,12 @@ export default function ProfileScreen({ user, setScreen, onLogin }) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       {/* ── Header ── */}
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
-        <TouchableOpacity onPress={() => setScreen('home')} style={styles.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={[styles.backIcon, { color: theme.textPrimary }]}>
-            {lang === 'ar' ? '→' : '←'}
-          </Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={() => setScreen('home')} label={lang === 'ar' ? '→' : '←'} variant='ghost' size='small' style={styles.backBtn} />
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
           {lang === 'ar' ? 'الملف الشخصي' : 'Profile'}
         </Text>
@@ -391,11 +379,7 @@ export default function ProfileScreen({ user, setScreen, onLogin }) {
       >
         {/* ── Banner الضيف ── */}
         {isGuest && (
-          <TouchableOpacity
-            style={[styles.guestBanner, { backgroundColor: theme.purpleSoft, borderColor: theme.purpleBorder }]}
-            onPress={() => setScreen('login')}
-            activeOpacity={0.8}
-          >
+          <ThemedCard onPress={() => onLogout?.()} style={styles.guestBanner}>
             <Text style={styles.guestBannerIcon}>⚠️</Text>
             <View style={{ flex: 1 }}>
               <Text style={[styles.guestBannerTitle, { color: theme.purple }]}>
@@ -410,7 +394,7 @@ export default function ProfileScreen({ user, setScreen, onLogin }) {
             <Text style={[styles.guestBannerArrow, { color: theme.purple }]}>
               {lang === 'ar' ? '←' : '→'}
             </Text>
-          </TouchableOpacity>
+          </ThemedCard>
         )}
 
         {/* ── بطاقة المستخدم ── */}
@@ -478,17 +462,17 @@ export default function ProfileScreen({ user, setScreen, onLogin }) {
         {/* ── التبويبات ── */}
         <View style={[styles.tabBar, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
           {['missions', 'achievements'].map(t => (
-            <TouchableOpacity
+            <ThemedCard
               key={t}
-              style={[styles.tabBtn, tab === t && { borderBottomColor: theme.accent, borderBottomWidth: 2 }]}
               onPress={() => setTab(t)}
+              style={[styles.tabBtn, tab === t && { borderBottomColor: theme.accent, borderBottomWidth: 2 }]}
             >
               <Text style={[styles.tabText, { color: tab === t ? theme.accent : theme.textMuted }]}>
                 {t === 'missions'
                   ? (lang === 'ar' ? '📅 مهام اليوم' : '📅 Daily Missions')
                   : (lang === 'ar' ? '🏅 إنجازات' : '🏅 Achievements')}
               </Text>
-            </TouchableOpacity>
+            </ThemedCard>
           ))}
         </View>
 
@@ -617,11 +601,7 @@ function LevelUpModal({ info, theme, lang, onClose }) {
             </Text>
           </View>
         )}
-        <TouchableOpacity style={[luStyles.btn, { backgroundColor: theme.accent }]} onPress={onClose}>
-          <Text style={[luStyles.btnText, { color: theme.textOnAccent }]}>
-            {lang === 'ar' ? 'رائع! 🎉' : 'Awesome! 🎉'}
-          </Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onClose} label={lang === 'ar' ? 'رائع! 🎉' : 'Awesome! 🎉'} variant='primary' size='large' style={luStyles.btn} />
       </Animated.View>
     </Animated.View>
   );

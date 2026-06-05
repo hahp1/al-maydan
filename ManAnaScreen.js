@@ -82,7 +82,7 @@ function SetupScreen({ onStart, theme, t, isGlobal }) {
   };
 
   return (
-    <ScrollView contentContainerStyle={[styles.setupContainer, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <ScrollView contentContainerStyle={[styles.setupContainer, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
       <Text style={[styles.title, { color: theme.accent }]}>
         {isGlobal ? '🤔 Who Am I?' : '🤔 من أنا؟'}
@@ -98,15 +98,9 @@ function SetupScreen({ onStart, theme, t, isGlobal }) {
         </Text>
         <View style={styles.options}>
           {[2,3,4,5,6,7,8].map(n => (
-            <TouchableOpacity
-              key={n}
-              style={[styles.optBtn, { backgroundColor: theme.bgCard, borderColor: theme.border },
-                playerCount === n && { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}
-              onPress={() => syncCount(n)}
-              activeOpacity={0.8}
-            >
+            <ThemedCard key={n} onPress={() => syncCount(n)} style={styles.optBtn} variant={playerCount === n ? 'accent' : 'default'}>
               <Text style={[styles.optText, { color: playerCount === n ? theme.accent : theme.textMuted }]}>{n}</Text>
-            </TouchableOpacity>
+            </ThemedCard>
           ))}
         </View>
       </View>
@@ -136,26 +130,14 @@ function SetupScreen({ onStart, theme, t, isGlobal }) {
         </Text>
         <View style={styles.options}>
           {[60,90,120].map(tv => (
-            <TouchableOpacity
-              key={tv}
-              style={[styles.optBtn, { backgroundColor: theme.bgCard, borderColor: theme.border },
-                timeLimit === tv && { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}
-              onPress={() => setTimeLimit(tv)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.optText, { color: timeLimit === tv ? theme.accent : theme.textMuted }]}>
-                {isGlobal ? `${tv}s` : `${tv}ث`}
-              </Text>
-            </TouchableOpacity>
+            <ThemedCard key={tv} onPress={() => setTimeLimit(tv)} style={styles.optBtn} variant={timeLimit === tv ? 'accent' : 'default'}>
+              <Text style={[styles.optText, { color: timeLimit === tv ? theme.accent : theme.textMuted }]}>{isGlobal ? `${tv}s` : `${tv}ث`}</Text>
+            </ThemedCard>
           ))}
         </View>
       </View>
 
-      <TouchableOpacity style={[styles.startBtn, { backgroundColor: theme.accent }]} onPress={handleStart} activeOpacity={0.85}>
-        <Text style={[styles.startText, { color: theme.textOnAccent }]}>
-          {isGlobal ? 'Start Game →' : 'ابدأ اللعبة ←'}
-        </Text>
-      </TouchableOpacity>
+      <ThemedButton onPress={handleStart} label={isGlobal ? 'Start Game →' : 'ابدأ اللعبة ←'} variant='primary' size='large' style={styles.startBtn} />
     </ScrollView>
   );
 }
@@ -262,11 +244,7 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
   const TopBar = ({ showProgress = true }) => (
     <View style={styles.topBar}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-        <TouchableOpacity onPress={onBack} hitSlop={HIT_SLOP} style={styles.exitBtn}>
-          <Text style={[styles.exitText, { color: theme.accent }]}>
-            {isGlobal ? '✕ Exit' : '✕ خروج'}
-          </Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label={isGlobal ? '✕ Exit' : '✕ خروج'} variant='ghost' size='small' style={styles.exitBtn} />
         <GameInfoButton gameType="man_ana" lang={lang} />
         <WebScreenButton
           playerUid={`mana_${playerNames?.[0] || 'p0'}`}
@@ -298,7 +276,7 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
       .sort((a, b) => b.score - a.score);
     const medals = ['🥇','🥈','🥉'];
     return (
-      <View style={[styles.screen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.screen, { backgroundColor: 'transparent' }]}>
         <TopBar showProgress={false} />
         <ScrollView contentContainerStyle={styles.finishedContent}>
           <Text style={styles.trophyEmoji}>🏆</Text>
@@ -317,11 +295,7 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
               </View>
             ))}
           </View>
-          <TouchableOpacity style={[styles.startBtn, { backgroundColor: theme.accent, marginTop: 24 }]} onPress={onBack} activeOpacity={0.85}>
-            <Text style={[styles.startText, { color: theme.textOnAccent }]}>
-              {isGlobal ? 'Return Home' : 'العودة للرئيسية'}
-            </Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onBack} label={isGlobal ? 'Return Home' : 'العودة للرئيسية'} variant='primary' size='large' style={[styles.startBtn, { marginTop: 24 }]} />
         </ScrollView>
       </View>
     );
@@ -338,7 +312,7 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
       .sort((a, b) => b.score - a.score);
 
     return (
-      <View style={[styles.screen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.screen, { backgroundColor: 'transparent' }]}>
         <TopBar />
         <ScrollView contentContainerStyle={styles.betweenContent}>
           <Text style={styles.phoneEmoji}>📱</Text>
@@ -368,11 +342,7 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
             </View>
           )}
 
-          <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#22c55e' }]} onPress={startReveal} activeOpacity={0.85}>
-            <Text style={[styles.startText, { color: '#fff' }]}>
-              {isGlobal ? '▶ Start Turn' : '▶ ابدأ الدور'}
-            </Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={startReveal} label={isGlobal ? '▶ Start Turn' : '▶ ابدأ الدور'} variant='success' size='large' style={styles.startBtn} />
         </ScrollView>
       </View>
     );
@@ -383,7 +353,7 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
   // ══════════════════════════════════════════════════════════════
   if (phase === 'countdown') {
     return (
-      <View style={[styles.screen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.screen, { backgroundColor: 'transparent' }]}>
         <TopBar />
         <View style={styles.centeredContent}>
           <Text style={[styles.countdownNumber, { color: theme.accent }]}>
@@ -403,7 +373,7 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
   if (phase === 'result') {
     const isLast = turnIndex + 1 >= totalTurns;
     return (
-      <View style={[styles.screen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.screen, { backgroundColor: 'transparent' }]}>
         <TopBar />
         <View style={styles.centeredContent}>
           <Text style={styles.phoneEmoji}>⏱️</Text>
@@ -415,19 +385,12 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
           <Text style={[styles.scoreBig, { color: theme.accent }]}>
             {scores[currentPlayerIdx]} {isGlobal ? 'pts' : 'نقطة'}
           </Text>
-          <TouchableOpacity
-            style={[styles.startBtn, { backgroundColor: theme.accent }]}
+          <ThemedButton
             onPress={nextTurn}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.startText, { color: theme.textOnAccent }]}>
-              {isLast
-                ? (isGlobal ? 'See Results 🏆' : 'عرض النتائج 🏆')
-                : (isGlobal
-                    ? `Next: ${playerNames[playerOrder[turnIndex + 1]]} →`
-                    : `→ دور ${playerNames[playerOrder[turnIndex + 1]]}`)}
-            </Text>
-          </TouchableOpacity>
+            label={isLast ? (isGlobal ? 'See Results 🏆' : 'عرض النتائج 🏆') : (isGlobal ? `Next: ${playerNames[playerOrder[turnIndex + 1]]} →` : `→ دور ${playerNames[playerOrder[turnIndex + 1]]}`)}
+            variant='primary' size='large'
+            style={styles.startBtn}
+          />
         </View>
       </View>
     );
@@ -441,7 +404,7 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
   const timerColor = timeLeft > timeLimit * 0.4 ? theme.accent : timeLeft > timeLimit * 0.2 ? '#f59e0b' : '#ef4444';
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[styles.screen, { backgroundColor: 'transparent' }]}>
       <TopBar />
 
       {/* شريط الوقت */}
@@ -463,16 +426,12 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
         </Text>
 
         <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#22c55e' }]} onPress={gotIt} activeOpacity={0.85}>
-            <Text style={[styles.actionText, { color: '#fff' }]}>
-              {isGlobal ? '✅ Correct\n+10' : '✅ عرّفها\n+١٠'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.bgCard, borderWidth: 1.5, borderColor: theme.border }]} onPress={skip} activeOpacity={0.85}>
-            <Text style={[styles.actionText, { color: theme.textSecondary }]}>
-              {isGlobal ? '⏭ Skip\n-2' : '⏭ تخطي\n-٢'}
-            </Text>
-          </TouchableOpacity>
+          <ThemedCard onPress={gotIt} style={styles.actionBtn} variant='success'>
+            <Text style={[styles.actionText, { color: '#fff' }]}>{isGlobal ? '✅ Correct\n+10' : '✅ عرّفها\n+١٠'}</Text>
+          </ThemedCard>
+          <ThemedCard onPress={skip} style={styles.actionBtn}>
+            <Text style={[styles.actionText, { color: theme.textSecondary }]}>{isGlobal ? '⏭ Skip\n-2' : '⏭ تخطي\n-٢'}</Text>
+          </ThemedCard>
         </View>
       </View>
     </View>
@@ -494,16 +453,14 @@ export default function ManAnaScreen({ onBack, isGlobal = false }) {
   }, [gameConfig, onBack]);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[styles.root, { backgroundColor: 'transparent' }]}>
       <ManAnaEngraving theme={theme} />
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
       {!gameConfig
         ? (
           <>
             <SetupScreen onStart={handleStart} theme={theme} t={t} isGlobal={isGlobal} />
-            <TouchableOpacity style={styles.backBtn} onPress={onBack} hitSlop={HIT_SLOP}>
-              <Text style={[styles.backText, { color: theme.accent }]}>{t('common.back')}</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={onBack} label={t('common.back')} variant='ghost' size='small' style={styles.backBtn} />
           </>
         )
         : (

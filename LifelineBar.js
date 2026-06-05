@@ -73,15 +73,10 @@ const LIFELINES = [
 //  LifelineBtn
 // ══════════════════════════════════════════════
 const LifelineBtn = memo(({ lifeline, used, onPress, theme, isPremium }) => (
-  <TouchableOpacity
+  <ThemedCard
     onPress={() => !used && onPress(lifeline)}
     disabled={used}
-    activeOpacity={0.75}
-    style={[
-      styles.btn,
-      { backgroundColor: theme.bgCard, borderColor: theme.borderCard },
-      used && styles.btnUsed,
-    ]}
+    style={[styles.btn, used && styles.btnUsed]}
   >
     <Text style={[styles.btnEmoji, used && styles.emojiUsed]}>
       {used ? '✓' : lifeline.emoji}
@@ -99,7 +94,7 @@ const LifelineBtn = memo(({ lifeline, used, onPress, theme, isPremium }) => (
         </Text>
       </View>
     )}
-  </TouchableOpacity>
+  </ThemedCard>
 ));
 
 // ══════════════════════════════════════════════
@@ -153,28 +148,12 @@ const ConfirmModal = memo(({
           ) : (
             <View style={styles.modalBtns}>
               {canAfford && (
-                <TouchableOpacity
-                  style={[styles.modalBtnPrimary, { backgroundColor: theme.accent }]}
-                  onPress={handleConfirm}
-                >
-                  <Text style={[styles.modalBtnText, { color: theme.textOnAccent }]}>
-                    {isPremium ? '💎 استخدم مجاناً' : `🪙 استخدم ${lifeline.cost} توكن`}
-                  </Text>
-                </TouchableOpacity>
+                <ThemedButton onPress={handleConfirm} label={isPremium ? '💎 استخدم مجاناً' : `🪙 استخدم ${lifeline.cost} توكن`} variant='primary' size='large' style={styles.modalBtnPrimary} />
               )}
               {!isPremium && (
-                <TouchableOpacity
-                  style={[styles.modalBtnAd, { backgroundColor: theme.bgElevated, borderColor: theme.accentBorder }]}
-                  onPress={handleAd}
-                >
-                  <Text style={[styles.modalBtnText, { color: theme.accent }]}>
-                    📺 شاهد إعلاناً مجاناً
-                  </Text>
-                </TouchableOpacity>
+                <ThemedButton onPress={handleAd} label='📺 شاهد إعلاناً مجاناً' variant='secondary' size='large' style={styles.modalBtnAd} />
               )}
-              <TouchableOpacity style={styles.modalBtnCancel} onPress={onCancel}>
-                <Text style={[styles.modalBtnCancelText, { color: theme.textMuted }]}>إلغاء</Text>
-              </TouchableOpacity>
+              <ThemedButton onPress={onCancel} label='إلغاء' variant='ghost' size='medium' style={styles.modalBtnCancel} />
             </View>
           )}
         </View>

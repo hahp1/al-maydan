@@ -142,21 +142,16 @@ const TimerBar = memo(({ scaleAnim, timeLeft, total, theme }) => {
 //  CategoryCard
 // ══════════════════════════════════════════════
 const CategoryCard = memo(({ cat, onPress, levelColor, disabled, timeLeft, theme }) => (
-  <TouchableOpacity
-    style={[
-      styles.catCard,
-      { backgroundColor: theme.bgCard, borderColor: theme.borderCard },
-      disabled && { opacity: 0.45 },
-    ]}
+  <ThemedCard
     onPress={() => !disabled && onPress(cat)}
-    activeOpacity={0.8}
     disabled={disabled}
+    style={[styles.catCard, disabled && { opacity: 0.45 }]}
   >
     <Text style={styles.catEmoji}>{cat.emoji}</Text>
     <Text style={[styles.catName, { color: theme.textPrimary }]} numberOfLines={2}>
       {cat.name}
     </Text>
-  </TouchableOpacity>
+  </ThemedCard>
 ));
 
 // ══════════════════════════════════════════════
@@ -588,12 +583,10 @@ export default function OnlineGameScreen({
   if (phase === 'connecting' || phase === 'lobby') {
     const isWaiting = !opponentName;
     return (
-      <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.container, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <TouchableOpacity onPress={onBack}>
-            <ExitButton onPress={onBack} />
-          </TouchableOpacity>
+          <ExitButton onPress={onBack} />
           <WebScreenButton
             playerUid={myUid}
             playerName={myName}
@@ -649,7 +642,7 @@ export default function OnlineGameScreen({
   if (phase === 'waiting') {
     const oppData = roomData?.[isPlayer1 ? 'player2' : 'player1'];
     return (
-      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.container, styles.centerContent, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <Text style={styles.waitEmoji}>⏳</Text>
         <Text style={[styles.waitTitle, { color: theme.accent }]}>أنهيت اللعبة!</Text>
@@ -686,7 +679,7 @@ export default function OnlineGameScreen({
     const isDraw  = (myData.score ?? myScore) === (oppData.score ?? 0);
 
     return (
-      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.container, styles.centerContent, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <Text style={styles.resultEmoji}>{isDraw ? '🤝' : iWon ? '🏆' : '😔'}</Text>
         <Text style={[styles.resultTitle, { color: isDraw ? theme.accent : iWon ? '#f59e0b' : theme.textMuted }]}>
@@ -721,13 +714,7 @@ export default function OnlineGameScreen({
           </View>
         </View>
 
-        <TouchableOpacity
-          style={[styles.doneBtn, { backgroundColor: theme.accent }]}
-          onPress={onBack}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.doneBtnText, { color: theme.textOnAccent }]}>العودة للرئيسية</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label='العودة للرئيسية' variant='primary' size='large' style={styles.doneBtn} />
       </View>
     );
   }
@@ -736,7 +723,7 @@ export default function OnlineGameScreen({
   if (phase === 'picking') {
     const round = rounds[currentRound];
     return (
-      <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.container, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
         {/* هيدر */}
@@ -803,7 +790,7 @@ export default function OnlineGameScreen({
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       {/* هيدر */}
@@ -872,18 +859,17 @@ export default function OnlineGameScreen({
         {/* الخيارات */}
         <View style={styles.choicesContainer}>
           {choices.map((choice, i) => (
-            <TouchableOpacity
+            <ThemedCard
               key={i}
-              style={getChoiceStyle(choice)}
               onPress={() => handleAnswer(choice)}
               disabled={isAnswered || eliminated.has(choice)}
-              activeOpacity={0.85}
+              style={getChoiceStyle(choice)}
             >
               <Text style={[styles.choiceLetter, { color: theme.accent }]}>{ARABIC_LETTERS[i]}</Text>
               <Text style={[styles.choiceText, { color: getTextColor(choice) }]}>{choice}</Text>
               {isAnswered && choice === selectedCat?.correct && <Text>✅</Text>}
               {isAnswered && choice === selectedChoice && choice !== selectedCat?.correct && <Text>❌</Text>}
-            </TouchableOpacity>
+            </ThemedCard>
           ))}
         </View>
 
@@ -899,15 +885,12 @@ export default function OnlineGameScreen({
 
         {/* زر التالي */}
         {isAnswered && (
-          <TouchableOpacity
-            style={[styles.nextBtn, { backgroundColor: theme.accent }]}
+          <ThemedButton
             onPress={handleNext}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.nextBtnText, { color: theme.textOnAccent }]}>
-              {currentRound + 1 >= ROUNDS_TOTAL ? 'إنهاء اللعبة' : 'الجولة التالية ←'}
-            </Text>
-          </TouchableOpacity>
+            label={currentRound + 1 >= ROUNDS_TOTAL ? 'إنهاء اللعبة' : 'الجولة التالية ←'}
+            variant='primary' size='large'
+            style={styles.nextBtn}
+          />
         )}
       </ScrollView>
       <LeaveModal

@@ -1,319 +1,193 @@
 /**
- * GameBoardScreen.js — محدّث
+ * TokenModal.js — محدّث
  * ════════════════════════════════════════════════
- *  ✅ tokens و setTokens ممررة من App.js
- *  ✅ onSwapSame / onSwapRandom مبنيّة هنا وممررة لـ QuestionScreen
- *  ✅ onSpendTokens يخصم من tokens ويحدّث الـ state
- *  ✅ باقي منطق اللوح محفوظ كما هو
+ *  ✅ MAX_ADS محدّث إلى 10 إعلانات/يوم للتوكنز
+ *  ✅ AD_REWARD = 15 توكن لكل إعلان
+ *  ✅ باقي الوظائف كما هي
  */
 
-import { useState, useCallback, memo, useMemo, useEffect } from 'react';
-import {
-  StyleSheet, Text, View, TouchableOpacity,
-  StatusBar, ScrollView, useWindowDimensions, Alert, ActivityIndicator, BackHandler } from 'react-native';
-import QuestionScreen from './QuestionScreen';
+import { useState, useEffect } from 'react';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from './ThemeContext';
-import LeaveModal from './LeaveModal';
-import { useT, useLanguage } from './I18n';
-import { WebScreenButton, GameInfoButton } from './WebRoomService';
-import { fetchQuestionsForCategories } from './firebaseConfig';
+import ExitButton from './ExitButton';
+import { useT } from './I18n';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
-const pointColors      = { 100: '#1a3a6e', 200: '#1a5a3a', 300: '#5a5a00', 400: '#7a3a00', 500: '#7a1a1a' };
-const pointColorsLight = { 100: '#2a5aaa', 200: '#2a8a5a', 300: '#8a8a00', 400: '#aa5a00', 500: '#aa2a2a' };
+const MAX_ADS   = 10;  // ✅ 10 إعلانات/يوم للتوكنز
+const AD_REWARD = 15;  // ✅ 15 توكن لكل إعلان
+const ADS_KEY   = 'almaydan_ads';
 
-const POINTS_TO_LEVEL = { 100: 1, 200: 2, 300: 3, 400: 4, 500: 5 };
-const POINTS = [500, 400, 300, 200, 100];
+const PLANS = [
+  { id: 'monthly',   icon: '🚀', nameKey: 'tokens.planMonthly',  subKey: 'tokens.planMonthlyAr',  durationKey: 'tokens.month6',   price: '$2.99'  },
+  { id: 'sixmonths', icon: '⭐', nameKey: 'tokens.planSixMonths', subKey: 'tokens.planSixMonthsAr',durationKey: 'tokens.months6',  price: '$9.99'  },
+  { id: 'yearly',    icon: '🏆', nameKey: 'tokens.planYearly',   subKey: 'tokens.planYearlyAr',   durationKey: 'tokens.year',     price: '$15.99' },
+];
 
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+const PACKAGES = [
+  { id: 'sm', labelKey: 'tokens.small',  amount: 100,  price: '0.99$' },
+  { id: 'md', labelKey: 'tokens.medium', amount: 250,  price: '1.99$' },
+  { id: 'lg', labelKey: 'tokens.large',  amount: 600,  price: '3.99$' },
+  { id: 'xl', labelKey: 'tokens.xlarge', amount: 1500, price: '7.99$' },
+];
 
-const Cell = memo(({ used, pts, onPress }) => (
-  <TouchableOpacity style={[styles.cell, used && styles.cellUsed]} onPress={onPress} disabled={used}>
-    <Text style={[styles.cellText, used && styles.cellTextUsed]}>{pts}</Text>
-  </TouchableOpacity>
-));
-
-const CategoryHeader = memo(({ cat, colWidth, theme }) => (
-  <View style={[styles.catHeader, { width: colWidth, backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
-    <Text style={styles.catEmoji}>{cat.emoji}</Text>
-    <Text style={[styles.catHeaderText, { color: theme.accent }]} numberOfLines={2}>{cat.name}</Text>
-  </View>
-));
-
-const TopBar = memo(({ scores, team1, team2, currentTeam, onEnd, theme, t, currentUser, themeId, lang }) => (
-  <View style={[styles.topBar, { backgroundColor: theme.bgElevated, borderBottomColor: theme.divider }]}>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-      <TouchableOpacity style={[styles.endBtn, { backgroundColor: theme.bgCard, borderColor: '#ff444433' }]} onPress={onEnd}>
-        <Text style={styles.endIcon}>🏁</Text>
-        <Text style={[styles.endText, { color: theme.error }]}>{t('board.endBtn')}</Text>
-      </TouchableOpacity>
-      <GameInfoButton gameType="classic" lang={lang} />
-      <WebScreenButton
-        playerUid={currentUser?.uid || 'board_p0'}
-        playerName={team1 || ''}
-        gameType="classic"
-        getPublicData={() => ({ scores, team1, team2, currentTeam })}
-        themeName={themeId || 'dark'}
-      />
-    </View>
-
-    <View style={[styles.teamCard, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
-      <Text style={[styles.teamName, { color: theme.textSecondary }]} numberOfLines={1}>
-        {scores.team2 > scores.team1 && scores.team2 > 0 ? '👑 ' : ''}{team2}
-      </Text>
-      <Text style={[styles.teamScore, { color: theme.accent }]}>{scores.team2}</Text>
-    </View>
-
-    <View style={styles.spacer} />
-
-    <View style={[styles.teamCard, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
-      <Text style={[styles.teamName, { color: theme.textSecondary }]} numberOfLines={1}>
-        {scores.team1 >= scores.team2 && scores.team1 > 0 ? '👑 ' : ''}{team1}
-      </Text>
-      <Text style={[styles.teamScore, { color: theme.accent }]}>{scores.team1}</Text>
-    </View>
-  </View>
-));
-
-export default function GameBoardScreen({
-  onGameEnd, team1, team2, selectedCategories,
-  gameMode = 'classic',
-  tokens = 0,
-  setTokens,
-  currentUser,
-}) {
-  const { theme, isDark, themeId } = useTheme();
+export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
+  const { theme } = useTheme();
   const t = useT();
-  const { lang } = useLanguage();
-  const { width, height }  = useWindowDimensions();
-  const isLandscape = width > height;
-  const numCats     = selectedCategories.length;
+  const [adsLeft,    setAdsLeft]    = useState(MAX_ADS);
+  const [watchingAd, setWatchingAd] = useState(false);
 
-  const [scores,         setScores]         = useState({ team1: 0, team2: 0 });
-  const [currentTeam,    setCurrentTeam]    = useState(1);
-  const [usedQuestions,  setUsedQuestions]  = useState({});
-  const [activeQuestion,  setActiveQuestion]  = useState(null);
-  const [leaveVisible,    setLeaveVisible]    = useState(false);
+  useEffect(() => { if (visible) loadAdsData(); }, [visible]);
 
-  // ── أسئلة تُجلب lazy عند بداية اللوح ──
-  const [questionsMap, setQuestionsMap] = useState(null); // { [catId]: questions[] }
-  const [loadingQ,     setLoadingQ]     = useState(true);
+  const loadAdsData = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(ADS_KEY);
+      if (raw) {
+        const { date, count } = JSON.parse(raw);
+        const today = new Date().toDateString();
+        if (date === today) { setAdsLeft(MAX_ADS - count); }
+        else {
+          setAdsLeft(MAX_ADS);
+          await AsyncStorage.setItem(ADS_KEY, JSON.stringify({ date: today, count: 0 }));
+        }
+      } else { setAdsLeft(MAX_ADS); }
+    } catch (e) { console.error(e); }
+  };
 
-  useEffect(() => {
-    const ids = selectedCategories.map(c => c.id);
-    fetchQuestionsForCategories(ids)
-      .then(map => setQuestionsMap(map))
-      .catch(() => setQuestionsMap({}))
-      .finally(() => setLoadingQ(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const handleWatchAd = async () => {
+    if (adsLeft <= 0) return;
+    setWatchingAd(true);
+    setTimeout(async () => {
+      try {
+        const today   = new Date().toDateString();
+        const watched = MAX_ADS - adsLeft + 1;
+        await AsyncStorage.setItem(ADS_KEY, JSON.stringify({ date: today, count: watched }));
+        setAdsLeft(adsLeft - 1);
+        onAddTokens(AD_REWARD);
+        setWatchingAd(false);
+        Alert.alert(t('tokens.congrats'), t('tokens.earned', { n: AD_REWARD }), [{ text: t('tokens.great') }]);
+      } catch (e) { console.error(e); setWatchingAd(false); }
+    }, 3000);
+  };
 
-  // دمج metadata الفئات مع الأسئلة المجلوبة
-  const enrichedCategories = useMemo(() => {
-    if (!questionsMap) return selectedCategories;
-    return selectedCategories.map(c => ({
-      ...c,
-      questions: questionsMap[c.id] ?? [],
-    }));
-  }, [selectedCategories, questionsMap]);
-
-  const totalQuestions = numCats * 10;
-
-  const colWidth = useMemo(() => {
-    const hPad = 10, gap = 6;
-    const available = width - hPad * 2 - gap * (numCats - 1);
-    const ideal  = available / numCats;
-    const minCol = isLandscape ? 90 : 68;
-    return Math.max(ideal, minCol);
-  }, [width, isLandscape, numCats]);
-
-  const pColors = theme.isLight ? pointColorsLight : pointColors;
-
-  const isUsed = useCallback((catId, pts, side) =>
-    !!usedQuestions[`${catId}-${pts}-${side}`],
-  [usedQuestions]);
-
-  const handleOpenQuestion = useCallback((cat, pts, side) => {
-    if (usedQuestions[`${cat.id}-${pts}-${side}`]) return;
-    const questions = cat.questions || [];
-    if (questions.length === 0) { Alert.alert('', t('board.noCatsQ')); return; }
-    const targetLevel    = POINTS_TO_LEVEL[pts];
-    const levelQuestions = questions.filter(q => q.level === targetLevel);
-    const pool = levelQuestions.length > 0 ? levelQuestions : questions;
-    const q    = pool[Math.floor(Math.random() * pool.length)];
-    setActiveQuestion({ cat, pts, side, question: q });
-  }, [usedQuestions, t]);
-
-  const handleAnswer = useCallback((teamNum, pts) => {
-    const key = `${activeQuestion.cat.id}-${activeQuestion.pts}-${activeQuestion.side}`;
-    setUsedQuestions(prev => {
-      const newUsed   = { ...prev, [key]: true };
-      const newScores = { ...scores };
-      if (teamNum !== null) newScores[`team${teamNum}`] += pts;
-      setScores(newScores);
-      setCurrentTeam(tk => tk === 1 ? 2 : 1);
-      setActiveQuestion(null);
-      if (Object.keys(newUsed).length === totalQuestions) onGameEnd(newScores.team1, newScores.team2);
-      return newUsed;
-    });
-  }, [activeQuestion, scores, totalQuestions, onGameEnd]);
-
-  const handleEndGame = useCallback(() => {
-    Alert.alert(t('board.endQ'), t('board.endMsg'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('board.endYes'), style: 'destructive', onPress: () => onGameEnd(scores.team1, scores.team2) },
-    ]);
-  }, [scores, onGameEnd, t]);
-
-  const handleBack = useCallback(() => {
-    if (activeQuestion) { setActiveQuestion(null); return; }
-    setLeaveVisible(true);
-  }, [activeQuestion]);
-
-  // اعترض السحب من الطرف وزر الرجوع
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (activeQuestion) { setActiveQuestion(null); return true; }
-      setLeaveVisible(true);
-      return true;
-    });
-    return () => sub.remove();
-  }, [activeQuestion]);
-
-  // ── خصم التوكنز لوسائل المساعدة ──
-  const handleSpendTokens = useCallback((cost) => {
-    if (tokens < cost) return false;
-    setTokens?.(prev => prev - cost);
-    return true;
-  }, [tokens, setTokens]);
-
-  // ── تبديل نفس الفئة (swapSame) ──
-  const handleSwapSame = useCallback(() => {
-    if (!activeQuestion) return null;
-    const { cat, pts } = activeQuestion;
-    const targetLevel  = POINTS_TO_LEVEL[pts];
-    const pool         = (cat.questions || []).filter(q =>
-      q.level === targetLevel && q !== activeQuestion.question
+  const handlePlan = (plan) => {
+    Alert.alert(
+      `${plan.icon} ${t(plan.nameKey)} ${t(plan.durationKey)}`,
+      t('tokens.planMsg', { p: plan.price }),
+      [{ text: t('common.ok') }]
     );
-    if (pool.length === 0) return null;
-    const newQ = pool[Math.floor(Math.random() * pool.length)];
-    setActiveQuestion(prev => ({ ...prev, question: newQ }));
-    return { question: newQ.question ?? newQ.text, answer: newQ.correct ?? newQ.answer, wrong: newQ.wrong ?? [] };
-  }, [activeQuestion]);
+  };
 
-  // ── تبديل عشوائي (swapRandom) ──
-  const handleSwapRandom = useCallback(() => {
-    const allQs = enrichedCategories.flatMap(cat =>
-      (cat.questions || []).map(q => ({ ...q, catName: cat.name, catEmoji: cat.emoji }))
+  const handlePackage = (pkg) => {
+    Alert.alert(
+      `🪙 ${pkg.amount}`,
+      t('tokens.pkgMsg', { p: pkg.price }),
+      [{ text: t('common.ok') }]
     );
-    if (allQs.length === 0) return null;
-    const newQ = allQs[Math.floor(Math.random() * allQs.length)];
-    setActiveQuestion(prev => ({
-      ...prev,
-      question: newQ,
-      cat: { ...prev.cat, name: newQ.catName, emoji: newQ.catEmoji },
-    }));
-    return { question: newQ.question ?? newQ.text, answer: newQ.correct ?? newQ.answer, wrong: newQ.wrong ?? [] };
-  }, [enrichedCategories]);
-
-  // ── loading ──
-  if (loadingQ) {
-    return (
-      <View style={[styles.root, { backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={theme.accent} />
-      </View>
-    );
-  }
-
-  if (activeQuestion) {
-    const q = activeQuestion.question;
-    return (
-      <QuestionScreen
-        question={q.question ?? q.text}
-        answer={q.correct   ?? q.answer}
-        wrong={q.wrong      ?? []}
-        points={activeQuestion.pts}
-        category={activeQuestion.cat.name}
-        team1={team1}
-        team2={team2}
-        currentTeam={currentTeam}
-        onAnswer={handleAnswer}
-        onBack={handleBack}
-        mode={gameMode}
-        tokens={tokens}
-        onSpendTokens={handleSpendTokens}
-        onSwapSame={handleSwapSame}
-        onSwapRandom={handleSwapRandom}
-        imageUrl={q.imageUrl ?? null}
-      />
-    );
-  }
-
-  const hPad = 10, gap = 6;
+  };
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
-      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <View style={[styles.sheet, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
 
-      <TopBar
-        scores={scores} team1={team1} team2={team2}
-        currentTeam={currentTeam} onEnd={handleEndGame}
-        theme={theme} t={t} currentUser={currentUser} themeId={themeId} lang={lang}
-      />
+          <View style={[styles.header, { borderBottomColor: theme.divider }]}>
+            <ExitButton onPress={onClose} size={34} />
+            <Text style={[styles.title, { color: theme.textSecondary }]}>{t('tokens.title')}</Text>
+            <Text style={[styles.balance, { color: theme.accent }]}>{tokens} 🪙</Text>
+          </View>
 
-      <View style={{ flex: 1 }}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: hPad, paddingVertical: 8 }}
-        >
-          <View style={{ gap: 6 }}>
-            <View style={{ flexDirection: 'row', gap }}>
-              {enrichedCategories.map(cat => (
-                <CategoryHeader key={cat.id} cat={cat} colWidth={colWidth} theme={theme} />
-              ))}
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+
+            {/* إعلان للتوكنز */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.accent }]}>{t('tokens.watchAd')}</Text>
+              <View style={[styles.adCard, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}>
+                <View style={styles.adInfo}>
+                  <Text style={[styles.adReward, { color: theme.textPrimary }]}>{t('tokens.reward', { n: AD_REWARD })}</Text>
+                  <Text style={[styles.adCounter, { color: theme.textSecondary }]}>{t('tokens.adsLeft', { n: adsLeft, t: MAX_ADS })}</Text>
+                </View>
+                <ThemedButton
+                  onPress={handleWatchAd}
+                  disabled={adsLeft <= 0 || watchingAd}
+                  label={watchingAd ? t('tokens.watching') : adsLeft <= 0 ? t('tokens.tomorrow') : t('tokens.watch')}
+                  variant={adsLeft <= 0 || watchingAd ? 'secondary' : 'primary'}
+                  size='medium'
+                  style={styles.adBtn}
+                />
+              </View>
             </View>
-            {POINTS.map(pts => (
-              <View key={pts} style={{ flexDirection: 'row', gap }}>
-                {enrichedCategories.map(cat => (
-                  <View key={cat.id} style={[styles.cellPair, { width: colWidth, backgroundColor: pColors[pts] }]}>
-                    <Cell used={isUsed(cat.id, pts, 'L')} pts={pts} onPress={() => handleOpenQuestion(cat, pts, 'L')} />
-                    <View style={styles.cellDivider} />
-                    <Cell used={isUsed(cat.id, pts, 'R')} pts={pts} onPress={() => handleOpenQuestion(cat, pts, 'R')} />
-                  </View>
+
+            {/* ترقية */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.accent }]}>{t('tokens.upgradePremium')}</Text>
+              <View style={styles.plansCol}>
+                {PLANS.map((plan) => (
+                  <ThemedCard key={plan.id} onPress={() => handlePlan(plan)} radius={14} padding={14} variant="accent">
+                    <Text style={styles.planIcon}>{plan.icon}</Text>
+                    <View style={styles.planInfo}>
+                      <Text style={[styles.planName, { color: theme.textPrimary }]}>{t(plan.nameKey)}</Text>
+                      <Text style={[styles.planDuration, { color: theme.textSecondary }]}>{t(plan.subKey)}</Text>
+                    </View>
+                    <Text style={[styles.planPrice, { color: theme.accent }]}>{plan.price}</Text>
+                  </ThemedCard>
                 ))}
               </View>
-            ))}
-          </View>
-        </ScrollView>
+            </View>
+
+            {/* شراء توكنز */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.accent }]}>{t('tokens.buyCoins')}</Text>
+              <View style={styles.packagesGrid}>
+                {PACKAGES.map((pkg) => (
+                  <ThemedCard key={pkg.id} onPress={() => handlePackage(pkg)} radius={12} padding={12}>
+                    <Text style={[styles.packAmount, { color: theme.accent }]}>{pkg.amount}</Text>
+                    <Text style={styles.packCoin}>🪙</Text>
+                    <Text style={[styles.packLabel, { color: theme.textSecondary }]}>{t(pkg.labelKey)}</Text>
+                    <View style={[styles.packPriceTag, { backgroundColor: theme.accent }]}>
+                      <Text style={[styles.packPrice, { color: theme.textOnAccent }]}>{pkg.price}</Text>
+                    </View>
+                  </ThemedCard>
+                ))}
+              </View>
+            </View>
+
+          </ScrollView>
+        </View>
       </View>
-    </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  root:          { flex: 1, paddingTop: 46 },
-  topBar:        { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, gap: 8 },
-  spacer:        { flex: 1 },
-  teamCard:      { alignItems: 'center', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, minWidth: 80 },
-  teamName:      { fontSize: 11, fontWeight: '700', maxWidth: 100, textAlign: 'center' },
-  teamScore:     { fontSize: 20, fontWeight: '900' },
-  endBtn:        { alignItems: 'center', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, minWidth: 54 },
-  endIcon:       { fontSize: 16 },
-  endText:       { fontSize: 10, fontWeight: '700' },
-  catHeader:     { borderRadius: 10, paddingVertical: 10, alignItems: 'center', gap: 4, borderWidth: 1 },
-  catEmoji:      { fontSize: 20 },
-  catHeaderText: { fontSize: 10, fontWeight: '800', textAlign: 'center', paddingHorizontal: 2 },
-  cellPair:      { flexDirection: 'row', borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  cell:          { flex: 1, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
-  cellDivider:   { width: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
-  cellUsed:      { opacity: 0.2 },
-  cellText:      { fontSize: 12, fontWeight: '900' },
-  cellTextUsed:  { color: '#888' },
+  overlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'flex-end' },
+  sheet:        { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%', borderWidth: 1 },
+  header:       { alignItems: 'center', padding: 20, borderBottomWidth: 1, gap: 4 },
+  closeBtn:     { position: 'absolute', left: 20, top: 20, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  closeText:    { fontSize: 14, fontWeight: '700' },
+  title:        { fontSize: 14, fontWeight: '600' },
+  balance:      { fontSize: 32, fontWeight: '900' },
+  content:      { padding: 20, gap: 24 },
+  section:      { gap: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: '800' },
+  adCard:       { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1 },
+  adInfo:       { gap: 4 },
+  adReward:     { fontSize: 16, fontWeight: '700' },
+  adCounter:    { fontSize: 13 },
+  adBtn:        { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12 },
+  adBtnText:    { fontSize: 14, fontWeight: '800' },
+  plansCol:     { gap: 10 },
+  planCard:     { borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1 },
+  planIcon:     { fontSize: 28 },
+  planInfo:     { flex: 1 },
+  planName:     { fontSize: 16, fontWeight: '800' },
+  planDuration: { fontSize: 13 },
+  planPrice:    { fontSize: 18, fontWeight: '900' },
+  packagesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  packCard:     { width: '47%', borderRadius: 16, padding: 16, alignItems: 'center', gap: 4, borderWidth: 1 },
+  packAmount:   { fontSize: 26, fontWeight: '900' },
+  packCoin:     { fontSize: 20 },
+  packLabel:    { fontSize: 13 },
+  packPriceTag: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, marginTop: 4 },
+  packPrice:    { fontSize: 13, fontWeight: '800' },
 });

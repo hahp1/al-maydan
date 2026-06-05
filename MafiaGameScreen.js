@@ -18,8 +18,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
   StatusBar, ScrollView, Alert, Animated, Modal, TextInput,
-  Dimensions, Clipboard
+  Dimensions,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { db } from './firebaseConfig';
 import {
   doc, setDoc, updateDoc, onSnapshot, getDoc, collection,
@@ -94,17 +95,10 @@ function PlayerAvatar({ name, isEliminated, isSelected, role, showRole, theme, s
   const roleData = role ? ROLE_INFO[role] : null;
 
   return (
-    <TouchableOpacity
+    <ThemedCard
       onPress={onPress}
       disabled={disabled || !onPress}
-      activeOpacity={0.75}
-      style={[
-        avatarS.wrap,
-        {
-          width: size + 16, alignItems: 'center',
-          opacity: isEliminated ? 0.4 : 1,
-        }
-      ]}
+      style={[avatarS.wrap, { width: size + 16, alignItems: 'center', opacity: isEliminated ? 0.4 : 1 }]}
     >
       <View style={[
         avatarS.circle,
@@ -141,7 +135,7 @@ function PlayerAvatar({ name, isEliminated, isSelected, role, showRole, theme, s
           <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700' }}>✓</Text>
         </View>
       )}
-    </TouchableOpacity>
+    </ThemedCard>
   );
 }
 
@@ -216,6 +210,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
   const unsubRef = useRef(null);
   const timerRef = useRef(null);
   const phaseStartRef = useRef(null);
+  const gameEndCalledRef = useRef(false);
 
   const myUid = currentUser?.uid || `guest_${Math.random().toString(36).slice(2, 10)}`;
   const myName = currentUser?.name || 'لاعب';
@@ -274,6 +269,17 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
 
     return () => clearInterval(timerRef.current);
   }, [roomData?.gamePhase, roomData?.round]);
+
+  // ── استدعاء onGameEnd مرة واحدة عند انتهاء اللعبة ──
+  useEffect(() => {
+    if (roomData?.gamePhase !== 'finished' || gameEndCalledRef.current) return;
+    const winner    = roomData.winner;
+    const myRole    = roomData.roles?.[myUid];
+    const isMafiaWin = winner === 'mafia';
+    const myTeamWon  = (isMafiaWin && myRole === 'mafia') || (!isMafiaWin && myRole !== 'mafia');
+    gameEndCalledRef.current = true;
+    if (onGameEnd) onGameEnd(myTeamWon);
+  }, [roomData?.gamePhase]);
 
   // ── reset vote/action عند مرحلة جديدة ──
   useEffect(() => {
@@ -630,6 +636,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
       roomData={roomData}
       isCreator={isCreator}
       myUid={myUid}
+      myName={myName}
       minPlayers={MIN_PLAYERS}
       maxPlayers={MAX_PLAYERS}
       onStart={handleStart}
@@ -637,12 +644,16 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
       showLeave={showLeave}
       onCancelLeave={() => setShowLeave(false)}
       onConfirmLeave={handleLeave}
+      onBack={onBack}
+      lang={lang}
+      roomId={roomId}
+      themeId={themeId}
     />
   );
 
   // Game screen
   if (!roomData) return (
-    <View style={[gs.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg, justifyContent: 'center', alignItems: 'center' }]}>
+    <View style={[gs.container, { backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center' }]}>
       <ActivityIndicator size="large" color={theme.accent} />
     </View>
   );
@@ -653,7 +664,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
   const alivePlayers = (roomData.players || []).filter(p => p.alive);
 
   return (
-    <View style={[gs.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[gs.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} />
 
       {/* زر الخروج + شاشة كبيرة */}
@@ -729,11 +740,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
 
       {/* ── finished ── */}
       {phase === 'finished' && (() => {
-        const winner    = roomData.winner;
-        const myRole    = roomData.roles?.[myUid];
-        const isMafiaWin = winner === 'mafia';
-        const myTeamWon  = (isMafiaWin && myRole === 'mafia') || (!isMafiaWin && myRole !== 'mafia');
-        if (onGameEnd) onGameEnd(myTeamWon);
+        const myRole = roomData.roles?.[myUid];
         return (
           <FinishedPhase
             theme={theme}
@@ -760,7 +767,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
 // ═══════════════════════════════════════════
 function SetupScreen({ theme, joinCode, setJoinCode, loading, error, onBack, onCreate, onJoin }) {
   return (
-    <View style={[gs.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[gs.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} />
 
       {/* زر الرجوع أعلى يسار */}
@@ -790,15 +797,7 @@ function SetupScreen({ theme, joinCode, setJoinCode, loading, error, onBack, onC
           <Text style={[gs.cardSub, { color: theme.textSecondary }]}>
             شارك كود الغرفة مع أصدقائك ({MIN_PLAYERS}–{MAX_PLAYERS} لاعبين)
           </Text>
-          <TouchableOpacity
-            style={[gs.btnPrimary, { backgroundColor: theme.accent }]}
-            onPress={onCreate} disabled={loading} activeOpacity={0.85}
-          >
-            {loading
-              ? <ActivityIndicator color={theme.textOnAccent} />
-              : <Text style={[gs.btnText, { color: theme.textOnAccent }]}>إنشاء غرفة ✦</Text>
-            }
-          </TouchableOpacity>
+          <ThemedButton onPress={onCreate} disabled={loading} label={loading ? '...' : 'إنشاء غرفة ✦'} variant='primary' size='large' style={gs.btnPrimary} />
         </View>
 
         {/* انضمام بكود */}
@@ -814,12 +813,7 @@ function SetupScreen({ theme, joinCode, setJoinCode, loading, error, onBack, onC
             autoCapitalize="characters"
             textAlign="center"
           />
-          <TouchableOpacity
-            style={[gs.btnSecondary, { backgroundColor: theme.bgElevated, borderColor: theme.borderCard }]}
-            onPress={onJoin} disabled={loading} activeOpacity={0.85}
-          >
-            <Text style={[gs.btnText, { color: theme.textPrimary }]}>انضمام</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onJoin} disabled={loading} label='انضمام' variant='secondary' size='large' style={gs.btnSecondary} />
         </View>
 
         {error ? <Text style={gs.errorText}>{error}</Text> : null}
@@ -831,17 +825,18 @@ function SetupScreen({ theme, joinCode, setJoinCode, loading, error, onBack, onC
 // ═══════════════════════════════════════════
 //  شاشة اللوبي
 // ═══════════════════════════════════════════
-function LobbyScreen({ theme, roomCode, roomData, isCreator, myUid, minPlayers, maxPlayers,
-  onStart, onLeave, showLeave, onCancelLeave, onConfirmLeave }) {
+function LobbyScreen({ theme, roomCode, roomData, isCreator, myUid, myName, minPlayers, maxPlayers,
+  onStart, onLeave, showLeave, onCancelLeave, onConfirmLeave,
+  onBack, lang, roomId, themeId }) {
   const players = roomData?.players || [];
   const canStart = players.length >= minPlayers;
 
   const copyCode = () => {
-    Clipboard.setString(roomCode);
+    Clipboard.setStringAsync(roomCode);
   };
 
   return (
-    <View style={[gs.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+    <View style={[gs.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} />
 
       <View style={gs.exitBtnRow}>
@@ -863,14 +858,11 @@ function LobbyScreen({ theme, roomCode, roomData, isCreator, myUid, minPlayers, 
         <Text style={[gs.lobbyGame, { color: theme.textSecondary }]}>🕵️ المافيا</Text>
 
         {/* كود الغرفة */}
-        <TouchableOpacity
-          style={[gs.codeBox, { backgroundColor: theme.bgCard, borderColor: theme.accent + '60' }]}
-          onPress={copyCode} activeOpacity={0.8}
-        >
+        <ThemedCard onPress={copyCode} style={gs.codeBox}>
           <Text style={[gs.codeLabel, { color: theme.textSecondary }]}>كود الغرفة</Text>
           <Text style={[gs.codeValue, { color: theme.accent }]}>{roomCode}</Text>
           <Text style={[gs.codeCopy, { color: theme.textMuted }]}>اضغط للنسخ 📋</Text>
-        </TouchableOpacity>
+        </ThemedCard>
 
         {/* قائمة اللاعبين */}
         <View style={[gs.playerListCard, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
@@ -905,24 +897,14 @@ function LobbyScreen({ theme, roomCode, roomData, isCreator, myUid, minPlayers, 
         </View>
 
         {isCreator && (
-          <TouchableOpacity
-            style={[
-              gs.btnPrimary,
-              {
-                backgroundColor: canStart ? theme.accent : theme.bgElevated,
-                borderWidth: 1,
-                borderColor: canStart ? theme.accent : theme.borderCard,
-                marginTop: 8,
-              }
-            ]}
+          <ThemedButton
             onPress={onStart}
             disabled={!canStart}
-            activeOpacity={0.85}
-          >
-            <Text style={[gs.btnText, { color: canStart ? theme.textOnAccent : theme.textMuted }]}>
-              {canStart ? 'بدء اللعبة ▶' : `يحتاج ${minPlayers} لاعبين على الأقل`}
-            </Text>
-          </TouchableOpacity>
+            variant={canStart ? 'primary' : 'secondary'}
+            size='large'
+            style={[gs.btnPrimary, { marginTop: 8 }]}
+            label={canStart ? 'بدء اللعبة ▶' : `يحتاج ${minPlayers} لاعبين على الأقل`}
+          />
         )}
 
         {!isCreator && (
@@ -1051,42 +1033,25 @@ function DayPhase({ theme, roomData, myUid, myRole, myPlayer, myVote, voteSubmit
           </View>
 
           {/* خيار التأجيل */}
-          <TouchableOpacity
-            style={[
-              gs.postponeBtn,
-              {
-                backgroundColor: pendingVote === 'postpone'
-                  ? theme.bgElevated
-                  : theme.bgCard,
-                borderColor: pendingVote === 'postpone'
-                  ? theme.accent
-                  : theme.borderCard,
-                borderWidth: pendingVote === 'postpone' ? 2 : 1,
-              }
-            ]}
+          <ThemedCard
             onPress={() => handleSelect('postpone')}
-            activeOpacity={0.8}
+            style={gs.postponeBtn}
+            variant={pendingVote === 'postpone' ? 'accent' : 'default'}
           >
             <Text style={{ fontSize: 20 }}>🕊️</Text>
             <Text style={[gs.postponeText, { color: pendingVote === 'postpone' ? theme.accent : theme.textSecondary }]}>
               تأجيل التصويت للغد
             </Text>
-          </TouchableOpacity>
+          </ThemedCard>
 
           {/* زر التأكيد */}
           {pendingVote && (
-            <TouchableOpacity
-              style={[gs.confirmVoteBtn, { backgroundColor: '#f59e0b' }]}
+            <ThemedButton
               onPress={handleConfirm}
-              activeOpacity={0.85}
-            >
-              <Text style={[gs.confirmVoteBtnText, { color: theme.textOnAccent }]}>
-                {pendingVote === 'postpone'
-                  ? '✓ تأكيد التأجيل'
-                  : `✓ طرد ${pendingPlayer?.name}`
-                }
-              </Text>
-            </TouchableOpacity>
+              label={pendingVote === 'postpone' ? '✓ تأكيد التأجيل' : `✓ طرد ${pendingPlayer?.name}`}
+              variant='primary' size='large'
+              style={gs.confirmVoteBtn}
+            />
           )}
         </>
       )}
@@ -1113,12 +1078,7 @@ function DayPhase({ theme, roomData, myUid, myRole, myPlayer, myVote, voteSubmit
       )}
 
       {isCreator && (
-        <TouchableOpacity
-          style={[gs.btnSecondary, { borderColor: theme.borderCard, marginTop: 8 }]}
-          onPress={onForceAdvance}
-        >
-          <Text style={{ color: theme.textSecondary, fontSize: 13 }}>⏩ إنهاء التصويت مبكرًا</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onForceAdvance} label='⏩ إنهاء التصويت مبكرًا' variant='ghost' size='small' style={[gs.btnSecondary, { marginTop: 8 }]} />
       )}
     </ScrollView>
   );
@@ -1262,18 +1222,11 @@ function NightPhase({ theme, roomData, myUid, myRole, myPlayer, myAction, action
               .map(p => {
                 const isSelected = pendingAction === p.uid;
                 return (
-                  <TouchableOpacity
+                  <ThemedCard
                     key={p.uid}
                     onPress={() => setPendingAction(p.uid)}
-                    activeOpacity={0.75}
-                    style={[
-                      gs.nightPlayerTile,
-                      {
-                        backgroundColor: isSelected ? info.color + '20' : theme.bgCard,
-                        borderColor: isSelected ? info.color : theme.borderCard,
-                        borderWidth: isSelected ? 2.5 : 1,
-                      }
-                    ]}
+                    style={gs.nightPlayerTile}
+                    variant={isSelected ? 'accent' : 'default'}
                   >
                     <Text style={gs.nightPlayerEmoji}>🎭</Text>
                     <Text style={[gs.nightPlayerName, { color: theme.textPrimary }]}>{p.name}</Text>
@@ -1282,7 +1235,7 @@ function NightPhase({ theme, roomData, myUid, myRole, myPlayer, myAction, action
                         <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>✓</Text>
                       </View>
                     )}
-                  </TouchableOpacity>
+                  </ThemedCard>
                 );
               })
             }
@@ -1294,25 +1247,14 @@ function NightPhase({ theme, roomData, myUid, myRole, myPlayer, myAction, action
               <Text style={[gs.pendingConfirmText, { color: info.color }]}>
                 {confirmMessage()}
               </Text>
-              <TouchableOpacity
-                style={[gs.confirmNightBtn, { backgroundColor: info.color }]}
-                onPress={() => { onAction(pendingAction); }}
-                activeOpacity={0.85}
-              >
-                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>تأكيد الاختيار ✓</Text>
-              </TouchableOpacity>
+              <ThemedButton onPress={() => { onAction(pendingAction); }} label='تأكيد الاختيار ✓' variant='primary' size='large' style={gs.confirmNightBtn} />
             </View>
           )}
         </>
       )}
 
       {isCreator && (
-        <TouchableOpacity
-          style={[gs.btnSecondary, { borderColor: theme.borderCard, marginTop: 12 }]}
-          onPress={onForceResolve}
-        >
-          <Text style={{ color: theme.textSecondary, fontSize: 13 }}>⏩ إنهاء الليل مبكرًا</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onForceResolve} label='⏩ إنهاء الليل مبكرًا' variant='ghost' size='small' style={[gs.btnSecondary, { marginTop: 12 }]} />
       )}
     </ScrollView>
   );
@@ -1418,13 +1360,7 @@ function FinishedPhase({ theme, roomData, myUid, myRole, onLeave }) {
         })}
       </View>
 
-      <TouchableOpacity
-        style={[gs.btnPrimary, { backgroundColor: theme.accent, marginTop: 24, marginBottom: 40 }]}
-        onPress={onLeave}
-        activeOpacity={0.85}
-      >
-        <Text style={[gs.btnText, { color: theme.textOnAccent }]}>العودة للقائمة</Text>
-      </TouchableOpacity>
+      <ThemedButton onPress={onLeave} label='العودة للقائمة' variant='primary' size='large' style={[gs.btnPrimary, { marginTop: 24, marginBottom: 40 }]} />
     </ScrollView>
   );
 }

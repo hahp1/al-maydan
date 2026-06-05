@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useLanguage, useT } from './I18n';
 import { useTheme } from './ThemeContext';
+import { ThemedCard } from './ThemedComponents';
 
 // ══════════════════════════════════════════════════════════════
 // قائمة اللغات — قابلة للتوسع
@@ -69,16 +70,9 @@ export default function LanguageSelector({ compact = false }) {
   return (
     <>
       {/* الزر الرئيسي */}
-      <TouchableOpacity
+      <ThemedCard
         onPress={() => setOpen(true)}
-        style={[
-          styles.trigger,
-          {
-            backgroundColor: theme.bgInput,
-            borderColor: theme.border,
-          },
-        ]}
-        activeOpacity={0.7}
+        style={styles.trigger}
       >
         <Text style={styles.globeIcon}>🌐</Text>
         {!compact && (
@@ -94,9 +88,9 @@ export default function LanguageSelector({ compact = false }) {
         >
           ▾
         </Animated.Text>
-      </TouchableOpacity>
+      </ThemedCard>
 
-      {/* القائمة المنسدلة كـ Modal */}
+      {/* القائمة المنسدلة كـ Modal */
       <Modal
         visible={open}
         transparent

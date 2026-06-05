@@ -191,7 +191,7 @@ function SetupScreen({ onCreateRoom, theme, t }) {
 
   return (
     <ScrollView
-      style={[styles.flex, { backgroundColor: theme.bg }]}
+      style={[styles.flex, { backgroundColor: 'transparent' }]}
       contentContainerStyle={styles.setupContent}
       showsVerticalScrollIndicator={false}
     >
@@ -237,18 +237,11 @@ function SetupScreen({ onCreateRoom, theme, t }) {
               const isSelected = selected.includes(cat.id);
               const isDisabled = !isSelected && selected.length >= 5;
               return (
-                <TouchableOpacity
+                <ThemedCard
                   key={cat.id}
-                  style={[
-                    styles.catCard,
-                    {
-                      backgroundColor: isSelected ? theme.accentSoft : theme.bgCard,
-                      borderColor: isSelected ? theme.accent : theme.border,
-                      opacity: isDisabled ? 0.4 : 1,
-                    },
-                  ]}
                   onPress={() => { if (!isDisabled) { playSound('tap'); toggleCat(cat.id); } }}
-                  activeOpacity={0.8}
+                  style={[styles.catCard, { opacity: isDisabled ? 0.4 : 1 }]}
+                  variant={isSelected ? 'accent' : 'default'}
                   disabled={isDisabled}
                 >
                   {isSelected && (
@@ -260,7 +253,7 @@ function SetupScreen({ onCreateRoom, theme, t }) {
                   <Text style={[styles.catName, { color: theme.textPrimary }]} numberOfLines={2}>
                     {cat.nameAr}
                   </Text>
-                </TouchableOpacity>
+                </ThemedCard>
               );
             })}
           </View>
@@ -301,7 +294,7 @@ function JoinScreen({ onJoin, onBack, theme, t }) {
   };
 
   return (
-    <View style={[styles.flex, styles.center, { backgroundColor: theme.bg, padding: 24 }]}>
+    <View style={[styles.flex, styles.center, { backgroundColor: 'transparent', padding: 24 }]}>
       <Text style={[styles.heroEmoji, { marginBottom: 16 }]}>🔍</Text>
       <Text style={[styles.heroName, { color: theme.accent, marginBottom: 8 }]}>انضم لغرفة</Text>
       <Text style={[styles.heroTag, { color: theme.textMuted, marginBottom: 32, textAlign: 'center' }]}>
@@ -325,29 +318,19 @@ function JoinScreen({ onJoin, onBack, theme, t }) {
         }, []).map((row, ri) => (
           <View key={ri} style={styles.keyRow}>
             {row.map(char => (
-              <TouchableOpacity
-                key={char}
-                style={[styles.key, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-                onPress={() => setCode(prev => prev.length < 5 ? prev + char : prev)}
-              >
-                <Text style={[styles.keyText, { color: theme.textPrimary }]}>{char}</Text>
-              </TouchableOpacity>
+              <ThemedCard key={char} onPress={() => setCode(prev => prev.length < 5 ? prev + char : prev)} style={styles.key}>
+              <Text style={[styles.keyText, { color: theme.textPrimary }]}>{char}</Text>
+            </ThemedCard>
             ))}
           </View>
         ))}
         <View style={styles.keyRow}>
-          <TouchableOpacity
-            style={[styles.key, { backgroundColor: theme.bgCard, borderColor: theme.border, flex: 2 }]}
-            onPress={() => setCode(prev => prev.slice(0, -1))}
-          >
+          <ThemedCard onPress={() => setCode(prev => prev.slice(0, -1))} style={[styles.key, { flex: 2 }]}>
             <Text style={[styles.keyText, { color: theme.error }]}>⌫</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.key, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-            onPress={() => setCode('')}
-          >
+          </ThemedCard>
+          <ThemedCard onPress={() => setCode('')} style={styles.key}>
             <Text style={[styles.keyText, { color: theme.textMuted }]}>✕</Text>
-          </TouchableOpacity>
+          </ThemedCard>
         </View>
       </View>
 
@@ -386,7 +369,7 @@ function WaitScreen({ roomCode, playerName, theme }) {
   }, []);
 
   return (
-    <View style={[styles.flex, styles.center, { backgroundColor: theme.bg, gap: 24, padding: 24 }]}>
+    <View style={[styles.flex, styles.center, { backgroundColor: 'transparent', gap: 24, padding: 24 }]}>
       <Animated.View style={[
         styles.waitIcon,
         { backgroundColor: theme.bgCard, borderColor: theme.border, transform: [{ scale: pulseAnim }] },
@@ -436,7 +419,7 @@ function RulesScreen({ onStart, theme }) {
 
   return (
     <ScrollView
-      style={[styles.flex, { backgroundColor: theme.bg }]}
+      style={[styles.flex, { backgroundColor: 'transparent' }]}
       contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
       showsVerticalScrollIndicator={false}
     >
@@ -495,7 +478,7 @@ function PlayScreen({
   blueUsed, blueCardCountdown, blueCardActive,
   onGuess, onBlueCard,
   opponentName, categoryEmoji, categoryName,
-  theme,
+  theme, infoVisible, onToggleInfo,
 }) {
   const guessAnim = useRef(new Animated.Value(1)).current;
 
@@ -517,7 +500,7 @@ function PlayScreen({
       activeOpacity={1}
       onPress={currentImage?.info ? onToggleInfo : undefined}
     >
-    <View style={[styles.flex, { backgroundColor: theme.bg }]}>
+    <View style={[styles.flex, { backgroundColor: 'transparent' }]}>
       {/* صندوق المعلومات */}
       <InfoBox image={currentImage} visible={infoVisible} theme={theme} />
 
@@ -544,20 +527,14 @@ function PlayScreen({
           </View>
 
           {/* زر الكارت الأزرق — دائري صغير أعلى اليمين */}
-          <TouchableOpacity
-            style={[
-              styles.blueCardSmall,
-              {
-                backgroundColor: blueUsed ? theme.bgCard : BLUE_SOFT,
-                borderColor: blueUsed ? theme.border : BLUE,
-                opacity: blueUsed ? 0.4 : 1,
-              },
-            ]}
+          <ThemedButton
             onPress={blueUsed ? null : onBlueCard}
             disabled={blueUsed}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={{ fontSize: 14 }}>🔵</Text>
+            label='🔵'
+            variant={blueUsed ? 'ghost' : 'secondary'}
+            size='small'
+            style={[styles.blueCardSmall, { opacity: blueUsed ? 0.4 : 1 }]}
+          />
           </TouchableOpacity>
         </View>
 
@@ -638,7 +615,7 @@ function PlayScreen({
 // ══════════════════════════════════════════════════════════════
 function BetweenScreen({ myScore, oppScore, round, answer, iWon, onNext, theme }) {
   return (
-    <View style={[styles.flex, styles.center, { backgroundColor: theme.bg, padding: 24, gap: 20 }]}>
+    <View style={[styles.flex, styles.center, { backgroundColor: 'transparent', padding: 24, gap: 20 }]}>
       <Text style={{ fontSize: 64 }}>{iWon ? '🎉' : '😔'}</Text>
       <Text style={[styles.heroName, { color: iWon ? theme.accent : theme.error }]}>
         {iWon ? 'أحسنت! نقطة لك 🎯' : 'خصمك حصل على النقطة'}
@@ -695,7 +672,7 @@ function ResultScreen({ myScore, oppScore, opponentName, onRematch, onBack, them
   }, []);
 
   return (
-    <View style={[styles.flex, styles.center, { backgroundColor: theme.bg, padding: 24, gap: 20 }]}>
+    <View style={[styles.flex, styles.center, { backgroundColor: 'transparent', padding: 24, gap: 20 }]}>
       <Animated.Text style={[{ fontSize: 80 }, { transform: [{ scale: bounceAnim }] }]}>
         {iWon ? '🏆' : '🥈'}
       </Animated.Text>
@@ -803,6 +780,7 @@ export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGam
 
       // خصم انضم → انتقل للتعليمات
       if (data.status === 'ready' && flow === 'wait') {
+        if (onGameReady) onGameReady();
         setFlow('rules');
       }
     });
@@ -830,7 +808,7 @@ export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGam
 
     listenRoom(rid);
     setFlow('wait');
-    if (onGameReady) onGameReady();
+    // القلب يُخصم عند انضمام الخصم في listenRoom
   }, [myUid, myName, listenRoom]);
 
   // ── الانضمام لغرفة ──
@@ -966,13 +944,8 @@ export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGam
   if (flow === 'lobby') {
     return (
       <View style={styles.flex}>
-        <View style={[styles.lobbyHeader, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-          <TouchableOpacity
-            style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-            onPress={onBack}
-          >
-            <Text style={[styles.backText, { color: theme.textPrimary }]}>←</Text>
-          </TouchableOpacity>
+        <View style={[styles.lobbyHeader, { backgroundColor: 'transparent', borderColor: theme.border }]}>
+          <ThemedButton onPress={onBack} label='←' variant='ghost' size='small' style={styles.backBtn} />
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>تحدي تخمين الصورة</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -1006,13 +979,8 @@ export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGam
   if (flow === 'setup') {
     return (
       <View style={styles.flex}>
-        <View style={[styles.lobbyHeader, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-          <TouchableOpacity
-            style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-            onPress={() => setFlow('lobby')}
-          >
-            <Text style={[styles.backText, { color: theme.textPrimary }]}>←</Text>
-          </TouchableOpacity>
+        <View style={[styles.lobbyHeader, { backgroundColor: 'transparent', borderColor: theme.border }]}>
+          <ThemedButton onPress={() => setFlow('lobby')} label='←' variant='ghost' size='small' style={styles.backBtn} />
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>إنشاء غرفة</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -1024,13 +992,8 @@ export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGam
   if (flow === 'join') {
     return (
       <View style={styles.flex}>
-        <View style={[styles.lobbyHeader, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-          <TouchableOpacity
-            style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-            onPress={() => setFlow('lobby')}
-          >
-            <Text style={[styles.backText, { color: theme.textPrimary }]}>←</Text>
-          </TouchableOpacity>
+        <View style={[styles.lobbyHeader, { backgroundColor: 'transparent', borderColor: theme.border }]}>
+          <ThemedButton onPress={() => setFlow('lobby')} label='←' variant='ghost' size='small' style={styles.backBtn} />
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>انضم لغرفة</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -1042,13 +1005,8 @@ export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGam
   if (flow === 'wait') {
     return (
       <View style={styles.flex}>
-        <View style={[styles.lobbyHeader, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-          <TouchableOpacity
-            style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-            onPress={onBack}
-          >
-            <Text style={[styles.backText, { color: theme.textPrimary }]}>←</Text>
-          </TouchableOpacity>
+        <View style={[styles.lobbyHeader, { backgroundColor: 'transparent', borderColor: theme.border }]}>
+          <ThemedButton onPress={onBack} label='←' variant='ghost' size='small' style={styles.backBtn} />
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>انتظار الخصم</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -1060,7 +1018,7 @@ export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGam
   if (flow === 'rules') {
     return (
       <View style={styles.flex}>
-        <View style={[styles.lobbyHeader, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+        <View style={[styles.lobbyHeader, { backgroundColor: 'transparent', borderColor: theme.border }]}>
           <View style={{ width: 40 }} />
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>كيف تلعب؟</Text>
           <View style={{ width: 40 }} />

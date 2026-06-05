@@ -317,6 +317,13 @@ const T = {
   'games.drawguess_title':       { ar: 'رسم وتخمين',     en: 'Draw & Guess' },
   'games.drawguess_desc':        { ar: 'ارسم والآخرون يخمّنون', en: 'Draw and let others guess' },
   'games.drawguess_players':     { ar: '2–8 لاعبين',     en: '2–8 players' },
+
+  'games.mafia_title':    { ar: 'المافيا',                      en: 'Mafia' },
+  'games.mafia_desc':     { ar: 'اكشف المافيا قبل فوات الأوان', en: "Unmask the mafia before it's too late" },
+  'games.mafia_players':  { ar: '5–12 لاعباً',                   en: '5–12 players' },
+  'games.wordle_title':   { ar: 'وردل',                          en: 'Wordle' },
+  'games.wordle_desc':    { ar: 'خمّن الكلمة في 6 محاولات',      en: 'Guess the word in 6 tries' },
+  'games.wordle_players': { ar: '2–8 لاعبين',                   en: '2–8 players' },
   'games.kout_title':            { ar: 'كوت بو 6',       en: 'Kout Bo 6' },
   'games.kout_desc':             { ar: 'لعبة ورق خليجية تنافسية', en: 'Gulf competitive card game' },
   'games.kout_players':          { ar: '4–6 لاعبين',     en: '4–6 players' },

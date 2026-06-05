@@ -23,9 +23,15 @@ import Svg, {
 const clamp = (v) => Math.min(1, Math.max(0, v));
 
 export function getEngraveColor(theme) { return theme.accent; }
+// ══════════════════════════════════════════════════════════════
+//  🚫 Engravings معطّلة مؤقتاً — كل الألعاب تأخذ خلفية الثيم
+//  لإعادة التفعيل: غيّر ENGRAVINGS_ENABLED إلى true
+// ══════════════════════════════════════════════════════════════
+const ENGRAVINGS_ENABLED = false;
 export function getEngraveBg(theme)    { return theme.bg; }
 
 function EngrWrap({ children }) {
+  const { theme } = useTheme();
   return (
     <View style={s.wrap} pointerEvents="none">
       <Svg
@@ -43,7 +49,8 @@ function EngrWrap({ children }) {
 // ════════════════════════════════════════════════════════════
 //  1. TRUTH OR DARE — لهب نار + علامات ?
 // ════════════════════════════════════════════════════════════
-export function TruthDareEngraving({ theme }) {
+export function TruthDareEngraving({theme }) {
+  if (!ENGRAVINGS_ENABLED) return null;
   if (theme?.isCityTheme) return null;
   const ec = getEngraveColor(theme);
   const b  = theme.isLight ? 0.13 : 0.10;   // base opacity
@@ -85,7 +92,8 @@ export function TruthDareEngraving({ theme }) {
 // ════════════════════════════════════════════════════════════
 //  2. RANK FRIENDS — كأس + نجوم + منصة تتويج
 // ════════════════════════════════════════════════════════════
-export function RankFriendsEngraving({ theme }) {
+export function RankFriendsEngraving({theme }) {
+  if (!ENGRAVINGS_ENABLED) return null;
   if (theme?.isCityTheme) return null;
   const ec = getEngraveColor(theme);
   const b  = theme.isLight ? 0.12 : 0.09;
@@ -123,7 +131,8 @@ export function RankFriendsEngraving({ theme }) {
 // ════════════════════════════════════════════════════════════
 //  3. ACT IT OUT — أقنعة مسرح + حزم ضوء
 // ════════════════════════════════════════════════════════════
-export function ActItOutEngraving({ theme }) {
+export function ActItOutEngraving({theme }) {
+  if (!ENGRAVINGS_ENABLED) return null;
   const ec  = getEngraveColor(theme);
   const ebg = getEngraveBg(theme);
   const b   = theme.isLight ? 0.11 : 0.08;
@@ -159,7 +168,8 @@ export function ActItOutEngraving({ theme }) {
 // ════════════════════════════════════════════════════════════
 //  4. WHO AM I — ظل شخصية + بطاقة اسم + ?
 // ════════════════════════════════════════════════════════════
-export function WhoAmIEngraving({ theme }) {
+export function WhoAmIEngraving({theme }) {
+  if (!ENGRAVINGS_ENABLED) return null;
   if (theme?.isCityTheme) return null;
   const ec = getEngraveColor(theme);
   const b  = theme.isLight ? 0.11 : 0.08;
@@ -194,7 +204,8 @@ export function WhoAmIEngraving({ theme }) {
 // ════════════════════════════════════════════════════════════
 //  5. NEVER HAVE I EVER — قمر + نجوم + يد مرفوعة
 // ════════════════════════════════════════════════════════════
-export function NeverHaveIEverEngraving({ theme }) {
+export function NeverHaveIEverEngraving({theme }) {
+  if (!ENGRAVINGS_ENABLED) return null;
   const ec  = getEngraveColor(theme);
   const ebg = getEngraveBg(theme);
   const b   = theme.isLight ? 0.11 : 0.08;
@@ -233,7 +244,8 @@ export function NeverHaveIEverEngraving({ theme }) {
 // ════════════════════════════════════════════════════════════
 //  6. CODENAMES — شبكة تجسس + تقاطع + أقواس أركان
 // ════════════════════════════════════════════════════════════
-export function CodenamesEngraving({ theme }) {
+export function CodenamesEngraving({theme }) {
+  if (!ENGRAVINGS_ENABLED) return null;
   if (theme?.isCityTheme) return null;
   const ec = getEngraveColor(theme);
   const b  = theme.isLight ? 0.10 : 0.07;
@@ -269,7 +281,8 @@ export function CodenamesEngraving({ theme }) {
       <Path d="M24,820 L24,786"  stroke={ec} strokeWidth={3} fill="none" opacity={clamp(b * 1.6)}/>
       <Path d="M24,820 L58,820"  stroke={ec} strokeWidth={3} fill="none" opacity={clamp(b * 1.6)}/>
       <Path d="M366,820 L366,786"  stroke={ec} strokeWidth={3} fill="none" opacity={clamp(b * 1.6)}/>
-      <Path d="M366,820 L332,820"  stroke={ec} strokeWidth={3} fill="none" opacity={clamp(b * 1.6)}/>
+      <Path d="M366,820 L332,820"  stroke={ec} strokeWidth={3} fill="none" opacity={
+  const { theme } = useTheme();clamp(b * 1.6)}/>
     </EngrWrap>
   );
 }
@@ -278,6 +291,7 @@ export function CodenamesEngraving({ theme }) {
 //  7. XO — عروق رخام + لوحة XO + تاج
 // ════════════════════════════════════════════════════════════
 export function XOEngraving({ theme }) {
+  if (!ENGRAVINGS_ENABLED) return null;
   if (theme?.isCityTheme) return null;
   const ec = getEngraveColor(theme);
   const b  = theme.isLight ? 0.20 : 0.15;
@@ -309,7 +323,8 @@ export function XOEngraving({ theme }) {
       {/* تاج */}
       <Path
         d="M140,74 L154,108 L175,94 L195,125 L215,94 L236,108 L250,74 L240,142 L150,142Z"
-        fill={ec} opacity={clamp(b * 1.5)}
+        fill={
+  const { theme } = useTheme();ec} opacity={clamp(b * 1.5)}
       />
     </EngrWrap>
   );
@@ -319,6 +334,7 @@ export function XOEngraving({ theme }) {
 //  8. WORDLE — سداسي + شقوق مشعة + مربعات حروف
 // ════════════════════════════════════════════════════════════
 export function WordleEngraving({ theme }) {
+  if (!ENGRAVINGS_ENABLED) return null;
   const ec  = getEngraveColor(theme);
   const b   = theme.isLight ? 0.18 : 0.13;
 
@@ -392,7 +408,8 @@ export function WordleEngraving({ theme }) {
                   fill={bg} opacity={clamp(b * 3.0)}/>
               )}
               <Rect x={tx} y={ty} width={TW} height={TH} rx={6}
-                fill="none" stroke={ec} strokeWidth={2} opacity={bordOp}/>
+                fill="none" stroke={ec} strokeWidth={
+  const { theme } = useTheme();2} opacity={bordOp}/>
             </G>
           );
         })
@@ -405,6 +422,7 @@ export function WordleEngraving({ theme }) {
 //  9. MAN ANA — هالة + أشعة + ظل شخصية + بطاقة
 // ════════════════════════════════════════════════════════════
 export function ManAnaEngraving({ theme }) {
+  if (!ENGRAVINGS_ENABLED) return null;
   if (theme?.isCityTheme) return null;
   const ec = getEngraveColor(theme);
   const b  = theme.isLight ? 0.11 : 0.08;
@@ -443,7 +461,8 @@ export function ManAnaEngraving({ theme }) {
       <Rect x={105} y={468} width={180} height={115} rx={10}
         fill="none" stroke={ec} strokeWidth={2.5} opacity={clamp(b * 1.8)}/>
       <Line x1={105} y1={500} x2={285} y2={500} stroke={ec} strokeWidth={1.5} opacity={clamp(b * 1.2)}/>
-      <SvgText x={195} y={540} fontSize={20} fill={ec} textAnchor="middle" opacity={clamp(b * 1.1)}>
+      <SvgText x={195} y={540} fontSize={
+  const { theme } = useTheme();20} fill={ec} textAnchor="middle" opacity={clamp(b * 1.1)}>
         {"● ● ●"}
       </SvgText>
     </EngrWrap>
@@ -454,6 +473,7 @@ export function ManAnaEngraving({ theme }) {
 //  WHO IS LYING — عيون تراقب + علامات استفهام + خطوط تحقيق
 // ════════════════════════════════════════════════════════════
 export function WhoIsSpyEngraving({ theme }) {
+  if (!ENGRAVINGS_ENABLED) return null;
   if (theme?.isCityTheme) return null;
   const ec = getEngraveColor(theme);
   const b  = theme.isLight ? 0.12 : 0.09;
@@ -559,6 +579,7 @@ export function WhoIsSpyEngraving({ theme }) {
 const CITY_STARS_CACHE_GB = {};
 function getCityStarsGB(themeId, count) {
   if (!CITY_STARS_CACHE_GB[themeId]) {
+  const { theme } = useTheme();
     CITY_STARS_CACHE_GB[themeId] = [...Array(count)].map((_, i) => ({
       key:     i,
       top:     `${(i * 43 + 7)  % 65}%`,

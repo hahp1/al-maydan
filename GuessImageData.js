@@ -2758,400 +2758,945 @@ export const GUESS_IMAGE_DATA = {
       "info": {
         "الشركة": "Land Rover — بريطانيا",
         "السنة": "1970 — الآن",
-         "المحرك": "V8 4.4L سوبر شارج",
-        "أقصى سرعة": "225 كم/س",
-        "الحصان": "525"
-      }
-    },
-    {
-      "id": "ca21",
-      "answer": "جاغوار F-Type",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/2016_Jaguar_F-Type_SVR_Coupe_%28UK%29_front_8.10.16.jpg/400px-2016_Jaguar_F-Type_SVR_Coupe_%28UK%29_front_8.10.16.jpg",
-      "info": {
-        "الشركة": "Jaguar — بريطانيا",
-        "السنة": 2013,
-        "المحرك": "V8 سوبر شارج 5.0L",
-        "أقصى سرعة": "300 كم/س",
-        "الحصان": "575"
+        "المحرك": "V8 4.0L",
+        "أقصى سرعة": "220 كم/س",
+        "ملاحظة": "الجيب الأشهر عند المشاهير"
       }
     },
     {
       "id": "ca22",
-      "answer": "أستون مارتن DB11",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Aston_Martin_DB11_%28cropped%29.jpg/400px-Aston_Martin_DB11_%28cropped%29.jpg",
-      "info": {
-        "الشركة": "Aston Martin — بريطانيا",
-        "السنة": 2016,
-        "المحرك": "V12 توربو 5.2L",
-        "أقصى سرعة": "334 كم/س",
-        "الحصان": "600"
-      }
-    },
-    {
-      "id": "ca23",
-      "answer": "كوينيغسيغ أجيرا",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Koenigsegg_Agera_R_%28Vin_003%29.jpg/400px-Koenigsegg_Agera_R_%28Vin_003%29.jpg",
-      "info": {
-        "الشركة": "Koenigsegg — السويد",
-        "السنة": 2010,
-        "المحرك": "V8 توربو 5.0L",
-        "أقصى سرعة": "440+ كم/س",
-        "الحصان": "1140"
-      }
-    },
-    {
-      "id": "ca24",
-      "answer": "رينو ألبين A110",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Alpine_A110_2018_%28cropped%29.jpg/400px-Alpine_A110_2018_%28cropped%29.jpg",
-      "info": {
-        "الشركة": "Alpine — فرنسا",
-        "السنة": 2017,
-        "المحرك": "I4 توربو 1.8L",
-        "أقصى سرعة": "250 كم/س",
-        "الحصان": "252"
-      }
-    },
-    {
-      "id": "ca25",
-      "answer": "شيفروليه كامارو",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/2016_Chevrolet_Camaro_SS_%28cropped%29.jpg/400px-2016_Chevrolet_Camaro_SS_%28cropped%29.jpg",
-      "info": {
-        "الشركة": "Chevrolet — أمريكا",
-        "السنة": "1966 — الآن",
-        "المحرك": "V8 6.2L",
-        "أقصى سرعة": "250 كم/س",
-        "الحصان": "455"
-      }
-    },
-    {
-      "id": "ca26",
-      "answer": "دودج فايبر",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/2013_Dodge_Viper_GTS_%28cropped%29.jpg/400px-2013_Dodge_Viper_GTS_%28cropped%29.jpg",
-      "info": {
-        "الشركة": "Dodge — أمريكا",
-        "السنة": 1992,
-        "المحرك": "V10 8.4L",
-        "أقصى سرعة": "331 كم/س",
-        "الحصان": "645"
-      }
-    },
-    {
-      "id": "ca27",
-      "answer": "هوندا NSX",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/2019_Honda_NSX_%28cropped%29.jpg/400px-2019_Honda_NSX_%28cropped%29.jpg",
-      "info": {
-        "الشركة": "Honda — اليابان",
-        "السنة": 2016,
-        "المحرك": "V6 توربو هجين 3.5L",
-        "أقصى سرعة": "308 كم/س",
-        "الحصان": "573"
-      }
-    },
-    {
-      "id": "ca28",
-      "answer": "ليكسس LFA",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Lexus_LFA_Nurburgring_Package.jpg/400px-Lexus_LFA_Nurburgring_Package.jpg",
+      "answer": "لكزس LFA",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Lexus_LFA_%28cropped%29.jpg/400px-Lexus_LFA_%28cropped%29.jpg",
       "info": {
         "الشركة": "Lexus — اليابان",
         "السنة": 2010,
         "المحرك": "V10 4.8L",
         "أقصى سرعة": "325 كم/س",
-        "الحصان": "553"
+        "الحصان": "552"
+      }
+    },
+    {
+      "id": "ca23",
+      "answer": "باغاني هوايرا",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Pagani_Huayra_-_Flickr_-_Alexandre_Pr%C3%A9vot_%281%29.jpg/400px-Pagani_Huayra_-_Flickr_-_Alexandre_Pr%C3%A9vot_%281%29.jpg",
+      "info": {
+        "الشركة": "Pagani — إيطاليا",
+        "السنة": 2011,
+        "المحرك": "V12 توربو 6.0L (AMG)",
+        "أقصى سرعة": "383 كم/س",
+        "الحصان": "764"
+      }
+    },
+    {
+      "id": "ca24",
+      "answer": "فيراري لاFerrari",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Ferrari_LaFerrari_%28cropped%29.jpg/400px-Ferrari_LaFerrari_%28cropped%29.jpg",
+      "info": {
+        "الشركة": "Ferrari — إيطاليا",
+        "السنة": 2013,
+        "المحرك": "V12 هايبرد 6.3L",
+        "أقصى سرعة": "350 كم/س",
+        "الحصان": "963"
+      }
+    },
+    {
+      "id": "ca25",
+      "answer": "لامبورغيني أفنتادور",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Lamborghini_Aventador_LP700-4_%28cropped%29.jpg/400px-Lamborghini_Aventador_LP700-4_%28cropped%29.jpg",
+      "info": {
+        "الشركة": "Lamborghini — إيطاليا",
+        "السنة": 2011,
+        "المحرك": "V12 6.5L",
+        "أقصى سرعة": "350 كم/س",
+        "الحصان": "769"
+      }
+    },
+    {
+      "id": "ca26",
+      "answer": "أستون مارتن DB9",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/Aston_Martin_DB9_Coupe_%28cropped%29.jpg/400px-Aston_Martin_DB9_Coupe_%28cropped%29.jpg",
+      "info": {
+        "الشركة": "Aston Martin — بريطانيا",
+        "السنة": 2004,
+        "المحرك": "V12 5.9L",
+        "أقصى سرعة": "295 كم/س",
+        "ملاحظة": "سيارة جيمس بوند"
+      }
+    },
+    {
+      "id": "ca27",
+      "answer": "ماكلارين P1",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/2014_McLaren_P1_-_front.jpg/400px-2014_McLaren_P1_-_front.jpg",
+      "info": {
+        "الشركة": "McLaren — بريطانيا",
+        "السنة": 2013,
+        "المحرك": "V8 هايبرد توربو",
+        "أقصى سرعة": "350 كم/س",
+        "الحصان": "916"
+      }
+    },
+    {
+      "id": "ca28",
+      "answer": "شيفروليه كامارو",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/2016_Chevrolet_Camaro_RS%2C_front_1.9.16.jpg/400px-2016_Chevrolet_Camaro_RS%2C_front_1.9.16.jpg",
+      "info": {
+        "الشركة": "Chevrolet — أمريكا",
+        "السنة": "1966 — الآن",
+        "المحرك": "V8 6.2L",
+        "أقصى سرعة": "290 كم/س",
+        "الحصان": "455"
       }
     },
     {
       "id": "ca29",
-      "answer": "باغاني هوايرا",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/Pagani_Huayra_at_2012_Goodwood_Festival_of_Speed.jpg/400px-Pagani_Huayra_at_2012_Goodwood_Festival_of_Speed.jpg",
+      "answer": "فورد GT",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/2017_Ford_GT_%28cropped%29.jpg/400px-2017_Ford_GT_%28cropped%29.jpg",
       "info": {
-        "الشركة": "Pagani — إيطاليا",
-        "السنة": 2011,
-        "المحرك": "V12 توربو AMG 6.0L",
-        "أقصى سرعة": "383 كم/س",
-        "الحصان": "730"
+        "الشركة": "Ford — أمريكا",
+        "السنة": 2017,
+        "المحرك": "V6 توربو 3.5L EcoBoost",
+        "أقصى سرعة": "348 كم/س",
+        "الحصان": "647"
       }
     },
     {
       "id": "ca30",
-      "answer": "سوبارو إمبريزا WRX",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Subaru_Impreza_WRX_STi_%282007%2C_GD%29_%28cropped%29.jpg/400px-Subaru_Impreza_WRX_STi_%282007%2C_GD%29_%28cropped%29.jpg",
+      "answer": "ميتسوبيشي لانسر EVO",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/2005_Mitsubishi_Lancer_Evolution_VIII_%28cropped%29.jpg/400px-2005_Mitsubishi_Lancer_Evolution_VIII_%28cropped%29.jpg",
       "info": {
-        "الشركة": "Subaru — اليابان",
-        "السنة": 1992,
-        "المحرك": "H4 توربو 2.5L",
-        "أقصى سرعة": "255 كم/س",
-        "الحصان": "305"
+        "الشركة": "Mitsubishi — اليابان",
+        "السنة": "1992 — 2016",
+        "المحرك": "I4 توربو 2.0L",
+        "أقصى سرعة": "260 كم/س",
+        "الحصان": "291"
       }
     },
     {
       "id": "ca31",
-      "answer": "ميتسوبيشي لانسر إيفو",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Mitsubishi_Lancer_Evolution_X_MR_2008_%28cropped%29.jpg/400px-Mitsubishi_Lancer_Evolution_X_MR_2008_%28cropped%29.jpg",
+      "answer": "سوبارو إمبريزا WRX",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f5/Subaru_Impreza_WRX_STi_-_Flickr_-_Alexandre_Pr%C3%A9vot_%281%29.jpg/400px-Subaru_Impreza_WRX_STi_-_Flickr_-_Alexandre_Pr%C3%A9vot_%281%29.jpg",
       "info": {
-        "الشركة": "Mitsubishi — اليابان",
-        "السنة": 1992,
-        "المحرك": "I4 توربو 2.0L",
-        "أقصى سرعة": "250 كم/س",
-        "الحصان": "295"
+        "الشركة": "Subaru — اليابان",
+        "السنة": "1992 — الآن",
+        "المحرك": "Flat-4 توربو 2.5L",
+        "أقصى سرعة": "255 كم/س",
+        "الحصان": "310"
       }
     },
     {
       "id": "ca32",
-      "answer": "BMW i8",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/BMW_i8_at_IAA_2015_%28cropped%29.jpg/400px-BMW_i8_at_IAA_2015_%28cropped%29.jpg",
+      "answer": "بي إم دبليو i8",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/BMW_i8_coupe_%28cropped%29.jpg/400px-BMW_i8_coupe_%28cropped%29.jpg",
       "info": {
         "الشركة": "BMW — ألمانيا",
         "السنة": 2014,
-        "المحرك": "هجين I3 توربو + كهربائي",
+        "المحرك": "I3 توربو هايبرد",
         "أقصى سرعة": "250 كم/س",
         "الحصان": "374"
       }
     },
     {
       "id": "ca33",
-      "answer": "تسلا رودستر",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/Tesla_Roadster_2.5_%28cropped%29.jpg/400px-Tesla_Roadster_2.5_%28cropped%29.jpg",
-      "info": {
-        "الشركة": "Tesla — أمريكا",
-        "السنة": 2008,
-        "المحرك": "كهربائي بالكامل",
-        "أقصى سرعة": "250 كم/س",
-        "الحصان": "248"
-      }
-    },
-    {
-      "id": "ca34",
-      "answer": "لاند روفر ديفندر",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/2020_Land_Rover_Defender_110_%28cropped%29.jpg/400px-2020_Land_Rover_Defender_110_%28cropped%29.jpg",
-      "info": {
-        "الشركة": "Land Rover — بريطانيا",
-        "السنة": "1983 — الآن",
-        "المحرك": "I6 توربو 3.0L",
-        "أقصى سرعة": "191 كم/س",
-        "الحصان": "400"
-      }
-    },
-    {
-      "id": "ca35",
-      "answer": "مرسيدس G-Class",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/2019_Mercedes-Benz_G_350_d_%28UK%29_front_8.11.18.jpg/400px-2019_Mercedes-Benz_G_350_d_%28UK%29_front_8.11.18.jpg",
-      "info": {
-        "الشركة": "Mercedes-Benz — ألمانيا",
-        "السنة": "1979 — الآن",
-        "المحرك": "V8 4.0L توربو",
-        "أقصى سرعة": "220 كم/س",
-        "الحصان": "577"
-      }
-    },
-    {
-      "id": "ca36",
-      "answer": "فورد GT",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Ford_GT_at_2017_NAIAS_%28cropped%29.jpg/400px-Ford_GT_at_2017_NAIAS_%28cropped%29.jpg",
-      "info": {
-        "الشركة": "Ford — أمريكا",
-        "السنة": 2017,
-        "المحرك": "V6 توربو EcoBoost 3.5L",
-        "أقصى سرعة": "348 كم/س",
-        "الحصان": "647"
-      }
-    },
-    {
-      "id": "ca37",
-      "answer": "بورشه كايمان GT4",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/2016_Porsche_Cayman_GT4_%28cropped%29.jpg/400px-2016_Porsche_Cayman_GT4_%28cropped%29.jpg",
-      "info": {
-        "الشركة": "Porsche — ألمانيا",
-        "السنة": 2015,
-        "المحرك": "Flat-6 3.8L",
-        "أقصى سرعة": "295 كم/س",
-        "الحصان": "385"
-      }
-    },
-    {
-      "id": "ca38",
-      "answer": "ريمات ريفيرا",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Rimac_Nevera_cropped.jpg/400px-Rimac_Nevera_cropped.jpg",
-      "info": {
-        "الشركة": "Rimac — كرواتيا",
-        "السنة": 2021,
-        "المحرك": "كهربائي بالكامل",
-        "أقصى سرعة": "412 كم/س",
-        "الحصان": "1914"
-      }
-    },
-    {
-      "id": "ca39",
-      "answer": "لوتس إيفورا",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/2010_Lotus_Evora_%28cropped%29.jpg/400px-2010_Lotus_Evora_%28cropped%29.jpg",
-      "info": {
-        "الشركة": "Lotus — بريطانيا",
-        "السنة": 2009,
-        "المحرك": "V6 توربو 3.5L",
-        "أقصى سرعة": "280 كم/س",
-        "الحصان": "410"
-      }
-    },
-    {
-      "id": "ca40",
-      "answer": "أوبل GT",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Opel-gt-1968-1973.jpg/400px-Opel-gt-1968-1973.jpg",
-      "info": {
-        "الشركة": "Opel — ألمانيا",
-        "السنة": "1968 — 1973",
-        "المحرك": "I4 1.9L",
-        "أقصى سرعة": "185 كم/س",
-        "الحصان": "102"
-      }
-    },
-    {
-      "id": "ca41",
-      "answer": "سيتروين DS3",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Citroen_DS3_Racing_%28cropped%29.jpg/400px-Citroen_DS3_Racing_%28cropped%29.jpg",
-      "info": {
-        "الشركة": "Citroën — فرنسا",
-        "السنة": 2009,
-        "المحرك": "I4 توربو 1.6L",
-        "أقصى سرعة": "213 كم/س",
-        "الحصان": "207"
-      }
-    },
-    {
-      "id": "ca42",
       "answer": "تويوتا لاند كروزر",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Toyota_LandCruiser_200_%28cropped%29.jpg/400px-Toyota_LandCruiser_200_%28cropped%29.jpg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/2016_Toyota_Land_Cruiser_200_facelift_%28cropped%29.jpg/400px-2016_Toyota_Land_Cruiser_200_facelift_%28cropped%29.jpg",
       "info": {
         "الشركة": "Toyota — اليابان",
         "السنة": "1951 — الآن",
         "المحرك": "V8 ديزل 4.5L",
         "أقصى سرعة": "210 كم/س",
-        "الحصان": "272"
+        "ملاحظة": "الأشهر في الخليج والشرق الأوسط"
       }
     },
     {
-      "id": "ca43",
+      "id": "ca34",
+      "answer": "نيسان باترول",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Nissan_Patrol_Y62_%28cropped%29.jpg/400px-Nissan_Patrol_Y62_%28cropped%29.jpg",
+      "info": {
+        "الشركة": "Nissan — اليابان",
+        "السنة": "1951 — الآن",
+        "المحرك": "V8 5.6L",
+        "أقصى سرعة": "210 كم/س",
+        "ملاحظة": "الأكثر مبيعاً في السعودية"
+      }
+    },
+    {
+      "id": "ca35",
+      "answer": "مرسيدس S-Class",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/2021_Mercedes-Benz_S_500_4MATIC_%28W223%29%2C_front_8.4.21.jpg/400px-2021_Mercedes-Benz_S_500_4MATIC_%28W223%29%2C_front_8.4.21.jpg",
+      "info": {
+        "الشركة": "Mercedes-Benz — ألمانيا",
+        "السنة": "1951 — الآن",
+        "المحرك": "I6/V8 توربو",
+        "أقصى سرعة": "250 كم/س",
+        "ملاحظة": "معيار السيارات الفاخرة"
+      }
+    },
+    {
+      "id": "ca36",
+      "answer": "كونيغسيغ",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Image-Koenigsegg.jpg/400px-Image-Koenigsegg.jpg",
+      "info": {
+        "الشركة": "Koenigsegg — السويد",
+        "السنة": "1994 — الآن",
+        "المحرك": "V8 توربو 5.0L",
+        "أقصى سرعة": "447 كم/س",
+        "ملاحظة": "أسرع سيارة في العالم (Agera RS)"
+      }
+    },
+    {
+      "id": "ca37",
+      "answer": "بورشه كايين",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/2019_Porsche_Cayenne_S_Coupé_%28cropped%29.jpg/400px-2019_Porsche_Cayenne_S_Coupé_%28cropped%29.jpg",
+      "info": {
+        "الشركة": "Porsche — ألمانيا",
+        "السنة": 2002,
+        "المحرك": "V8 4.0L",
+        "أقصى سرعة": "265 كم/س",
+        "الحصان": "550"
+      }
+    },
+    {
+      "id": "ca38",
+      "answer": "هوندا NSX",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Honda-nsx-na1-001.jpg/400px-Honda-nsx-na1-001.jpg",
+      "info": {
+        "الشركة": "Honda/Acura — اليابان",
+        "السنة": "1990 — الآن",
+        "المحرك": "V6 هايبرد 3.5L",
+        "أقصى سرعة": "307 كم/س",
+        "الحصان": "573"
+      }
+    },
+    {
+      "id": "ca39",
+      "answer": "دودج فايبر",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Dodge_Viper_SRT_GTS_%28cropped%29.jpg/400px-Dodge_Viper_SRT_GTS_%28cropped%29.jpg",
+      "info": {
+        "الشركة": "Dodge — أمريكا",
+        "السنة": "1991 — 2017",
+        "المحرك": "V10 8.4L",
+        "أقصى سرعة": "338 كم/س",
+        "الحصان": "645"
+      }
+    },
+    {
+      "id": "ca40",
       "answer": "جيب رانغلر",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/2018_Jeep_Wrangler_JL_%28cropped%29.jpg/400px-2018_Jeep_Wrangler_JL_%28cropped%29.jpg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/2018_Jeep_Wrangler_Unlimited_Sahara_2.0T_%28facelift%29%2C_front_11.3.19.jpg/400px-2018_Jeep_Wrangler_Unlimited_Sahara_2.0T_%28facelift%29%2C_front_11.3.19.jpg",
       "info": {
         "الشركة": "Jeep — أمريكا",
         "السنة": "1986 — الآن",
-        "المحرك": "V6 بنزين 3.6L",
-        "أقصى سرعة": "177 كم/س",
-        "الحصان": "285"
+        "المحرك": "V6/I4 توربو",
+        "أقصى سرعة": "180 كم/س",
+        "ملاحظة": "أشهر سيارة off-road"
       }
     },
     {
-      "id": "ca44",
-      "answer": "رينو ميغان RS",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Renault_Megane_RS_Trophy_2018_%28cropped%29.jpg/400px-Renault_Megane_RS_Trophy_2018_%28cropped%29.jpg",
+      "id": "ca41",
+      "answer": "فولفو XC90",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/2017_Volvo_XC90_D5_AWD_Inscription%2C_front_8.17.17.jpg/400px-2017_Volvo_XC90_D5_AWD_Inscription%2C_front_8.17.17.jpg",
       "info": {
-        "الشركة": "Renault — فرنسا",
-        "السنة": 2017,
-        "المحرك": "I4 توربو 1.8L",
-        "أقصى سرعة": "270 كم/س",
-        "الحصان": "300"
+        "الشركة": "Volvo — السويد",
+        "السنة": 2002,
+        "المحرك": "I4 توربو 2.0L",
+        "أقصى سرعة": "210 كم/س",
+        "ملاحظة": "أآمن SUV في العالم مرات عديدة"
       }
     },
     {
-      "id": "ca45",
+      "id": "ca42",
       "answer": "هيونداي فيلوستر N",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Hyundai_Veloster_N_%282019%29_%28cropped%29.jpg/400px-Hyundai_Veloster_N_%282019%29_%28cropped%29.jpg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/2019_Hyundai_Veloster_N%2C_front_10.17.19.jpg/400px-2019_Hyundai_Veloster_N%2C_front_10.17.19.jpg",
       "info": {
-        "الشركة": "Hyundai — كوريا",
-        "السنة": 2017,
+        "الشركة": "Hyundai — كوريا الجنوبية",
+        "السنة": 2018,
         "المحرك": "I4 توربو 2.0L",
         "أقصى سرعة": "250 كم/س",
         "الحصان": "275"
       }
     },
     {
-      "id": "ca46",
-      "answer": "كيا ستينغر GT",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/Kia_Stinger_GT_%28cropped%29.jpg/400px-Kia_Stinger_GT_%28cropped%29.jpg",
+      "id": "ca43",
+      "answer": "كيا ستينغر",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/2019_Kia_Stinger_GT_%28UK%29%2C_front_8.10.18.jpg/400px-2019_Kia_Stinger_GT_%28UK%29%2C_front_8.10.18.jpg",
       "info": {
-        "الشركة": "Kia — كوريا",
+        "الشركة": "Kia — كوريا الجنوبية",
         "السنة": 2017,
         "المحرك": "V6 توربو 3.3L",
         "أقصى سرعة": "270 كم/س",
-        "الحصان": "365"
+        "الحصان": "370"
+      }
+    },
+    {
+      "id": "ca44",
+      "answer": "فيات 500",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/2016_Fiat_500_1.2_Pop_%28UK%29%2C_front_8.11.19.jpg/400px-2016_Fiat_500_1.2_Pop_%28UK%29%2C_front_8.11.19.jpg",
+      "info": {
+        "الشركة": "Fiat — إيطاليا",
+        "السنة": "1957 — الآن",
+        "المحرك": "I4 1.4L",
+        "أقصى سرعة": "180 كم/س",
+        "ملاحظة": "أيقونة التصميم الإيطالي"
+      }
+    },
+    {
+      "id": "ca45",
+      "answer": "سيات ليون",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/2017_SEAT_Leon_SC_%28facelift%2C_red%29%2C_front_8.11.17.jpg/400px-2017_SEAT_Leon_SC_%28facelift%2C_red%29%2C_front_8.11.17.jpg",
+      "info": {
+        "الشركة": "SEAT — إسبانيا",
+        "السنة": "1999 — الآن",
+        "المحرك": "I4 توربو 2.0L",
+        "أقصى سرعة": "250 كم/س",
+        "الحصان": "300"
+      }
+    },
+    {
+      "id": "ca46",
+      "answer": "مرسيدس CLA",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/2020_Mercedes-Benz_CLA_200_AMG_Line_%28UK%29%2C_front_8.8.20.jpg/400px-2020_Mercedes-Benz_CLA_200_AMG_Line_%28UK%29%2C_front_8.8.20.jpg",
+      "info": {
+        "الشركة": "Mercedes-Benz — ألمانيا",
+        "السنة": 2013,
+        "المحرك": "I4 توربو 2.0L",
+        "أقصى سرعة": "250 كم/س",
+        "الحصان": "224"
       }
     },
     {
       "id": "ca47",
-      "answer": "ألفا روميو جوليا",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9d/Alfa_Romeo_Giulia_Quadrifoglio_%282016%29_%28cropped%29.jpg/400px-Alfa_Romeo_Giulia_Quadrifoglio_%282016%29_%28cropped%29.jpg",
+      "answer": "BMW 3 Series",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/2019_BMW_330i_M_Sport_%28facelift%2C_UK%29%2C_front_8.8.19.jpg/400px-2019_BMW_330i_M_Sport_%28facelift%2C_UK%29%2C_front_8.8.19.jpg",
       "info": {
-        "الشركة": "Alfa Romeo — إيطاليا",
-        "السنة": 2016,
-        "المحرك": "V6 توربو 2.9L",
-        "أقصى سرعة": "307 كم/س",
-        "الحصان": "505"
+        "الشركة": "BMW — ألمانيا",
+        "السنة": "1975 — الآن",
+        "المحرك": "I4/I6 توربو",
+        "أقصى سرعة": "250 كم/س",
+        "ملاحظة": "الأكثر مبيعاً من BMW"
       }
     },
     {
       "id": "ca48",
-      "answer": "فولفو P1800",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/1967_Volvo_P1800S_%28cropped%29.jpg/400px-1967_Volvo_P1800S_%28cropped%29.jpg",
+      "answer": "أودي A4",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2019_Audi_A4_%28B9%2C_facelift%29%2C_front_8.10.19.jpg/400px-2019_Audi_A4_%28B9%2C_facelift%29%2C_front_8.10.19.jpg",
       "info": {
-        "الشركة": "Volvo — السويد",
-        "السنة": "1961 — 1973",
-        "المحرك": "I4 1.8L",
-        "أقصى سرعة": "175 كم/س",
-        "الحصان": "115"
+        "الشركة": "Audi — ألمانيا",
+        "السنة": "1994 — الآن",
+        "المحرك": "I4 توربو 2.0L",
+        "أقصى سرعة": "250 كم/س",
+        "الحصان": "190"
       }
     },
     {
       "id": "ca49",
-      "answer": "ماتسودا MX-5 ميياتا",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/da/2019_Mazda_MX-5_%28ND%2C_facelift%2C_red%29%2C_front_8.21.19.jpg/400px-2019_Mazda_MX-5_%28ND%2C_facelift%2C_red%29%2C_front_8.21.19.jpg",
+      "answer": "رينو ميغان RS",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/2016_Renault_Megane_GT_Line%2C_front_7.15.17.jpg/400px-2016_Renault_Megane_GT_Line%2C_front_7.15.17.jpg",
       "info": {
-        "الشركة": "Mazda — اليابان",
-        "السنة": "1989 — الآن",
-        "المحرك": "I4 2.0L",
-        "أقصى سرعة": "214 كم/س",
-        "الحصان": "184"
+        "الشركة": "Renault — فرنسا",
+        "السنة": "1995 — الآن",
+        "المحرك": "I4 توربو 1.8L",
+        "أقصى سرعة": "260 كم/س",
+        "الحصان": "300"
       }
     },
     {
       "id": "ca50",
-      "answer": "فيراري لافيراري",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Ferrari_LaFerrari.jpg/400px-Ferrari_LaFerrari.jpg",
+      "answer": "فولكسفاغن غولف GTI",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Volkswagen_Golf_VII_Facelift_%28cropped%29.jpg/400px-Volkswagen_Golf_VII_Facelift_%28cropped%29.jpg",
       "info": {
-        "الشركة": "Ferrari — إيطاليا",
-        "السنة": 2013,
-        "المحرك": "V12 هجين 6.3L",
-        "أقصى سرعة": "350+ كم/س",
-        "الحصان": "950"
+        "الشركة": "Volkswagen — ألمانيا",
+        "السنة": "1974 — الآن",
+        "المحرك": "I4 توربو 2.0L",
+        "أقصى سرعة": "250 كم/س",
+        "ملاحظة": "أيقونة السيارات الرياضية المدنية"
       }
     }
-  ]
-};
+  ],
+  "game_chars": [
+    {
+      "id": "gc01",
+      "answer": "ماريو",
+      "url": "https://upload.wikimedia.org/wikipedia/en/thumb/a/a9/MarioNSMBUDeluxe.png/400px-MarioNSMBUDeluxe.png",
+      "info": {
+        "اللعبة": "Super Mario Bros",
+        "الشركة": "Nintendo",
+        "السنة": 1985,
+        "النوع": "منصات"
+      }
+    },
+    {
+      "id": "gc02",
+      "answer": "بيكاتشو",
+      "url": "https://upload.wikimedia.org/wikipedia/en/thumb/4/43/Pikachu_art.png/400px-Pikachu_art.png",
+      "info": {
+        "اللعبة": "Pokémon",
+        "الشركة": "Nintendo",
+        "السنة": 1996,
+        "النوع": "RPG"
+      }
+    },
+    {
+      "id": "gc03",
+      "answer": "سونيك",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Sonic_the_Hedgehog_logo.svg/400px-Sonic_the_Hedgehog_logo.svg",
+      "info": {
+        "اللعبة": "Sonic the Hedgehog",
+        "الشركة": "SEGA",
+        "السنة": 1991,
+        "النوع": "منصات-سرعة"
+      }
+    },
+    {
+      "id": "gc04",
+      "answer": "لينك (زيلدا)",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG-development_Link_artwork1_%28Twilight_Princess%29.png/400px-PNG-development_Link_artwork1_%28Twilight_Princess%29.png",
+      "info": {
+        "اللعبة": "The Legend of Zelda",
+        "الشركة": "Nintendo",
+        "السنة": 1986,
+        "النوع": "مغامرة-RPG"
+      }
+    },
+    {
+      "id": "gc05",
+      "answer": "لارا كروفت",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Lara_Croft_1996.png/400px-Lara_Croft_1996.png",
+      "info": {
+        "اللعبة": "Tomb Raider",
+        "الشركة": "Crystal Dynamics",
+        "السنة": 1996,
+        "النوع": "مغامرة-أكشن"
+      }
+    },
+    {
+      "id": "gc06",
+      "answer": "كراتوس",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/54/God_of_War_2018_coverart.png/400px-God_of_War_2018_coverart.png",
+      "info": {
+        "اللعبة": "God of War",
+        "الشركة": "Sony Santa Monica",
+        "السنة": 2005,
+        "النوع": "أكشن"
+      }
+    },
+    {
+      "id": "gc07",
+      "answer": "ماسترتشيف",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Halo_3_Master_Chief.jpg/400px-Halo_3_Master_Chief.jpg",
+      "info": {
+        "اللعبة": "Halo",
+        "الشركة": "Bungie / 343 Industries",
+        "السنة": 2001,
+        "النوع": "FPS"
+      }
+    },
+    {
+      "id": "gc08",
+      "answer": "سبايدرمان PS4",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/Marvel%27s_Spider-Man_cover.jpg/400px-Marvel%27s_Spider-Man_cover.jpg",
+      "info": {
+        "اللعبة": "Marvel's Spider-Man",
+        "الشركة": "Insomniac / Sony",
+        "السنة": 2018,
+        "النوع": "أكشن-مغامرة"
+      }
+    },
+    {
+      "id": "gc09",
+      "answer": "آرثر مورغان",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Red_Dead_Redemption_2.jpg/400px-Red_Dead_Redemption_2.jpg",
+      "info": {
+        "اللعبة": "Red Dead Redemption 2",
+        "الشركة": "Rockstar Games",
+        "السنة": 2018,
+        "النوع": "مغامرة مفتوحة"
+      }
+    },
+    {
+      "id": "gc10",
+      "answer": "جيرالت (ويتشر)",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/The_Witcher_3_cover_art.jpg/400px-The_Witcher_3_cover_art.jpg",
+      "info": {
+        "اللعبة": "The Witcher 3",
+        "الشركة": "CD Projekt Red",
+        "السنة": 2015,
+        "النوع": "RPG"
+      }
+    },
+    {
+      "id": "gc11",
+      "answer": "V (سايبربانك)",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Cyberpunk_2077_box_art.jpg/400px-Cyberpunk_2077_box_art.jpg",
+      "info": {
+        "اللعبة": "Cyberpunk 2077",
+        "الشركة": "CD Projekt Red",
+        "السنة": 2020,
+        "النوع": "RPG مستقبلي"
+      }
+    },
+    {
+      "id": "gc12",
+      "answer": "إيلي (The Last of Us)",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/The_Last_of_Us_cover.jpg/400px-The_Last_of_Us_cover.jpg",
+      "info": {
+        "اللعبة": "The Last of Us",
+        "الشركة": "Naughty Dog",
+        "السنة": 2013,
+        "النوع": "بقاء-دراما"
+      }
+    },
+    {
+      "id": "gc13",
+      "answer": "ناثان دريك",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Uncharted_4_A_Thief%27s_End.png/400px-Uncharted_4_A_Thief%27s_End.png",
+      "info": {
+        "اللعبة": "Uncharted",
+        "الشركة": "Naughty Dog",
+        "السنة": 2007,
+        "النوع": "مغامرة-أكشن"
+      }
+    },
+    {
+      "id": "gc14",
+      "answer": "دونكي كونغ",
+      "url": "https://upload.wikimedia.org/wikipedia/en/thumb/a/a9/MarioNSMBUDeluxe.png/400px-MarioNSMBUDeluxe.png",
+      "info": {
+        "اللعبة": "Donkey Kong",
+        "الشركة": "Nintendo",
+        "السنة": 1981,
+        "النوع": "منصات"
+      }
+    },
+    {
+      "id": "gc15",
+      "answer": "باكمان",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/Pac-man_0.png/400px-Pac-man_0.png",
+      "info": {
+        "اللعبة": "Pac-Man",
+        "الشركة": "Namco",
+        "السنة": 1980,
+        "النوع": "كلاسيك"
+      }
+    },
+    {
+      "id": "gc16",
+      "answer": "ريو (ستريت فايتر)",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/Street_Fighter_Logo.png/400px-Street_Fighter_Logo.png",
+      "info": {
+        "اللعبة": "Street Fighter",
+        "الشركة": "Capcom",
+        "السنة": 1987,
+        "النوع": "قتال"
+      }
+    },
+    {
+      "id": "gc17",
+      "answer": "سكوربيون",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Mortal_Kombat_logo.png/400px-Mortal_Kombat_logo.png",
+      "info": {
+        "اللعبة": "Mortal Kombat",
+        "الشركة": "NetherRealm",
+        "السنة": 1992,
+        "النوع": "قتال"
+      }
+    },
+    {
+      "id": "gc18",
+      "answer": "ستيف (مايكرافت)",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Minecraft_jenny_mod.png/400px-Minecraft_jenny_mod.png",
+      "info": {
+        "اللعبة": "Minecraft",
+        "الشركة": "Mojang / Microsoft",
+        "السنة": 2011,
+        "النوع": "بناء-بقاء"
+      }
+    },
+    {
+      "id": "gc19",
+      "answer": "GTA V",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Grand_Theft_Auto_V_logo.svg/400px-Grand_Theft_Auto_V_logo.svg",
+      "info": {
+        "اللعبة": "Grand Theft Auto V",
+        "الشركة": "Rockstar Games",
+        "السنة": 2013,
+        "النوع": "عالم مفتوح"
+      }
+    },
+    {
+      "id": "gc20",
+      "answer": "فورتنايت",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Fortnite_-_Calamity.png/400px-Fortnite_-_Calamity.png",
+      "info": {
+        "اللعبة": "Fortnite",
+        "الشركة": "Epic Games",
+        "السنة": 2017,
+        "النوع": "Battle Royale"
+      }
+    },
+    {
+      "id": "gc21",
+      "answer": "تريسر (أوفرووتش)",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Overwatch_logo.svg/400px-Overwatch_logo.svg",
+      "info": {
+        "اللعبة": "Overwatch",
+        "الشركة": "Blizzard",
+        "السنة": 2016,
+        "النوع": "FPS تعاوني"
+      }
+    },
+    {
+      "id": "gc22",
+      "answer": "ليغ أوف ليجيندز",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/League_of_Legends_logo_2019.png/400px-League_of_Legends_logo_2019.png",
+      "info": {
+        "اللعبة": "League of Legends",
+        "الشركة": "Riot Games",
+        "السنة": 2009,
+        "النوع": "MOBA"
+      }
+    },
+    {
+      "id": "gc23",
+      "answer": "فالورانت",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Valorant_logo_-_red_and_white.svg/400px-Valorant_logo_-_red_and_white.svg",
+      "info": {
+        "اللعبة": "Valorant",
+        "الشركة": "Riot Games",
+        "السنة": 2020,
+        "النوع": "FPS تكتيكي"
+      }
+    },
+    {
+      "id": "gc24",
+      "answer": "بوبجي",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/PUBG_Logo.svg/400px-PUBG_Logo.svg",
+      "info": {
+        "اللعبة": "PUBG",
+        "الشركة": "Krafton",
+        "السنة": 2017,
+        "النوع": "Battle Royale"
+      }
+    },
+    {
+      "id": "gc25",
+      "answer": "كول أوف ديوتي",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Call_of_Duty_Logo.svg/400px-Call_of_Duty_Logo.svg",
+      "info": {
+        "اللعبة": "Call of Duty",
+        "الشركة": "Activision",
+        "السنة": 2003,
+        "النوع": "FPS-حرب"
+      }
+    },
+    {
+      "id": "gc26",
+      "answer": "أبكس ليجيندز",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/Apex_legends_cover.jpg/400px-Apex_legends_cover.jpg",
+      "info": {
+        "اللعبة": "Apex Legends",
+        "الشركة": "Respawn / EA",
+        "السنة": 2019,
+        "النوع": "Battle Royale"
+      }
+    },
+    {
+      "id": "gc27",
+      "answer": "دوتا 2",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Dota_2_logo.png/400px-Dota_2_logo.png",
+      "info": {
+        "اللعبة": "Dota 2",
+        "الشركة": "Valve",
+        "السنة": 2013,
+        "النوع": "MOBA"
+      }
+    },
+    {
+      "id": "gc28",
+      "answer": "سكايريم",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/The_Elder_Scrolls_V_Skyrim_cover.png/400px-The_Elder_Scrolls_V_Skyrim_cover.png",
+      "info": {
+        "اللعبة": "The Elder Scrolls V: Skyrim",
+        "الشركة": "Bethesda",
+        "السنة": 2011,
+        "النوع": "RPG مفتوح"
+      }
+    },
+    {
+      "id": "gc29",
+      "answer": "فولآوت 4",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Fallout_4_cover_art.jpg/400px-Fallout_4_cover_art.jpg",
+      "info": {
+        "اللعبة": "Fallout 4",
+        "الشركة": "Bethesda",
+        "السنة": 2015,
+        "النوع": "RPG ما بعد نووي"
+      }
+    },
+    {
+      "id": "gc30",
+      "answer": "سيكيرو",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/Sekiro_-_cover_art.jpg/400px-Sekiro_-_cover_art.jpg",
+      "info": {
+        "اللعبة": "Sekiro: Shadows Die Twice",
+        "الشركة": "FromSoftware",
+        "السنة": 2019,
+        "النوع": "أكشن ياباني"
+      }
+    },
+    {
+      "id": "gc31",
+      "answer": "دارك سولز",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Dark_Souls_cover_art.jpg/400px-Dark_Souls_cover_art.jpg",
+      "info": {
+        "اللعبة": "Dark Souls",
+        "الشركة": "FromSoftware",
+        "السنة": 2011,
+        "النوع": "أكشن-RPG صعب"
+      }
+    },
+    {
+      "id": "gc32",
+      "answer": "بلودبورن",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Bloodborne_cover_art.jpg/400px-Bloodborne_cover_art.jpg",
+      "info": {
+        "اللعبة": "Bloodborne",
+        "الشركة": "FromSoftware / Sony",
+        "السنة": 2015,
+        "النوع": "أكشن-RPG رعب"
+      }
+    },
+    {
+      "id": "gc33",
+      "answer": "هورايزن زيرو داون",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Horizon_Zero_Dawn_cover_art.jpg/400px-Horizon_Zero_Dawn_cover_art.jpg",
+      "info": {
+        "اللعبة": "Horizon Zero Dawn",
+        "الشركة": "Guerrilla / Sony",
+        "السنة": 2017,
+        "النوع": "أكشن-RPG"
+      }
+    },
+    {
+      "id": "gc34",
+      "answer": "ماس إفكت",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/Mass_Effect_cover_art.jpg/400px-Mass_Effect_cover_art.jpg",
+      "info": {
+        "اللعبة": "Mass Effect",
+        "الشركة": "BioWare / EA",
+        "السنة": 2007,
+        "النوع": "RPG خيال علمي"
+      }
+    },
+    {
+      "id": "gc35",
+      "answer": "باتمان آركهام",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Batman_Arkham_City_cover.jpg/400px-Batman_Arkham_City_cover.jpg",
+      "info": {
+        "اللعبة": "Batman: Arkham City",
+        "الشركة": "Rocksteady",
+        "السنة": 2011,
+        "النوع": "أكشن-مغامرة"
+      }
+    },
+    {
+      "id": "gc36",
+      "answer": "أساسينز كريد",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Assassin%27s_Creed_IV_Black_Flag_cover.jpg/400px-Assassin%27s_Creed_IV_Black_Flag_cover.jpg",
+      "info": {
+        "اللعبة": "Assassin's Creed",
+        "الشركة": "Ubisoft",
+        "السنة": 2007,
+        "النوع": "أكشن-تاريخي"
+      }
+    },
+    {
+      "id": "gc37",
+      "answer": "ديث ستراندينغ",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Death_Stranding_logo.png/400px-Death_Stranding_logo.png",
+      "info": {
+        "اللعبة": "Death Stranding",
+        "الشركة": "Kojima Productions",
+        "السنة": 2019,
+        "النوع": "مغامرة"
+      }
+    },
+    {
+      "id": "gc38",
+      "answer": "درغن أيج",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Dragon_Age-_Origins_cover_art.jpg/400px-Dragon_Age-_Origins_cover_art.jpg",
+      "info": {
+        "اللعبة": "Dragon Age: Origins",
+        "الشركة": "BioWare / EA",
+        "السنة": 2009,
+        "النوع": "RPG خيال"
+      }
+    },
+    {
+      "id": "gc39",
+      "answer": "وورلد أوف ووركرافت",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/World_of_Warcraft_Classic_logo.png/400px-World_of_Warcraft_Classic_logo.png",
+      "info": {
+        "اللعبة": "World of Warcraft",
+        "الشركة": "Blizzard",
+        "السنة": 2004,
+        "النوع": "MMORPG"
+      }
+    },
+    {
+      "id": "gc40",
+      "answer": "أمونج أس",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Among_Us_cover_art.jpg/400px-Among_Us_cover_art.jpg",
+      "info": {
+        "اللعبة": "Among Us",
+        "الشركة": "Innersloth",
+        "السنة": 2018,
+        "النوع": "اجتماعي-خداع"
+      }
+    },
+    {
+      "id": "gc41",
+      "answer": "هيلو إنفينت",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Halo_3_Master_Chief.jpg/400px-Halo_3_Master_Chief.jpg",
+      "info": {
+        "اللعبة": "Halo Infinite",
+        "الشركة": "343 Industries",
+        "السنة": 2021,
+        "النوع": "FPS"
+      }
+    },
+    {
+      "id": "gc42",
+      "answer": "كيربي",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Kirby_logo.png/400px-Kirby_logo.png",
+      "info": {
+        "اللعبة": "Kirby's Dream Land",
+        "الشركة": "Nintendo / HAL",
+        "السنة": 1992,
+        "النوع": "منصات — كرة وردية"
+      }
+    },
+    {
+      "id": "gc43",
+      "answer": "ميو تو",
+      "url": "https://upload.wikimedia.org/wikipedia/en/thumb/4/43/Pikachu_art.png/400px-Pikachu_art.png",
+      "info": {
+        "اللعبة": "Pokémon",
+        "الشركة": "Nintendo",
+        "السنة": 1996,
+        "النوع": "RPG — بوكيمون أسطوري"
+      }
+    },
+    {
+      "id": "gc44",
+      "answer": "سبيرو",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Spyro_Reignited_Trilogy_logo.svg/400px-Spyro_Reignited_Trilogy_logo.svg",
+      "info": {
+        "اللعبة": "Spyro the Dragon",
+        "الشركة": "Insomniac Games",
+        "السنة": 1998,
+        "النوع": "منصات — تنين بنفسجي"
+      }
+    },
+    {
+      "id": "gc45",
+      "answer": "كراش بانديكوت",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Crash_Bandicoot_-_The_Wrath_of_Cortex.jpg/400px-Crash_Bandicoot_-_The_Wrath_of_Cortex.jpg",
+      "info": {
+        "اللعبة": "Crash Bandicoot",
+        "الشركة": "Naughty Dog / Activision",
+        "السنة": 1996,
+        "النوع": "منصات"
+      }
+    },
+    {
+      "id": "gc46",
+      "answer": "لويجي",
+      "url": "https://upload.wikimedia.org/wikipedia/en/thumb/a/a9/MarioNSMBUDeluxe.png/400px-MarioNSMBUDeluxe.png",
+      "info": {
+        "اللعبة": "Super Mario Bros",
+        "الشركة": "Nintendo",
+        "السنة": 1983,
+        "النوع": "منصات — أخ ماريو"
+      }
+    },
+    {
+      "id": "gc47",
+      "answer": "باتل فيلد",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Call_of_Duty_Logo.svg/400px-Call_of_Duty_Logo.svg",
+      "info": {
+        "اللعبة": "Battlefield",
+        "الشركة": "DICE / EA",
+        "السنة": 2002,
+        "النوع": "FPS حرب واقعية"
+      }
+    },
+    {
+      "id": "gc48",
+      "answer": "فايف نايتس (FNAF)",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Fortnite_F_lettermark_logo.png/400px-Fortnite_F_lettermark_logo.png",
+      "info": {
+        "اللعبة": "Five Nights at Freddy's",
+        "الشركة": "Scott Cawthon",
+        "السنة": 2014,
+        "النوع": "رعب-بقاء"
+      }
+    },
+    {
+      "id": "gc49",
+      "answer": "روبلوكس",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Minecraft_jenny_mod.png/400px-Minecraft_jenny_mod.png",
+      "info": {
+        "اللعبة": "Roblox",
+        "الشركة": "Roblox Corporation",
+        "السنة": 2006,
+        "النوع": "منصة ألعاب متعددة"
+      }
+    },
+    {
+      "id": "gc50",
+      "answer": "تيرارا",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Minecraft_jenny_mod.png/400px-Minecraft_jenny_mod.png",
+      "info": {
+        "اللعبة": "Terraria",
+        "الشركة": "Re-Logic",
+        "السنة": 2011,
+        "النوع": "مغامرة-بناء 2D"
+      }
+    }
+  ]};
 
 // ══════════════════════════════════════════════════════════════
-// GUESS_CATEGORIES — قائمة الفئات المتاحة
+//  فئات اللعبة — المعروضة في شاشة الاختيار
 // ══════════════════════════════════════════════════════════════
 export const GUESS_CATEGORIES = [
-  { id: 'athletes',   emoji: '⚽', nameAr: 'رياضيون'       },
-  { id: 'countries',  emoji: '🌍', nameAr: 'دول وأعلام'    },
-  { id: 'animals',    emoji: '🦁', nameAr: 'حيوانات'       },
-  { id: 'food',       emoji: '🍕', nameAr: 'أطعمة'         },
+  { id: 'athletes',   emoji: '⚽', nameAr: 'رياضيون'      },
+  { id: 'countries',  emoji: '🌍', nameAr: 'دول'           },
+  { id: 'animals',    emoji: '🐾', nameAr: 'حيوانات'       },
+  { id: 'food',       emoji: '🍕', nameAr: 'أكل'           },
   { id: 'things',     emoji: '🔧', nameAr: 'أشياء'         },
-  { id: 'actors',     emoji: '🎬', nameAr: 'ممثلون عالميون'},
-  { id: 'arab_stars', emoji: '🌟', nameAr: 'نجوم عرب'      },
-  { id: 'movies',     emoji: '🎥', nameAr: 'أفلام ومسلسلات'},
-  { id: 'jobs',       emoji: '👨‍💼', nameAr: 'مهن وحرف'      },
-  { id: 'film_chars', emoji: '🦸', nameAr: 'شخصيات خيالية' },
+  { id: 'actors',     emoji: '🎬', nameAr: 'ممثلون'        },
+  { id: 'arab_stars', emoji: '🌟', nameAr: 'نجوم عرب'     },
+  { id: 'movies',     emoji: '🎥', nameAr: 'أفلام'         },
+  { id: 'jobs',       emoji: '💼', nameAr: 'مهن'           },
+  { id: 'film_chars', emoji: '🦸', nameAr: 'شخصيات أفلام' },
   { id: 'cars',       emoji: '🚗', nameAr: 'سيارات'        },
+  { id: 'game_chars', emoji: '🎮', nameAr: 'شخصيات ألعاب' },
 ];
 
 // ══════════════════════════════════════════════════════════════
-// pickRandomImage — تختار صورة عشوائية من فئة معينة
+//  اختيار صورة عشوائية من فئة مع تجنب المستخدمة
 // ══════════════════════════════════════════════════════════════
+/**
+ * @param {string}   catId    — معرّف الفئة
+ * @param {string[]} usedIds  — معرّفات الصور المستخدمة مسبقاً
+ * @returns {{ id, answer, url, info? } | null}
+ */
 export function pickRandomImage(catId, usedIds = []) {
   const pool = GUESS_IMAGE_DATA[catId];
   if (!pool || pool.length === 0) return null;
 
   const available = pool.filter(img => !usedIds.includes(img.id));
-  // إذا انتهت الصور المتاحة، أعد التدوير
+  // إذا استُنفدت الصور نعيد كل الفئة من البداية
   const source = available.length > 0 ? available : pool;
   return source[Math.floor(Math.random() * source.length)];
         }

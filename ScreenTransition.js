@@ -56,7 +56,6 @@ export const KeepAliveScreen = memo(function KeepAliveScreen({ active, children,
     <View
       style={[StyleSheet.absoluteFill, style, {
         display: active ? 'flex' : 'none',
-        backgroundColor: '#0a0a1a', // يمنع الوميض الأبيض
       }]}
       pointerEvents={active ? 'auto' : 'none'}
     >

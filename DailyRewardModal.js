@@ -90,13 +90,7 @@ export default function DailyRewardModal({ visible, streak, reward, onClaim }) {
             </View>
           </View>
 
-          <TouchableOpacity
-            style={[styles.claimBtn, { backgroundColor: theme.accent }]}
-            onPress={onClaim}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.claimText, { color: theme.textOnAccent }]}>{t('daily.claim')}</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onClaim} label={t('daily.claim')} variant='primary' size='large' style={styles.claimBtn} />
         </Animated.View>
       </View>
     </Modal>

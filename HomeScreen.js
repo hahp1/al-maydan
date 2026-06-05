@@ -10,7 +10,8 @@
  */
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated, ImageBackground } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated } from 'react-native';
+import { ThemedCard } from './ThemedComponents';
 import TokenModal from './TokenModal';
 import DailyRewardModal from './DailyRewardModal';
 import { checkDailyReward, claimDailyReward } from './DailyRewardService';
@@ -19,7 +20,6 @@ import { useTheme } from './ThemeContext';
 import HeartIcon     from './HeartIcon';
 import ChargingHeart from './ChargingHeart';
 import { getRefillCountdown } from './HeartsService';
-import { LinearGradient } from 'expo-linear-gradient';
 
 const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 
@@ -92,15 +92,13 @@ function HeartsWidget({ hearts, countdown, onPress, theme }) {
     }
   }, [hearts]);
 
-  const heartColor = hearts > 0 ? theme.error : theme.textMuted;
-  const bgColor    = hearts > 0 ? theme.error + '20' : theme.bgElevated;
+  const heartColor = hearts > 0 ? theme.accent : theme.textMuted;
+  const bgColor    = hearts > 0 ? theme.accentSoft : theme.bgElevated;
 
   return (
-    <TouchableOpacity
+    <ThemedCard
       onPress={onPress}
       style={[styles.heartsBtn, { backgroundColor: bgColor, borderColor: heartColor + '55' }]}
-      hitSlop={HIT_SLOP}
-      activeOpacity={0.75}
     >
       <Animated.View style={{ transform: [{ scale: pulseHeart }] }}>
         <HeartIcon size={22} filled={hearts > 0} hearts={hearts} pulseWhenZero glow={false} />
@@ -109,7 +107,7 @@ function HeartsWidget({ hearts, countdown, onPress, theme }) {
       {countdown && hearts === 0 && (
         <Text style={[styles.heartsCountdown, { color: theme.textMuted }]}>{countdown}</Text>
       )}
-    </TouchableOpacity>
+    </ThemedCard>
   );
 }
 
@@ -118,11 +116,9 @@ function LevelBadge({ user, theme, onPress }) {
   const level = user?.level || 1;
   const isGuest = !!user?.isGuest;
   return (
-    <TouchableOpacity
+    <ThemedCard
       onPress={onPress}
-      hitSlop={HIT_SLOP}
-      activeOpacity={0.75}
-      style={[styles.profileBtn, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}
+      style={styles.profileBtn}
     >
       <Text style={[styles.profileIcon, { color: theme.accent }]}>
         {isGuest ? '👤' : '⚡'}
@@ -130,7 +126,7 @@ function LevelBadge({ user, theme, onPress }) {
       {!isGuest && (
         <Text style={[styles.profileLevel, { color: theme.accent }]}>{level}</Text>
       )}
-    </TouchableOpacity>
+    </ThemedCard>
   );
 }
 
@@ -254,25 +250,13 @@ export default function HomeScreen({
         {/* يسار: قلوب + توكن */}
         <View style={styles.topLeft}>
           <HeartsWidget hearts={hearts ?? 0} countdown={countdown} onPress={onOpenHeartsModal} theme={theme} />
-          <TouchableOpacity
-            onPress={openTokenModal}
-            style={styles.topTokenBtn}
-            hitSlop={HIT_SLOP}
-            activeOpacity={0.7}
-          >
+          <ThemedCard onPress={openTokenModal} style={styles.topTokenBtn}>
             <Text style={[styles.topTokenText, { color: theme.accent }]}>🪙 {tokens}</Text>
-          </TouchableOpacity>
+          </ThemedCard>
         </View>
 
         {/* يمين: الملف الشخصي */}
-        <TouchableOpacity
-          style={styles.topProfile}
-          onPress={openProfile}
-          hitSlop={HIT_SLOP}
-          activeOpacity={0.7}
-        >
-          <LevelBadge user={user} theme={theme} onPress={openProfile} />
-        </TouchableOpacity>
+        <LevelBadge user={user} theme={theme} onPress={openProfile} />
       </Animated.View>
 
       {/* ─── أعلى نتيجة ─── */}
@@ -292,14 +276,9 @@ export default function HomeScreen({
       {/* ─── بطاقتا الميدانين ─── */}
       <View style={styles.arenaRow}>
         <Animated.View style={{ transform: [{ translateY: slide1 }], opacity: fadeAnim, flex: 1 }}>
-          <TouchableOpacity
-            style={[styles.arenaCard, {
-              backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
-              borderColor: theme.accentBorder,
-              shadowColor: theme.accent,
-            }]}
+          <ThemedCard
             onPress={() => setScreen('knowledge')}
-            activeOpacity={0.82}
+            style={styles.arenaCard}
           >
             <View style={[styles.arenaIconWrap, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
               <Text style={styles.arenaEmoji}>🧠</Text>
@@ -309,18 +288,13 @@ export default function HomeScreen({
             <View style={[styles.arenaBadge, { backgroundColor: theme.accentSoft }]}>
               <Text style={[styles.arenaBadgeText, { color: theme.accent }]}>{t('home.knowledgeBadge')}</Text>
             </View>
-          </TouchableOpacity>
+          </ThemedCard>
         </Animated.View>
 
         <Animated.View style={{ transform: [{ translateY: slide2 }], opacity: fadeAnim, flex: 1 }}>
-          <TouchableOpacity
-            style={[styles.arenaCard, {
-              backgroundColor: isCityTheme ? theme.purple + '0c' : theme.bgCard,
-              borderColor: theme.purpleBorder,
-              shadowColor: theme.purple,
-            }]}
+          <ThemedCard
             onPress={() => setScreen('games')}
-            activeOpacity={0.82}
+            style={styles.arenaCard}
           >
             <View style={[styles.arenaIconWrap, { backgroundColor: theme.purpleSoft, borderColor: theme.purpleBorder }]}>
               <Text style={styles.arenaEmoji}>🎲</Text>
@@ -330,7 +304,7 @@ export default function HomeScreen({
             <View style={[styles.arenaBadge, { backgroundColor: theme.purpleSoft }]}>
               <Text style={[styles.arenaBadgeText, { color: theme.purple }]}>{t('home.gamesBadge')}</Text>
             </View>
-          </TouchableOpacity>
+          </ThemedCard>
         </Animated.View>
       </View>
 
@@ -346,20 +320,16 @@ export default function HomeScreen({
             { emoji: '🎭', nameAr: 'مافيا',    nameEn: 'Mafia',    screen: 'mafia'    },
             { emoji: '🤔', nameAr: 'من أنا؟',  nameEn: 'Who Am I', screen: 'manana'   },
           ].map(item => (
-            <TouchableOpacity
+            <ThemedCard
               key={item.screen}
-              style={[styles.quickItem, {
-                backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
-                borderColor: theme.borderCard,
-              }]}
               onPress={() => setScreen(item.screen)}
-              activeOpacity={0.8}
+              style={styles.quickItem}
             >
               <Text style={styles.quickEmoji}>{item.emoji}</Text>
               <Text style={[styles.quickName, { color: theme.textMuted }]}>
                 {lang === 'en' ? item.nameEn : item.nameAr}
               </Text>
-            </TouchableOpacity>
+            </ThemedCard>
           ))}
         </View>
       </Animated.View>
@@ -368,20 +338,10 @@ export default function HomeScreen({
       <Animated.View style={[styles.friendsWrap, { opacity: fadeAnim, gap: 10 }]}>
         {/* زر البطولة — يظهر فقط إذا كانت بطولة نشطة */}
         {activeTournament?.isActive && (
-          <TouchableOpacity
-            style={[styles.friendsBtn, {
-              backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
-              borderColor: '#f59e0b66',
-              flexDirection: 'row', gap: 8,
-            }]}
-            onPress={() => setScreen('knowledge')}
-            activeOpacity={0.8}
-          >
+          <ThemedCard onPress={() => setScreen('knowledge')} style={[styles.friendsBtn, { flexDirection: 'row', gap: 8 }]}>
             <Text style={{ fontSize: 18 }}>🏆</Text>
-            <Text style={[styles.friendsBtnText, { color: '#f59e0b' }]}>
-              {t('home.tournament') || 'البطولة الأسبوعية'}
-            </Text>
-          </TouchableOpacity>
+            <Text style={[styles.friendsBtnText, { color: '#f59e0b' }]}>{t('home.tournament') || 'البطولة الأسبوعية'}</Text>
+          </ThemedCard>
         )}
         {/* ── BottomNav ── */}
         <View style={styles.bottomNav}>
@@ -394,7 +354,7 @@ export default function HomeScreen({
             { emoji: '👥', label: 'أصدقاء',  active: false, onPress: () => setScreen('friends')  },
             { emoji: '⚔️', label: 'الميدان', active: true,  onPress: () => {}                    },
           ]).map((item, i) => (
-            <TouchableOpacity key={i} style={styles.navItem} onPress={item.onPress} activeOpacity={0.8}>
+            <ThemedCard key={i} onPress={item.onPress} style={styles.navItem}>
               <View style={[styles.navCircle, {
                 borderColor:     item.active ? theme.accent : theme.borderCard,
                 backgroundColor: item.active ? theme.accentSoft : (isCityTheme ? theme.accent + '0c' : theme.bgCard),
@@ -404,7 +364,7 @@ export default function HomeScreen({
               <Text style={[styles.navLabel, { color: item.active ? theme.accent : theme.textMuted }]}>
                 {item.label}
               </Text>
-            </TouchableOpacity>
+            </ThemedCard>
           ))}
         </View>
       </Animated.View>
@@ -414,37 +374,9 @@ export default function HomeScreen({
     </>
   );
 
-  // ── ثيم مدينة ──
-  if (isCityTheme) {
-    return (
-      <LinearGradient
-        colors={theme.skyGradient}
-        style={styles.container}
-        start={{ x: 0.5, y: 1 }}
-        end={{ x: 0.5, y: 0 }}
-      >
-        {screenContent}
-        <View style={styles.skylineWrap} pointerEvents="none">
-          <ImageBackground
-            source={theme.skylineAsset}
-            style={styles.skylineImg}
-            resizeMode="cover"
-            imageStyle={{ objectPosition: 'bottom' }}
-          />
-          <LinearGradient
-            colors={[theme.skyBottom, theme.skyBottom + '00']}
-            style={styles.skylineFade}
-            start={{ x: 0, y: 1 }}
-            end={{ x: 0, y: 0 }}
-          />
-        </View>
-      </LinearGradient>
-    );
-  }
-
-  // ── ثيم عادي ──
+  // ── الخلفية من ThemeBackground في ThemeContext ──
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       {screenContent}
     </View>
   );
@@ -463,6 +395,10 @@ const styles = StyleSheet.create({
   titleLetter:     { fontSize: 68, fontWeight: '900', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 24, letterSpacing: 2 },
   subtitle:        { fontSize: 16, marginTop: 6, letterSpacing: 1 },
   // topBar (replaced userBar)
+  topBar:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 4 },
+  topLeft:         { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topTokenBtn:     { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  topTokenText:    { fontSize: 14, fontWeight: '700' },
   settingsBtn:     { padding: 4 },
   settingsIcon:    { fontSize: 20 },
   currencyRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -485,9 +421,9 @@ const styles = StyleSheet.create({
   quickSection:   { gap: 6, marginBottom: 10 },
   quickLabel:     { fontSize: 11, textAlign: 'center' },
   quickRow:       { flexDirection: 'row', gap: 8 },
-  quickItem:      { flex: 1, borderRadius: 14, borderWidth: 1, paddingVertical: 10, alignItems: 'center', gap: 4 },
+  quickItem:      { flex: 1, borderRadius: 14, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 4, alignItems: 'center', gap: 5, minWidth: 0 },
   quickEmoji:     { fontSize: 20 },
-  quickName:      { fontSize: 9, fontWeight: '700' },
+  quickName:      { fontSize: 10, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
   // ── BottomNav ──
   bottomNav:      { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', width: '100%', paddingTop: 8 },
   navItem:        { alignItems: 'center', gap: 4 },

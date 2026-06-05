@@ -15,6 +15,7 @@ import * as XLSX from 'xlsx';
 import { db } from './firebaseConfig';
 import { collection, doc, setDoc, writeBatch } from 'firebase/firestore';
 import { useTheme } from './ThemeContext';
+import { ThemedButton, ThemedCard } from './ThemedComponents';
 import { useT } from './I18n';
 
 export default function ImportScreen({ onBack, defaultLang = 'ar' }) {
@@ -118,13 +119,11 @@ export default function ImportScreen({ onBack, defaultLang = 'ar' }) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.back')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label={t('common.back')} variant='ghost' size='small' />
         <Text style={[styles.title, { color: theme.accent }]}>📥 استيراد أسئلة</Text>
       </View>
 
@@ -135,7 +134,7 @@ export default function ImportScreen({ onBack, defaultLang = 'ar' }) {
         </Text>
       </View>
 
-      <View style={[styles.infoBox, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+      <ThemedCard style={styles.infoBox}>
         <Text style={[styles.infoTitle, { color: theme.accent }]}>📋 تنسيق JSON المطلوب:</Text>
         <Text style={[styles.infoText, { color: theme.textSecondary }]}>• categoryId: معرف إنجليزي</Text>
         <Text style={[styles.infoText, { color: theme.textSecondary }]}>• category: اسم الفئة</Text>
@@ -144,26 +143,16 @@ export default function ImportScreen({ onBack, defaultLang = 'ar' }) {
         <Text style={[styles.infoText, { color: theme.textSecondary }]}>• كل سؤال: level + question + correct + wrong[3]</Text>
       </View>
 
-      <View style={[styles.infoBox, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+      <ThemedCard style={styles.infoBox}>
         <Text style={[styles.infoTitle, { color: theme.accent }]}>📊 تنسيق Excel المطلوب:</Text>
         <Text style={[styles.infoText, { color: theme.textSecondary }]}>• كل شيت = فئة</Text>
         <Text style={[styles.infoText, { color: theme.textSecondary }]}>• أعمدة: السؤال | الإجابة | الصعوبة | خطأ1 | خطأ2 | خطأ3</Text>
         <Text style={[styles.infoText, { color: theme.textSecondary }]}>• الصعوبة: 1 إلى 5</Text>
-      </View>
+      </ThemedCard>
 
       <View style={styles.buttonsRow}>
-        <TouchableOpacity
-          style={[styles.importBtn, { backgroundColor: theme.purple + '22', borderColor: theme.purple + '55' }, importing && styles.btnDisabled]}
-          onPress={handleImportJSON} disabled={importing}
-        >
-          <Text style={[styles.importBtnText, { color: theme.textOnAccent }]}>{importing ? t('common.loading') : '📄 JSON'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.importBtn, { backgroundColor: theme.success + '22', borderColor: theme.success + '55' }, importing && styles.btnDisabled]}
-          onPress={handleImportExcel} disabled={importing}
-        >
-          <Text style={[styles.importBtnText, { color: theme.textOnAccent }]}>{importing ? t('common.loading') : '📊 Excel'}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={handleImportJSON} disabled={importing} label={importing ? t('common.loading') : '📄 JSON'} variant='secondary' size='large' style={{ flex: 1 }} />
+        <ThemedButton onPress={handleImportExcel} disabled={importing} label={importing ? t('common.loading') : '📊 Excel'} variant='success' size='large' style={{ flex: 1 }} />
       </View>
 
       {log.length > 0 && (
@@ -175,9 +164,7 @@ export default function ImportScreen({ onBack, defaultLang = 'ar' }) {
       )}
 
       {log.some(m => m.includes('🎉')) && (
-        <TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.success + '22', borderColor: theme.success + '55' }]} onPress={onBack}>
-          <Text style={[styles.doneBtnText, { color: theme.textOnAccent }]}>{t('common.done')} — {t('common.back')}</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={onBack} label={`${t('common.done')} — ${t('common.back')}`} variant='success' size='large' />
       )}
     </View>
   );

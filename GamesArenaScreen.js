@@ -12,9 +12,9 @@ import {
   Animated, StatusBar, FlatList,
 } from 'react-native';
 import { useTheme } from './ThemeContext';
-import { useT } from './I18n';
+import { useT, useLanguage } from './I18n';
 import { playSound } from './SoundService';
-import { ThemedCard, ThemedPill } from './ThemedComponents';
+import { ThemedButton, ThemedCard, ThemedPill } from './ThemedComponents';
 
 // ── بنية اللعبة ──
 const JALSA_META = [
@@ -55,45 +55,48 @@ function buildGames(metaList, t) {
 }
 
 // ── بطاقة اللعبة ──
-const GameCard = memo(({ game, onPress, theme, t }) => (
-  <ThemedCard
-    onPress={game.ready ? () => onPress(game) : undefined}
-    radius={18}
-    padding={14}
-    style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: game.ready ? 1 : 0.75 }}
-  >
-    <View style={[styles.gameIconWrap, { backgroundColor: game.bg, borderColor: game.border }]}>
-      <Text style={styles.gameEmoji}>{game.emoji}</Text>
-    </View>
-    <View style={styles.gameInfo}>
-      <View style={styles.gameTitleRow}>
-        <Text style={[styles.gameTitle, { color: game.color }]}>{game.title}</Text>
-        {!game.ready && (
-          <ThemedPill variant="secondary" small style={{ paddingHorizontal: 8 }}>
-            {t('games.soon')}
-          </ThemedPill>
-        )}
-        {game.isNew && game.ready && (
-          <ThemedPill variant="warning" small style={{ paddingHorizontal: 8 }}>
-            {t('games.newBadge')}
-          </ThemedPill>
-        )}
+const GameCard = memo(({ game, onPress, theme, t, lang }) => {
+  const isRTL = lang === 'ar';
+  return (
+    <ThemedCard
+      onPress={game.ready ? () => onPress(game) : undefined}
+      radius={18}
+      padding={14}
+      style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 12, opacity: game.ready ? 1 : 0.75 }}
+    >
+      <View style={[styles.gameIconWrap, { backgroundColor: game.bg, borderColor: game.border }]}>
+        <Text style={styles.gameEmoji}>{game.emoji}</Text>
       </View>
-      <Text style={[styles.gameDesc,    { color: theme.textMuted }]}>{game.desc}</Text>
-      <Text style={[styles.gamePlayers, { color: theme.textMuted }]}>👤 {game.players}</Text>
-    </View>
-    {/* شارة التكلفة */}
-    {game.ready && (
-      <ThemedPill variant="danger" small>❤️ 1</ThemedPill>
-    )}
-  </ThemedCard>
-));
+      <View style={[styles.gameInfo, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+        <View style={[styles.gameTitleRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <Text style={[styles.gameTitle, { color: game.color }]}>{game.title}</Text>
+          {!game.ready && (
+            <ThemedPill variant="secondary" small style={{ paddingHorizontal: 8 }}>
+              {t('games.soon')}
+            </ThemedPill>
+          )}
+          {game.isNew && game.ready && (
+            <ThemedPill variant="warning" small style={{ paddingHorizontal: 8 }}>
+              {t('games.newBadge')}
+            </ThemedPill>
+          )}
+        </View>
+        <Text style={[styles.gameDesc,    { color: theme.textMuted, textAlign: isRTL ? 'right' : 'left' }]}>{game.desc}</Text>
+        <Text style={[styles.gamePlayers, { color: theme.textMuted, textAlign: isRTL ? 'right' : 'left' }]}>👤 {game.players}</Text>
+      </View>
+      {/* شارة التكلفة */}
+      {game.ready && (
+        <ThemedPill variant="danger" small>❤️ 1</ThemedPill>
+      )}
+    </ThemedCard>
+  );
+});
 
 const SEPARATOR = <View style={{ height: 12 }} />;
 
 export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStartGame }) {
   const { theme, isDark } = useTheme();
-  const t = useT();
+  const { t, lang } = useLanguage();
   const [activeTab, setActiveTab] = useState('jalsa');
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;
@@ -116,12 +119,19 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
     ]).start();
   }, [activeTab]);
 
+  // ألعاب تخصم القلب عند onGameReady وليس عند الضغط
+  const DEFERRED = new Set([
+    'mafia','actitout','truthdare','rankfriends','neverhaveiever',
+    'manana','whoisspy','guessimage','xo','bullshit','codenames',
+    'drawguess','wordle','kout','dominoes','biloot',
+  ]);
+
   const handleGamePress = useCallback((game) => {
     if (!game.ready) return;
     playSound('tap');
     if (setGameMode) setGameMode(game.mode);
     if (tryStartGame) {
-      tryStartGame(game.id, 1);
+      tryStartGame(game.id, 1, null, DEFERRED.has(game.id));
     } else {
       setScreen(game.id);
     }
@@ -131,8 +141,8 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
   const switchOnline = useCallback(() => setActiveTab('online'), []);
   const keyExtractor = useCallback((item) => item.id + item.mode, []);
   const renderItem   = useCallback(({ item }) => (
-    <GameCard game={item} onPress={handleGamePress} theme={theme} t={t} />
-  ), [handleGamePress, theme.bgCard, t]);
+    <GameCard game={item} onPress={handleGamePress} theme={theme} t={t} lang={lang} />
+  ), [handleGamePress, theme.bgCard, t, lang]);
 
   const ListFooter = useCallback(() => (
     <ThemedCard radius={18} padding={20} style={{ alignItems: 'center', gap: 8, borderStyle: 'dashed' }}>
@@ -142,18 +152,12 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
   ), [theme, t]);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       {/* هيدر */}
       <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-        <TouchableOpacity
-          onPress={() => setScreen('home')}
-          style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: theme.purpleBorder }]}
-          hitSlop={HIT_SLOP}
-        >
-          <Text style={[styles.backText, { color: theme.purple }]}>←</Text>
-        </TouchableOpacity>
+        <ThemedButton onPress={() => setScreen('home')} label='←' variant='ghost' size='small' style={styles.backBtn} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>🎲</Text>
           <Text style={[styles.headerTitle, { color: theme.purple }]}>{t('games.title')}</Text>
@@ -241,7 +245,7 @@ const styles = StyleSheet.create({
   gameCard:        { flexDirection: 'row', alignItems: 'center', borderRadius: 18, borderWidth: 1.5, padding: 14, gap: 12 },
   gameIconWrap:    { width: 60, height: 60, borderRadius: 16, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   gameEmoji:       { fontSize: 26 },
-  gameInfo:        { flex: 1, gap: 3 },
+  gameInfo:        { flex: 1, gap: 3, minWidth: 0 },
   gameTitleRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
   gameTitle:       { fontSize: 16, fontWeight: '800' },
   soonBadge:       { backgroundColor: '#a78bfa22', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },

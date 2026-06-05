@@ -163,14 +163,9 @@ const HIT_SLOP = { top: 10, bottom: 10, left: 10, right: 10 };
 const RankItem = memo(({ player, rank, onPress, theme, ranksNeeded }) => {
   const isSelected = rank > 0;
   return (
-    <TouchableOpacity
-      style={[
-        styles.rankItem,
-        { backgroundColor: theme.bgCard, borderColor: theme.border },
-        isSelected && { borderColor: '#f59e0b80', backgroundColor: '#f59e0b10' },
-      ]}
+    <ThemedCard
       onPress={onPress}
-      activeOpacity={0.75}
+      style={[styles.rankItem, isSelected && { borderColor: '#f59e0b80', backgroundColor: '#f59e0b10' }]}
     >
       <View style={[
         styles.rankBadge,
@@ -190,7 +185,7 @@ const RankItem = memo(({ player, rank, onPress, theme, ranksNeeded }) => {
           </Text>
         </View>
       )}
-    </TouchableOpacity>
+    </ThemedCard>
   );
 });
 
@@ -371,15 +366,13 @@ export default function RankFriendsScreen({ onBack, experience }) {
   // ════════════════════════════════════════════════════════════════
   if (phase === 'mode') {
     return (
-      <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.container, { backgroundColor: 'transparent' }]}>
         <RankFriendsEngraving theme={theme} />
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
         {/* زر رجوع صغير */}
         <View style={styles.exitBtnRow}>
-          <TouchableOpacity onPress={onBack} style={[styles.exitBtn, { backgroundColor: theme.bgCard, borderColor: '#f59e0b30' }]} hitSlop={HIT_SLOP}>
-            <Text style={[styles.exitBtnText, { color: '#f59e0b' }]}>→</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={onBack} label='→' variant='ghost' size='small' style={styles.exitBtn} />
         </View>
 
         <View style={styles.modeCenterWrap}>
@@ -389,26 +382,18 @@ export default function RankFriendsScreen({ onBack, experience }) {
 
           <View style={styles.modeCardsRow}>
             {/* وضع جاهز */}
-            <TouchableOpacity
-              style={[styles.modeCard, { backgroundColor: '#f59e0b18', borderColor: '#f59e0b60' }]}
-              onPress={() => { setMode('preset'); setPhase('setup'); }}
-              activeOpacity={0.8}
-            >
+            <ThemedCard onPress={() => { setMode('preset'); setPhase('setup'); }} style={styles.modeCard} variant='accent'>
               <Text style={styles.modeCardEmoji}>⚡</Text>
               <Text style={[styles.modeCardTitle, { color: '#f59e0b' }]}>جاهز</Text>
               <Text style={[styles.modeCardDesc, { color: theme.textMuted }]}>أسئلة جاهزة{'\n'}ابدأ فوراً</Text>
-            </TouchableOpacity>
+            </ThemedCard>
 
             {/* وضع مخصص */}
-            <TouchableOpacity
-              style={[styles.modeCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-              onPress={() => { setMode('custom'); setPhase('setup'); }}
-              activeOpacity={0.8}
-            >
+            <ThemedCard onPress={() => { setMode('custom'); setPhase('setup'); }} style={styles.modeCard}>
               <Text style={styles.modeCardEmoji}>✏️</Text>
               <Text style={[styles.modeCardTitle, { color: theme.textPrimary }]}>مخصص</Text>
               <Text style={[styles.modeCardDesc, { color: theme.textMuted }]}>أضف أسئلتك{'\n'}الخاصة</Text>
-            </TouchableOpacity>
+            </ThemedCard>
           </View>
         </View>
       </View>
@@ -421,14 +406,12 @@ export default function RankFriendsScreen({ onBack, experience }) {
   if (phase === 'setup') {
     return (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+        <View style={[styles.container, { backgroundColor: 'transparent' }]}>
           <RankFriendsEngraving theme={theme} />
           <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
           <View style={styles.header}>
-            <TouchableOpacity onPress={goMode} style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: '#f59e0b30' }]} hitSlop={HIT_SLOP}>
-              <Text style={[styles.backText, { color: '#f59e0b' }]}>{t('common.backArrow')}</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={goMode} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
             <View style={styles.headerCenter}>
               <Text style={styles.headerEmoji}>{mode === 'preset' ? '⚡' : '✏️'}</Text>
               <Text style={[styles.headerTitle, { color: '#f59e0b' }]}>{mode === 'preset' ? 'وضع جاهز' : 'وضع مخصص'}</Text>
@@ -450,9 +433,7 @@ export default function RankFriendsScreen({ onBack, experience }) {
                 onSubmitEditing={addPlayer}
                 returnKeyType="done"
               />
-              <TouchableOpacity style={[styles.addBtn, { backgroundColor: '#f59e0b' }]} onPress={addPlayer} activeOpacity={0.85}>
-                <Text style={styles.addBtnText}>＋</Text>
-              </TouchableOpacity>
+              <ThemedButton onPress={addPlayer} label='＋' variant='primary' size='small' style={styles.addBtn} />
             </View>
 
             <View style={styles.playersList}>
@@ -460,9 +441,7 @@ export default function RankFriendsScreen({ onBack, experience }) {
                 <View key={p.id} style={[styles.playerChip, { backgroundColor: theme.bgCard, borderColor: '#f59e0b20' }]}>
                   <Text style={styles.chipNum}>{i + 1}</Text>
                   <Text style={[styles.chipName, { color: theme.textPrimary }]}>{p.name}</Text>
-                  <TouchableOpacity style={styles.chipRemove} onPress={() => removePlayer(p.id)} hitSlop={HIT_SLOP}>
-                    <Text style={styles.chipRemoveText}>✕</Text>
-                  </TouchableOpacity>
+                  <ThemedButton onPress={() => removePlayer(p.id)} label='✕' variant='ghost' size='small' style={styles.chipRemove} />
                 </View>
               ))}
             </View>
@@ -481,9 +460,7 @@ export default function RankFriendsScreen({ onBack, experience }) {
                     onSubmitEditing={addCustomQuestion}
                     returnKeyType="done"
                   />
-                  <TouchableOpacity style={[styles.addBtn, { backgroundColor: '#f59e0b' }]} onPress={addCustomQuestion} activeOpacity={0.85}>
-                    <Text style={styles.addBtnText}>＋</Text>
-                  </TouchableOpacity>
+                  <ThemedButton onPress={addCustomQuestion} label='＋' variant='primary' size='small' style={styles.addBtn} />
                 </View>
 
                 <View style={styles.playersList}>
@@ -491,9 +468,7 @@ export default function RankFriendsScreen({ onBack, experience }) {
                     <View key={q.id} style={[styles.playerChip, { backgroundColor: theme.bgCard, borderColor: '#f59e0b20' }]}>
                       <Text style={styles.chipNum}>{q.emoji}</Text>
                       <Text style={[styles.chipName, { color: theme.textPrimary }]} numberOfLines={1}>{q.text}</Text>
-                      <TouchableOpacity style={styles.chipRemove} onPress={() => removeCustomQ(q.id)} hitSlop={HIT_SLOP}>
-                        <Text style={styles.chipRemoveText}>✕</Text>
-                      </TouchableOpacity>
+                      <ThemedButton onPress={() => removeCustomQ(q.id)} label='✕' variant='ghost' size='small' style={styles.chipRemove} />
                     </View>
                   ))}
                 </View>
@@ -501,9 +476,7 @@ export default function RankFriendsScreen({ onBack, experience }) {
             )}
 
             {players.length >= 2 && (mode === 'preset' || customQList.length >= 5) && (
-              <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#f59e0b' }]} onPress={startGame} activeOpacity={0.85}>
-                <Text style={styles.startBtnText}>🏆 ابدأ اللعبة</Text>
-              </TouchableOpacity>
+              <ThemedButton onPress={startGame} label='🏆 ابدأ اللعبة' variant='primary' size='large' style={styles.startBtn} />
             )}
 
           </ScrollView>
@@ -534,15 +507,13 @@ export default function RankFriendsScreen({ onBack, experience }) {
     const canConfirmEffective  = currentRank.length >= effectiveRanksNeeded;
 
     return (
-      <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.container, { backgroundColor: 'transparent' }]}>
         <RankFriendsEngraving theme={theme} />
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
         {/* زر خروج + زر شاشة كبيرة */}
         <View style={styles.exitBtnRow}>
-          <TouchableOpacity onPress={handleExitPlay} style={[styles.exitBtn, { backgroundColor: theme.bgCard, borderColor: '#f59e0b30' }]} hitSlop={HIT_SLOP}>
-            <Text style={[styles.exitBtnText, { color: '#f59e0b' }]}>→</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={handleExitPlay} label='→' variant='ghost' size='small' style={styles.exitBtn} />
           <GameInfoButton gameType="rank_friends" lang={lang} />
           <WebScreenButton
             playerUid="rf_p0"
@@ -614,26 +585,17 @@ export default function RankFriendsScreen({ onBack, experience }) {
 
           {/* زر التثبيت */}
           {canConfirmEffective && (
-            <TouchableOpacity
-              style={[styles.confirmBtn, { backgroundColor: '#f59e0b' }]}
+            <ThemedButton
               onPress={confirmRank}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.confirmBtnText}>
-                {qIndex + 1 < questions.length ? '✅ ثبّت الترتيب' : '🏆 عرض النتائج'}
-              </Text>
-            </TouchableOpacity>
+              label={qIndex + 1 < questions.length ? '✅ ثبّت الترتيب' : '🏆 عرض النتائج'}
+              variant='primary' size='large'
+              style={styles.confirmBtn}
+            />
           )}
 
           {/* زر إعادة الترتيب */}
           {currentRank.length > 0 && !canConfirmEffective && (
-            <TouchableOpacity
-              style={[styles.resetRankBtn, { borderColor: theme.border }]}
-              onPress={() => setCurrentRank([])}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.resetRankBtnText, { color: theme.textMuted }]}>↺ إعادة التحديد</Text>
-            </TouchableOpacity>
+            <ThemedButton onPress={() => setCurrentRank([])} label='↺ إعادة التحديد' variant='ghost' size='medium' style={styles.resetRankBtn} />
           )}
 
         </ScrollView>
@@ -649,12 +611,10 @@ export default function RankFriendsScreen({ onBack, experience }) {
     const pointsTable   = getPointsTable(players.length);
 
     return (
-      <View style={[styles.container, { backgroundColor: theme.isCityTheme ? 'transparent' : theme.bg }]}>
+      <View style={[styles.container, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <View style={styles.header}>
-          <TouchableOpacity onPress={goMode} style={[styles.backBtn, { backgroundColor: theme.bgCard, borderColor: '#f59e0b30' }]} hitSlop={HIT_SLOP}>
-            <Text style={[styles.backText, { color: '#f59e0b' }]}>{t('common.backArrow')}</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={goMode} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
           <View style={styles.headerCenter}>
             <Text style={styles.headerEmoji}>🎉</Text>
             <Text style={[styles.headerTitle, { color: '#f59e0b' }]}>النتائج النهائية</Text>
@@ -683,12 +643,8 @@ export default function RankFriendsScreen({ onBack, experience }) {
             <RevealCard key={i} ans={ans} theme={theme} />
           ))}
 
-          <TouchableOpacity style={[styles.startBtn, { backgroundColor: '#f59e0b' }]} onPress={startGame} activeOpacity={0.85}>
-            <Text style={styles.startBtnText}>🔄 جولة جديدة</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.outlineBtn, { borderColor: '#f59e0b50' }]} onPress={goMode} activeOpacity={0.85}>
-            <Text style={[styles.outlineBtnText, { color: '#f59e0b' }]}>🏠 الرئيسية</Text>
-          </TouchableOpacity>
+          <ThemedButton onPress={startGame} label='🔄 جولة جديدة' variant='primary' size='large' style={styles.startBtn} />
+          <ThemedButton onPress={goMode} label='🏠 الرئيسية' variant='ghost' size='large' style={styles.outlineBtn} />
 
         </ScrollView>
       </View>

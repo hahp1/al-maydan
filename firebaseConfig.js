@@ -1,11 +1,13 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, getDocs, collection } from 'firebase/firestore';
+import { getDatabase } from 'firebase/database';
 import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDIQ21c2LL4n-rJCKXqPNChv02QK1CIvBM",
   authDomain: "al-maydan-53953.firebaseapp.com",
+  databaseURL: "https://al-maydan-53953-default-rtdb.firebaseio.com",
   projectId: "al-maydan-53953",
   storageBucket: "al-maydan-53953.firebasestorage.app",
   messagingSenderId: "961744403836",
@@ -17,6 +19,7 @@ const app = initializeApp(firebaseConfig);
 export const db      = getFirestore(app);
 export const auth    = getAuth(app);
 export const storage = getStorage(app);
+export const rtdb    = getDatabase(app);
 
 /**
  * يجلب أسئلة فئة واحدة من Firestore

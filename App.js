@@ -119,6 +119,53 @@ function NoHeartsModal({ visible, cost, onClose, onOpenHearts }) {
   );
 }
 
+// ══════════════════════════════════════════════════════════════
+//  ExitAppModal — مودال الخروج المُصمَّم بالثيم
+// ══════════════════════════════════════════════════════════════
+function ExitAppModal({ visible, onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  if (!visible) return null;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={exitStyles.overlay}>
+        <View style={[exitStyles.box, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+          <Text style={[exitStyles.emoji]}>🚪</Text>
+          <Text style={[exitStyles.title, { color: theme.accent }]}>{tStatic('common.exit')}</Text>
+          <Text style={[exitStyles.msg, { color: theme.textMuted }]}>
+            {tStatic('common.exitConfirm') || 'هل تريد الخروج من التطبيق؟'}
+          </Text>
+          <View style={exitStyles.btns}>
+            <ThemedButton
+              onPress={onCancel}
+              label={tStatic('common.cancel')}
+              variant="ghost"
+              size="medium"
+              style={exitStyles.btn}
+            />
+            <ThemedButton
+              onPress={onConfirm}
+              label={tStatic('common.exit')}
+              variant="danger"
+              size="medium"
+              style={exitStyles.btn}
+            />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const exitStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 32 },
+  box:     { width: '100%', maxWidth: 340, borderRadius: 24, padding: 28, alignItems: 'center', gap: 10, borderWidth: 1 },
+  emoji:   { fontSize: 40 },
+  title:   { fontSize: 20, fontWeight: '900' },
+  msg:     { fontSize: 14, textAlign: 'center', lineHeight: 22 },
+  btns:    { flexDirection: 'row', gap: 12, marginTop: 8, width: '100%' },
+  btn:     { flex: 1 },
+});
+
 const nhStyles = StyleSheet.create({
   overlay:    { flex: 1, backgroundColor: '#00000099', justifyContent: 'center', alignItems: 'center', padding: 32 },
   box:        { width: '100%', borderRadius: 24, padding: 28, alignItems: 'center', gap: 12, borderWidth: 1 },
@@ -177,6 +224,7 @@ function MainApp() {
   const [showHeartsModal, setShowHeartsModal] = useState(false);
   const [noHeartsVisible, setNoHeartsVisible] = useState(false);
   const [noHeartsCost,    setNoHeartsCost]    = useState(1);
+  const [exitVisible,     setExitVisible]     = useState(false);
 
   const activeTournamentRef = useRef(null);
   const userRef             = useRef(null);
@@ -192,6 +240,8 @@ function MainApp() {
     setExperience(sessionExp);
     setScreen(targetScreen);
     setAuthStatus(AUTH_STATUS.AUTHENTICATED);
+    // تهيئة القلوب دائماً (حتى بدون إنترنت) لتجنّب race condition مع spendHeart
+    loadHearts().then(h => { setHearts(h.hearts); setAdsLeft(h.adsLeft); }).catch(() => {});
   }, []);
 
   const commitLogout = useCallback(() => {
@@ -416,10 +466,7 @@ function MainApp() {
         setScreen('home'); return true;
       }
       if (screen === 'home') {
-        Alert.alert(tStatic('common.exit'), '', [
-          { text: tStatic('common.cancel'), style: 'cancel' },
-          { text: tStatic('common.exit'), style: 'destructive', onPress: () => BackHandler.exitApp() },
-        ]);
+        setExitVisible(true);
         return true;
       }
       return false;
@@ -459,6 +506,12 @@ function MainApp() {
 
   const commonModals = (
     <>
+      {/* مودال تأكيد الخروج — مُصمَّم بالثيم */}
+      <ExitAppModal
+        visible={exitVisible}
+        onCancel={() => setExitVisible(false)}
+        onConfirm={() => { setExitVisible(false); BackHandler.exitApp(); }}
+      />
       <HeartsModal
         visible={showHeartsModal}
         onClose={() => setShowHeartsModal(false)}
@@ -491,11 +544,7 @@ function MainApp() {
             setScreen={setScreen}
             user={user}
             setGameMode={setGameMode}
-            tryStartGame={(sc, cost, extra) => tryStartGame(sc, cost, extra,
-              sc !== 'mafia' && sc !== 'actitout' && sc !== 'truthdare' &&
-              sc !== 'rankfriends' && sc !== 'neverhaveiever' && sc !== 'manana' &&
-              sc !== 'whoisspy' && sc !== 'guessimage'
-            )}
+            tryStartGame={(sc, cost, extra) => tryStartGame(sc, cost, extra, true)}
           />
         );
 

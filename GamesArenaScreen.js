@@ -1,12 +1,13 @@
 /**
- * GamesArenaScreen.js — محدّث
+ * GamesArenaScreen.js — محدّث v2
  * ════════════════════════════════════════════════
- *  ✅ كل الألعاب تخصم قلباً واحداً عند البدء
- *  ✅ tryStartGame من App.js تتحقق من القلوب
- *  ✅ باقي الوظائف والتصميم كما هو
+ *  ✅ بطاقة اللعبة: صورة يسار + معلومات يمين (row layout)
+ *  ✅ شارة القلوب: لون theme.accent بدلاً من الأحمر الثابت
+ *  ✅ منطق القلوب: كل الألعاب deferred=true (يخصم عند onGameReady)
+ *  ✅ الألعاب المحلية: لا تكلفة قلوب من هنا (تُضاف داخل اللعبة)
  */
 
-import { useState, useRef, useEffect, useCallback, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Animated, StatusBar, FlatList,
@@ -14,9 +15,9 @@ import {
 import { useTheme } from './ThemeContext';
 import { useT, useLanguage } from './I18n';
 import { playSound } from './SoundService';
-import { ThemedButton, ThemedCard, ThemedPill } from './ThemedComponents';
+import { ThemedButton, ThemedPill } from './ThemedComponents';
 
-// ── بنية اللعبة ──
+// ── بيانات الألعاب ───────────────────────────────────────────
 const JALSA_META = [
   { id: 'mafia',          emoji: '🎭', color: '#a855f7', border: '#a855f740', bg: '#a855f712', ready: true,  mode: 'local' },
   { id: 'xo',             emoji: '✕○', color: '#f59e0b', border: '#f59e0b40', bg: '#f59e0b12', ready: true,  mode: 'local' },
@@ -29,14 +30,14 @@ const JALSA_META = [
   { id: 'neverhaveiever', emoji: '☝️', color: '#10b981', border: '#10b98140', bg: '#10b98112', ready: true,  mode: 'local', isNew: true },
   { id: 'drawguess',      emoji: '🎨', color: '#3b82f6', border: '#3b82f640', bg: '#3b82f612', ready: true,  mode: 'local', isNew: true },
   { id: 'wordle',         emoji: '🔤', color: '#22c55e', border: '#22c55e40', bg: '#22c55e12', ready: true,  mode: 'local', isNew: true },
-  { id: 'whoisspy',     emoji: '🕵️', color: '#f97316', border: '#f9731640', bg: '#f9731612', ready: true,  mode: 'local', isNew: true },
-  { id: 'guessimage',    emoji: '🖼️', color: '#f5c518', border: '#f5c51840', bg: '#f5c51812', ready: true,  mode: 'local', isNew: true },
+  { id: 'whoisspy',       emoji: '🕵️', color: '#f97316', border: '#f9731640', bg: '#f9731612', ready: true,  mode: 'local', isNew: true },
+  { id: 'guessimage',     emoji: '🖼️', color: '#f5c518', border: '#f5c51840', bg: '#f5c51812', ready: true,  mode: 'local', isNew: true },
 ];
 
 const ONLINE_META = [
+  { id: 'xo',        emoji: '✕○', color: '#f59e0b', border: '#f59e0b40', bg: '#f59e0b12', ready: true,  mode: 'online' },
   { id: 'bullshit',  emoji: '🃏', color: '#ef4444', border: '#ef444440', bg: '#ef444412', ready: true,  mode: 'online' },
   { id: 'codenames', emoji: '🔐', color: '#10b981', border: '#10b98140', bg: '#10b98112', ready: true,  mode: 'online' },
-  { id: 'mafia',     emoji: '🎭', color: '#a855f7', border: '#a855f740', bg: '#a855f712', ready: true,  mode: 'online' },
   { id: 'drawguess', emoji: '🎨', color: '#3b82f6', border: '#3b82f640', bg: '#3b82f612', ready: true,  mode: 'online', isNew: true },
   { id: 'wordle',    emoji: '🔤', color: '#22c55e', border: '#22c55e40', bg: '#22c55e12', ready: true,  mode: 'online', isNew: true },
   { id: 'kout',      emoji: '🂡', color: '#8b5cf6', border: '#8b5cf640', bg: '#8b5cf612', ready: true,  mode: 'online' },
@@ -54,22 +55,36 @@ function buildGames(metaList, t) {
   }));
 }
 
-// ── بطاقة اللعبة ──
+// ── بطاقة اللعبة — row layout ───────────────────────────────
 const GameCard = memo(({ game, onPress, theme, t, lang }) => {
-  const isRTL = lang === 'ar';
+  const textColor = theme.textPrimary || theme.accent;
+  const mutedColor = theme.textMuted;
+
   return (
-    <ThemedCard
+    <TouchableOpacity
       onPress={game.ready ? () => onPress(game) : undefined}
-      radius={18}
-      padding={14}
-      style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 12, opacity: game.ready ? 1 : 0.75 }}
+      activeOpacity={game.ready ? 0.75 : 1}
+      style={[
+        styles.gameCard,
+        {
+          backgroundColor: theme.bgCard,
+          borderColor: game.border,
+          opacity: game.ready ? 1 : 0.75,
+        },
+      ]}
     >
+      {/* أيقونة اللعبة */}
       <View style={[styles.gameIconWrap, { backgroundColor: game.bg, borderColor: game.border }]}>
         <Text style={styles.gameEmoji}>{game.emoji}</Text>
       </View>
-      <View style={[styles.gameInfo, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-        <View style={[styles.gameTitleRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-          <Text style={[styles.gameTitle, { color: game.color }]}>{game.title}</Text>
+
+      {/* معلومات اللعبة */}
+      <View style={styles.gameInfo}>
+        {/* اسم + شارات */}
+        <View style={styles.gameTitleRow}>
+          <Text style={[styles.gameTitle, { color: game.color }]} numberOfLines={1}>
+            {game.title}
+          </Text>
           {!game.ready && (
             <ThemedPill variant="secondary" small style={{ paddingHorizontal: 8 }}>
               {t('games.soon')}
@@ -81,21 +96,30 @@ const GameCard = memo(({ game, onPress, theme, t, lang }) => {
             </ThemedPill>
           )}
         </View>
-        <Text style={[styles.gameDesc,    { color: theme.textMuted, textAlign: isRTL ? 'right' : 'left' }]}>{game.desc}</Text>
-        <Text style={[styles.gamePlayers, { color: theme.textMuted, textAlign: isRTL ? 'right' : 'left' }]}>👤 {game.players}</Text>
+
+        <Text style={[styles.gameDesc, { color: mutedColor, textAlign: isRTL ? 'right' : 'left' }]}
+          numberOfLines={2}>
+          {game.desc}
+        </Text>
+
+        <View style={styles.gameFooter}>
+          <Text style={[styles.gamePlayers, { color: mutedColor }]}>👤 {game.players}</Text>
+          {/* شارة القلوب — بلون الثيم */}
+          {game.ready && game.mode === 'online' && (
+            <View style={[styles.costBadge, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
+              <Text style={[styles.costText, { color: theme.accent }]}>❤️ 1</Text>
+            </View>
+          )}
+        </View>
       </View>
-      {/* شارة التكلفة */}
-      {game.ready && (
-        <ThemedPill variant="danger" small>❤️ 1</ThemedPill>
-      )}
-    </ThemedCard>
+    </TouchableOpacity>
   );
 });
 
 const SEPARATOR = <View style={{ height: 12 }} />;
 
 export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStartGame }) {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
   const { t, lang } = useLanguage();
   const [activeTab, setActiveTab] = useState('jalsa');
 
@@ -103,8 +127,8 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
   const tabScaleJ = useRef(new Animated.Value(1)).current;
   const tabScaleO = useRef(new Animated.Value(0.92)).current;
 
-  const jalsaGames  = buildGames(JALSA_META,  t);
-  const onlineGames = buildGames(ONLINE_META, t);
+  const jalsaGames  = useMemo(() => buildGames(JALSA_META,  t), [t, lang]);
+  const onlineGames = useMemo(() => buildGames(ONLINE_META, t), [t, lang]);
   const games = activeTab === 'jalsa' ? jalsaGames : onlineGames;
 
   useEffect(() => {
@@ -119,19 +143,15 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
     ]).start();
   }, [activeTab]);
 
-  // ألعاب تخصم القلب عند onGameReady وليس عند الضغط
-  const DEFERRED = new Set([
-    'mafia','actitout','truthdare','rankfriends','neverhaveiever',
-    'manana','whoisspy','guessimage','xo','bullshit','codenames',
-    'drawguess','wordle','kout','dominoes','biloot',
-  ]);
-
   const handleGamePress = useCallback((game) => {
     if (!game.ready) return;
     playSound('tap');
     if (setGameMode) setGameMode(game.mode);
+
     if (tryStartGame) {
-      tryStartGame(game.id, 1, null, DEFERRED.has(game.id));
+      // ألعاب أونلاين: deferred=true دائماً (القلب يُخصم عند onGameReady)
+      // ألعاب محلية: deferred=true أيضاً (لا تكلفة قلوب من هنا — مجانية)
+      tryStartGame(game.id, 1, null, true);
     } else {
       setScreen(game.id);
     }
@@ -140,16 +160,21 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
   const switchJalsa  = useCallback(() => setActiveTab('jalsa'),  []);
   const switchOnline = useCallback(() => setActiveTab('online'), []);
   const keyExtractor = useCallback((item) => item.id + item.mode, []);
-  const renderItem   = useCallback(({ item }) => (
-    <GameCard game={item} onPress={handleGamePress} theme={theme} t={t} lang={lang} />
-  ), [handleGamePress, theme.bgCard, t, lang]);
 
-  const ListFooter = useCallback(() => (
-    <ThemedCard radius={18} padding={20} style={{ alignItems: 'center', gap: 8, borderStyle: 'dashed' }}>
-      <Text style={styles.comingSoonEmoji}>✨</Text>
-      <Text style={[styles.comingSoonText, { color: theme.textMuted }]}>{t('games.comingSoon')}</Text>
-    </ThemedCard>
-  ), [theme, t]);
+  const renderItem = useCallback(({ item }) => (
+    <GameCard game={item} onPress={handleGamePress} theme={theme} t={t} lang={lang} />
+  ), [handleGamePress, theme, t, lang]);
+
+  // ListFooter extracted outside render for FlatList stability
+  const listFooterData = { borderColor: theme.borderCard, bgCard: theme.bgCard, textMuted: theme.textMuted };
+  const ListFooterComponent = (
+    <View style={[styles.footerCard, { borderColor: theme.borderCard, backgroundColor: theme.bgCard }]}>
+      <Text style={styles.footerEmoji}>✨</Text>
+      <Text style={[styles.footerText, { color: theme.textMuted }]}>{t('games.comingSoon')}</Text>
+    </View>
+  );
+
+  const textColor = theme.textPrimary || theme.accent;
 
   return (
     <View style={[styles.container, { backgroundColor: 'transparent' }]}>
@@ -169,31 +194,35 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
       <Animated.View style={[styles.tabsWrap, { opacity: fadeAnim }]}>
         <View style={[styles.tabsContainer, { backgroundColor: theme.bgCard, borderColor: theme.purpleBorder }]}>
           <Animated.View style={[styles.tabBtn, { transform: [{ scale: tabScaleJ }] }]}>
-            <ThemedCard
+            <TouchableOpacity
               onPress={switchJalsa}
-              radius={12} padding={0}
-              variant={activeTab === 'jalsa' ? 'accent' : 'default'}
-              style={styles.tabInner}
+              activeOpacity={0.75}
+              style={[
+                styles.tabInner,
+                activeTab === 'jalsa' && { backgroundColor: theme.purpleSoft },
+              ]}
             >
               <Text style={styles.tabEmoji}>🏠</Text>
               <Text style={[styles.tabText, { color: activeTab === 'jalsa' ? theme.purple : theme.textMuted }]}>
                 {t('games.jalsa')}
               </Text>
-            </ThemedCard>
+            </TouchableOpacity>
           </Animated.View>
 
           <Animated.View style={[styles.tabBtn, { transform: [{ scale: tabScaleO }] }]}>
-            <ThemedCard
+            <TouchableOpacity
               onPress={switchOnline}
-              radius={12} padding={0}
-              variant={activeTab === 'online' ? 'accent' : 'default'}
-              style={styles.tabInner}
+              activeOpacity={0.75}
+              style={[
+                styles.tabInner,
+                activeTab === 'online' && { backgroundColor: theme.purpleSoft },
+              ]}
             >
               <Text style={styles.tabEmoji}>📡</Text>
               <Text style={[styles.tabText, { color: activeTab === 'online' ? theme.purple : theme.textMuted }]}>
                 {t('games.online')}
               </Text>
-            </ThemedCard>
+            </TouchableOpacity>
           </Animated.View>
         </View>
 
@@ -207,7 +236,7 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         ItemSeparatorComponent={() => SEPARATOR}
-        ListFooterComponent={ListFooter}
+        ListFooterComponent={() => ListFooterComponent}
         ListFooterComponentStyle={{ marginTop: 12 }}
         contentContainerStyle={styles.listContent}
         style={styles.list}
@@ -222,42 +251,63 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
   );
 }
 
-const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
-
 const styles = StyleSheet.create({
-  container:       { flex: 1, paddingTop: 56 },
-  header:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 },
-  backBtn:         { width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  backText:        { fontSize: 20, fontWeight: '700' },
-  headerCenter:    { alignItems: 'center', gap: 4 },
-  headerEmoji:     { fontSize: 26 },
-  headerTitle:     { fontSize: 20, fontWeight: '900' },
-  tabsWrap:        { paddingHorizontal: 20, marginBottom: 12, gap: 8 },
-  tabsContainer:   { flexDirection: 'row', borderRadius: 16, borderWidth: 1.5, padding: 4, gap: 4, height: 52, alignItems: 'center' },
-  tabBtn:          { flex: 1, borderRadius: 12, overflow: 'hidden' },
-  tabBtnActive:    { borderWidth: 1.5 },
-  tabInner:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
-  tabEmoji:        { fontSize: 16 },
-  tabText:         { fontSize: 15, fontWeight: '700' },
-  tabDesc:         { fontSize: 12, textAlign: 'center' },
-  list:            { flex: 1 },
-  listContent:     { paddingHorizontal: 20, paddingBottom: 40 },
-  gameCard:        { flexDirection: 'row', alignItems: 'center', borderRadius: 18, borderWidth: 1.5, padding: 14, gap: 12 },
-  gameIconWrap:    { width: 60, height: 60, borderRadius: 16, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  gameEmoji:       { fontSize: 26 },
-  gameInfo:        { flex: 1, gap: 3, minWidth: 0 },
-  gameTitleRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  gameTitle:       { fontSize: 16, fontWeight: '800' },
-  soonBadge:       { backgroundColor: '#a78bfa22', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  soonText:        { color: '#a78bfa', fontSize: 10, fontWeight: '700' },
-  newBadge:        { backgroundColor: '#f59e0b22' },
-  newText:         { color: '#f59e0b' },
-  gameDesc:        { fontSize: 12 },
-  gamePlayers:     { fontSize: 11, marginTop: 1 },
-  // شارة التكلفة بالقلوب
-  costBadge:       { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: '#ef444418', borderWidth: 1, borderColor: '#ef444433' },
-  costText:        { fontSize: 11, fontWeight: '700', color: '#ef4444' },
-  comingSoonCard:  { borderRadius: 18, borderWidth: 1.5, borderStyle: 'dashed', padding: 20, alignItems: 'center', gap: 8 },
-  comingSoonEmoji: { fontSize: 24 },
-  comingSoonText:  { fontSize: 14, fontWeight: '600' },
+  container:    { flex: 1, paddingTop: 56 },
+  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 },
+  backBtn:      { width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  headerCenter: { alignItems: 'center', gap: 4 },
+  headerEmoji:  { fontSize: 26 },
+  headerTitle:  { fontSize: 20, fontWeight: '900' },
+
+  // تابين
+  tabsWrap:      { paddingHorizontal: 20, marginBottom: 12, gap: 8 },
+  tabsContainer: { flexDirection: 'row', borderRadius: 16, borderWidth: 1.5, padding: 4, gap: 4, height: 52, alignItems: 'center' },
+  tabBtn:        { flex: 1, borderRadius: 12, overflow: 'hidden' },
+  tabInner:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 12 },
+  tabEmoji:      { fontSize: 16 },
+  tabText:       { fontSize: 15, fontWeight: '700' },
+  tabDesc:       { fontSize: 12, textAlign: 'center' },
+
+  // قائمة
+  list:        { flex: 1 },
+  listContent: { paddingHorizontal: 20, paddingBottom: 40 },
+
+  // بطاقة اللعبة
+  gameCard: {
+    alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1.5,
+    padding: 14,
+    gap: 14,
+  },
+  gameIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  gameEmoji:    { fontSize: 28 },
+  gameInfo:     { flex: 1, gap: 4, minWidth: 0 },
+  gameTitleRow: { alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  gameTitle:    { fontSize: 17, fontWeight: '900', flexShrink: 1 },
+  gameDesc:     { fontSize: 12, lineHeight: 17 },
+  gameFooter:   { alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 },
+  gamePlayers:  { fontSize: 11 },
+
+  // شارة القلوب
+  costBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  costText: { fontSize: 11, fontWeight: '700' },
+
+  // فوتر
+  footerCard:  { borderRadius: 18, borderWidth: 1.5, borderStyle: 'dashed', padding: 20, alignItems: 'center', gap: 8 },
+  footerEmoji: { fontSize: 24 },
+  footerText:  { fontSize: 14, fontWeight: '600' },
 });

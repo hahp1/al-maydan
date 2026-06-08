@@ -40,7 +40,7 @@ const PackCard = memo(({ amount, price, onPress, theme }) => (
   <ThemedCard onPress={onPress} radius={12} padding={12} variant="accent" style={{alignItems:'center'}}>
     <Text style={[styles.packAmount, { color: theme.accent }]}>{amount}</Text>
     <Text style={styles.packCoin}>🪙</Text>
-    <Text style={[styles.packPrice, { color: theme.textSecondary }]}>{price}</Text>
+    <Text style={[styles.packPrice, { color: theme.textSecondary || theme.textMuted }]}>{price}</Text>
   </ThemedCard>
 ));
 
@@ -48,7 +48,7 @@ const SettingRow = memo(({ label, sub, value, onChange, theme }) => (
   <View style={styles.row}>
     <View style={{ flex: 1 }}>
       <Text style={[styles.rowLabel, { color: theme.textPrimary }]}>{label}</Text>
-      {sub ? <Text style={[styles.rowSub, { color: theme.textSecondary }]}>{sub}</Text> : null}
+      {sub ? <Text style={[styles.rowSub, { color: theme.textSecondary || theme.textMuted }]}>{sub}</Text> : null}
     </View>
     <Switch
       value={value}
@@ -91,7 +91,7 @@ const ExperienceRow = memo(({ label, sub, current, onPress, theme }) => (
   <ThemedCard onPress={onPress} style={styles.row}>
     <View style={{ flex: 1 }}>
       <Text style={[styles.rowLabel, { color: theme.textPrimary }]}>{label}</Text>
-      {sub ? <Text style={[styles.rowSub, { color: theme.textSecondary }]}>{sub}</Text> : null}
+      {sub ? <Text style={[styles.rowSub, { color: theme.textSecondary || theme.textMuted }]}>{sub}</Text> : null}
     </View>
     <View style={styles.rowRight}>
       <Text style={[styles.rowValue, { color: theme.accent, fontWeight: '700' }]}>{current}</Text>
@@ -330,7 +330,7 @@ const ThemeGroup = memo(({ group, themeId, onSelect, onPreview, onBuy, theme, la
         {/* خط فاصل */}
         <View style={[styles.groupLine, { backgroundColor: theme.divider }]} />
         {/* يمين: الاسم الشاعري العربي + إيموجي */}
-        <Text style={[styles.groupLabel, { color: theme.textSecondary }]}>{label}</Text>
+        <Text style={[styles.groupLabel, { color: theme.textSecondary || theme.textMuted }]}>{label}</Text>
         <Text style={styles.groupEmoji}>{group.groupEmoji}</Text>
       </View>
       <View style={[styles.groupCard, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
@@ -375,7 +375,7 @@ const ThemedAlert = memo(({ visible, title, message, buttons, onClose, theme }) 
       <Pressable style={taStyles.overlay} onPress={onClose}>
         <Pressable style={[taStyles.box, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
           {title ? <Text style={[taStyles.title, { color: theme.textPrimary }]}>{title}</Text> : null}
-          {message ? <Text style={[taStyles.msg, { color: theme.textSecondary }]}>{message}</Text> : null}
+          {message ? <Text style={[taStyles.msg, { color: theme.textSecondary || theme.textMuted }]}>{message}</Text> : null}
           <View style={taStyles.btns}>
             {(buttons || []).map((btn, i) => (
               <ThemedButton
@@ -442,11 +442,17 @@ const ExperiencePickerModal = memo(({ visible, current, onSelect, onClose, theme
             {options.map(opt => {
               const isActive = current === opt.value;
               return (
-                <ThemedCard
+                <TouchableOpacity
                   key={opt.value}
                   onPress={() => { onSelect(opt.value); onClose(); }}
-                  style={expStyles.option}
-                  variant={isActive ? 'accent' : 'default'}
+                  activeOpacity={0.75}
+                  style={[
+                    expStyles.option,
+                    {
+                      backgroundColor: isActive ? theme.accentSoft : theme.bgCard,
+                      borderColor: isActive ? theme.accentBorder : theme.borderCard,
+                    },
+                  ]}
                 >
                   <Text style={expStyles.optionEmoji}>{opt.emoji}</Text>
                   <View style={{ flex: 1 }}>
@@ -458,14 +464,14 @@ const ExperiencePickerModal = memo(({ visible, current, onSelect, onClose, theme
                         <Text style={[expStyles.tagTxt, { color: isActive ? theme.accent : theme.textMuted }]}>{opt.tag}</Text>
                       </View>
                     </View>
-                    <Text style={[expStyles.optionDesc, { color: theme.textSecondary }]}>{opt.desc}</Text>
+                    <Text style={[expStyles.optionDesc, { color: theme.textSecondary || theme.textMuted }]}>{opt.desc}</Text>
                   </View>
                   {isActive && (
                     <View style={[expStyles.check, { backgroundColor: theme.accent }]}>
                       <Text style={expStyles.checkTxt}>✓</Text>
                     </View>
                   )}
-                </ThemedCard>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -633,7 +639,7 @@ export default function SettingsScreen({
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.accountName, { color: theme.textPrimary }]}>{accountName}</Text>
-          <Text style={[styles.accountType, { color: theme.textSecondary }]}>{accountType}</Text>
+          <Text style={[styles.accountType, { color: theme.textSecondary || theme.textMuted }]}>{accountType}</Text>
         </View>
         <View style={[styles.tokenBadge, { backgroundColor: theme.bgInput, borderColor: theme.accentBorder }]}>
           <Text style={[styles.tokenNum, { color: theme.accent }]}>{tokens}</Text>
@@ -690,7 +696,7 @@ Available at official launch.`,
       <Section title={t('settings.tokensSection')} theme={theme}>
         <View style={styles.row}>
           <Text style={[styles.rowLabel, { color: theme.textPrimary }]}>{t('settings.balance')}</Text>
-          <Text style={[styles.rowValue, { color: theme.textSecondary }]}>
+          <Text style={[styles.rowValue, { color: theme.textSecondary || theme.textMuted }]}>
             {t('settings.balanceVal', { n: tokens })}
           </Text>
         </View>
@@ -778,7 +784,7 @@ Available at official launch.`,
         <ThemedCard onPress={handleAbout} style={styles.row}>
           <Text style={[styles.rowLabel, { color: theme.textPrimary }]}>{t('settings.appInfo')}</Text>
           <View style={styles.rowRight}>
-            <Text style={[styles.rowValue, { color: theme.textSecondary }]}>{t('settings.version')}</Text>
+            <Text style={[styles.rowValue, { color: theme.textSecondary || theme.textMuted }]}>{t('settings.version')}</Text>
             <Text style={[styles.arrow, { color: theme.textMuted }]}>‹</Text>
           </View>
         </ThemedCard>

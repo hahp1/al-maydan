@@ -1,668 +1,365 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
-import ThemeBackground from './ThemeBackground';
+/**
+ * ThemeBackground.js
+ * ══════════════════════════════════════════════════════════
+ * خلفية واحدة ثابتة للتطبيق كله — تُرسم مرة واحدة في ThemeContext
+ *
+ * - Dark / Light  → View بسيط (لا WebView)
+ * - City          → LinearGradient + Skyline (React Native مباشرة)
+ * - Mist          → WebView Canvas (حلقات موجية)
+ * - Crystal       → WebView Canvas (أشعة بلورية)
+ *
+ * WebView: HTML مدمج كـ string → يعمل 100% أوف لاين
+ * تغيير الثيم → injectJavaScript فوري بدون reload
+ */
+
+import { useRef, useEffect, useState, useCallback, memo } from 'react';
+import { View, StyleSheet, Dimensions, ImageBackground, Animated } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ── ثيمات المدن — مصدر الحقيقة الوحيد هو CityThemes.js ──────
-import {
-  CITY_JERUSALEM,
-  CITY_TOKYO,
-  CITY_AMSTERDAM,
-  CITY_BAGHDAD,
-  CITY_ISTANBUL,
-  CITY_ALEXANDRIA,
-  CITY_PARIS,
-  CITY_NEWYORK,
-  CITY_LONDON,
-  CITY_RIYADH,
-  CITY_DUBAI,
-} from './CityThemes';
-
-const THEME_KEY = 'arena_theme_id';
-
-// ══════════════════════════════════════════════════════════════
-//  🌑🌕 Standard
-// ══════════════════════════════════════════════════════════════
-
-export const DARK = {
-  id: 'dark',
-  isNeon: true,
-  bg:          '#05050f',
-  bgCard:      'rgba(8,8,28,0.92)',
-  bgElevated:  'rgba(12,12,36,0.95)',
-  bgInput:     'rgba(6,6,22,0.96)',
-  bgOverlay:   'rgba(0,0,0,0.80)',
-  textPrimary:   'rgba(245,245,255,0.97)',
-  textSecondary: 'rgba(180,180,220,0.75)',
-  textMuted:     'rgba(100,100,160,0.60)',
-  textOnAccent:  '#05050f',
-  accent:        '#f5c518',
-  accentSoft:    'rgba(245,197,24,0.10)',
-  accentBorder:  'rgba(245,197,24,0.28)',
-  purple:        '#a78bfa',
-  purpleSoft:    'rgba(167,139,250,0.10)',
-  purpleBorder:  'rgba(167,139,250,0.28)',
-  border:        'rgba(245,197,24,0.12)',
-  divider:       'rgba(245,197,24,0.08)',
-  borderCard:    'rgba(245,197,24,0.15)',
-  success:       '#34d399',
-  error:         '#f87171',
-  warning:       '#fbbf24',
-  statusBar:     'light-content',
-  statusBg:      '#05050f',
-  neonAccentGlow:   'rgba(245,197,24,0.35)',
-  neonPurpleGlow:   'rgba(167,139,250,0.30)',
-  neonCardShadow:   '0 0 16px rgba(245,197,24,0.12), 0 2px 8px rgba(0,0,0,0.60)',
-  neonAccentShadow: '0 0 20px rgba(245,197,24,0.40)',
-  neonPurpleShadow: '0 0 18px rgba(167,139,250,0.35)',
-};
-
-export const LIGHT = {
-  id: 'light',
-  isLight: true,
-  bg:          '#fff8d6',
-  bgCard:      '#ffffff',
-  bgElevated:  '#fffdf0',
-  bgInput:     '#ffffff',
-  bgOverlay:   'rgba(0,0,0,0.40)',
-  textPrimary:   '#150a28',
-  textSecondary: '#3d1870',
-  textMuted:     '#7850a8',
-  textOnAccent:  '#ffffff',
-  accent:        '#6d28d9',
-  accentSoft:    'rgba(109,40,217,0.08)',
-  accentBorder:  'rgba(109,40,217,0.20)',
-  purple:        '#5b21b6',
-  purpleSoft:    'rgba(91,33,182,0.08)',
-  purpleBorder:  'rgba(91,33,182,0.20)',
-  border:        'rgba(109,40,217,0.12)',
-  divider:       'rgba(109,40,217,0.08)',
-  borderCard:    'rgba(109,40,217,0.13)',
-  success:       '#059669',
-  error:         '#dc2626',
-  warning:       '#d97706',
-  statusBar:     'dark-content',
-  statusBg:      '#fff8d6',
-  // توهج بنفسجي خفي — يُستخدم خلف العنوان وعلى البطاقات الرئيسية
-  lightGlow:     'rgba(109,40,217,0.10)',
-  lightGlowSoft: 'rgba(109,40,217,0.05)',
-  // لون التوكن/الذهب يبقى حاضراً كلون ثانوي
-  gold:          '#b8860b',
-  goldSoft:      'rgba(184,134,11,0.10)',
-  goldBorder:    'rgba(184,134,11,0.22)',
-};
-
-// ══════════════════════════════════════════════════════════════
-//  🌫️ Mist
-// ══════════════════════════════════════════════════════════════
-
-export const TRUE_MIST = {
-  id: 'truemist',
-  isMist: true,
-  isLight: true,
-  bg:          '#e8eaec',
-  bgCard:      'rgba(255,255,255,0.70)',
-  bgElevated:  'rgba(255,255,255,0.50)',
-  bgInput:     'rgba(255,255,255,0.60)',
-  bgOverlay:   'rgba(20,30,45,0.30)',
-  textPrimary:   'rgba(26,34,46,0.92)',
-  textSecondary: 'rgba(80,96,112,0.72)',
-  textMuted:     'rgba(96,112,128,0.50)',
-  textOnAccent:  '#ffffff',
-  accent:        '#8898a8',
-  accentSoft:    'rgba(136,152,168,0.15)',
-  accentBorder:  'rgba(136,152,168,0.30)',
-  purple:        '#687890',   // 🔧 كان '#6878900' (رقم زائد) — مُصلح
-  purpleSoft:    'rgba(104,120,144,0.12)',
-  purpleBorder:  'rgba(104,120,144,0.30)',
-  border:        'rgba(140,155,170,0.22)',
-  divider:       'rgba(140,155,170,0.15)',
-  borderCard:    'rgba(255,255,255,0.65)',
-  success:       '#059669',
-  error:         '#dc2626',
-  warning:       '#d97706',
-  statusBar:     'dark-content',
-  statusBg:      '#e8eaec',
-  logoVowel: '#a0b0c0',
-  logoCons:  '#788898',
-  mistGradient: ['#e8eaec', '#d0d5da'],
-};
-
-export const BLUE_MIST = {
-  id: 'bluemist',
-  isMist: true,
-  isLight: false,
-  bg:          '#0a1228',
-  bgCard:      'rgba(40,65,160,0.30)',
-  bgElevated:  'rgba(50,78,175,0.22)',
-  bgInput:     'rgba(28,48,118,0.42)',
-  bgOverlay:   'rgba(0,0,0,0.65)',
-  textPrimary:   'rgba(190,208,255,0.96)',
-  textSecondary: 'rgba(120,150,220,0.72)',
-  textMuted:     'rgba(90,120,200,0.50)',
-  textOnAccent:  '#ffffff',
-  accent:        '#5878d0',
-  accentSoft:    'rgba(88,120,208,0.15)',
-  accentBorder:  'rgba(88,120,208,0.30)',
-  purple:        '#3858b0',
-  purpleSoft:    'rgba(56,88,176,0.12)',
-  purpleBorder:  'rgba(56,88,176,0.30)',
-  border:        'rgba(70,105,200,0.28)',
-  divider:       'rgba(70,105,200,0.18)',
-  borderCard:    'rgba(105,140,215,0.25)',
-  success:       '#34d399',
-  error:         '#f87171',
-  warning:       '#fbbf24',
-  statusBar:     'light-content',
-  statusBg:      '#0a1228',
-  logoVowel: '#5878d0',
-  logoCons:  '#3858b0',
-  mistGradient: ['#121e3e', '#0a1228'],
-};
-
-export const GREEN_MIST = {
-  id: 'greenmist',
-  isMist: true,
-  isLight: false,
-  bg:          '#071510',
-  bgCard:      'rgba(30,80,45,0.38)',
-  bgElevated:  'rgba(38,95,55,0.28)',
-  bgInput:     'rgba(20,60,32,0.45)',
-  bgOverlay:   'rgba(0,0,0,0.65)',
-  textPrimary:   'rgba(170,240,195,0.96)',
-  textSecondary: 'rgba(100,185,130,0.72)',
-  textMuted:     'rgba(70,148,98,0.50)',
-  textOnAccent:  '#ffffff',
-  accent:        '#3a9058',
-  accentSoft:    'rgba(58,144,88,0.15)',
-  accentBorder:  'rgba(58,144,88,0.30)',
-  purple:        '#286040',
-  purpleSoft:    'rgba(40,96,64,0.12)',
-  purpleBorder:  'rgba(40,96,64,0.30)',
-  border:        'rgba(45,110,65,0.28)',
-  divider:       'rgba(45,110,65,0.18)',
-  borderCard:    'rgba(80,148,100,0.25)',
-  success:       '#34d399',
-  error:         '#f87171',
-  warning:       '#fbbf24',
-  statusBar:     'light-content',
-  statusBg:      '#071510',
-  logoVowel: '#3a9058',
-  logoCons:  '#286040',
-  mistGradient: ['#0e2418', '#071510'],
-};
-
-export const ORANGE_MIST = {
-  id: 'orangemist',
-  isMist: true,
-  isLight: false,
-  bg:          '#0e0a04',
-  bgCard:      'rgba(160,70,15,0.25)',
-  bgElevated:  'rgba(175,82,18,0.18)',
-  bgInput:     'rgba(120,52,10,0.38)',
-  bgOverlay:   'rgba(0,0,0,0.65)',
-  textPrimary:   'rgba(255,210,160,0.96)',
-  textSecondary: 'rgba(200,140,80,0.72)',
-  textMuted:     'rgba(165,108,52,0.50)',
-  textOnAccent:  '#ffffff',
-  accent:        '#c05814',
-  accentSoft:    'rgba(192,88,20,0.14)',
-  accentBorder:  'rgba(192,88,20,0.26)',
-  purple:        '#984010',
-  purpleSoft:    'rgba(152,64,16,0.11)',
-  purpleBorder:  'rgba(152,64,16,0.26)',
-  border:        'rgba(155,75,18,0.26)',
-  divider:       'rgba(155,75,18,0.16)',
-  borderCard:    'rgba(185,110,45,0.22)',
-  success:       '#34d399',
-  error:         '#f87171',
-  warning:       '#fbbf24',
-  statusBar:     'light-content',
-  statusBg:      '#0e0a04',
-  logoVowel: '#c05814',
-  logoCons:  '#984010',
-  mistGradient: ['#1c1006', '#0e0a04'],
-};
-
-export const BLACK_MIST = {
-  id: 'blackmist',
-  isMist: true,
-  isLight: false,
-  bg:          '#0e1014',
-  bgCard:      'rgba(80,100,120,0.22)',
-  bgElevated:  'rgba(90,112,135,0.16)',
-  bgInput:     'rgba(60,78,95,0.32)',
-  bgOverlay:   'rgba(0,0,0,0.72)',
-  textPrimary:   'rgba(200,215,225,0.96)',
-  textSecondary: 'rgba(140,165,185,0.72)',
-  textMuted:     'rgba(100,125,145,0.50)',
-  textOnAccent:  '#ffffff',
-  accent:        '#607080',
-  accentSoft:    'rgba(96,112,128,0.15)',
-  accentBorder:  'rgba(96,112,128,0.28)',
-  purple:        '#485868',
-  purpleSoft:    'rgba(72,88,104,0.12)',
-  purpleBorder:  'rgba(72,88,104,0.28)',
-  border:        'rgba(88,110,130,0.26)',
-  divider:       'rgba(88,110,130,0.16)',
-  borderCard:    'rgba(115,138,158,0.22)',
-  success:       '#34d399',
-  error:         '#f87171',
-  warning:       '#fbbf24',
-  statusBar:     'light-content',
-  statusBg:      '#0e1014',
-  logoVowel: '#607080',
-  logoCons:  '#485868',
-  mistGradient: ['#181c22', '#0e1014'],
-};
-
-// ══════════════════════════════════════════════════════════════
-//  💎 Crystal
-// ══════════════════════════════════════════════════════════════
-
-export const CRYSTAL_RUBY = {
-  id: 'crystal_ruby',
-  isCrystal: true,
-  isLight: false,
-  bg:          '#06010a',
-  bgCard:      'rgba(180,15,35,0.14)',
-  bgElevated:  'rgba(180,15,35,0.20)',
-  bgInput:     'rgba(130,8,22,0.20)',
-  bgOverlay:   'rgba(0,0,0,0.75)',
-  textPrimary:   'rgba(255,215,222,0.96)',
-  textSecondary: 'rgba(218,138,152,0.75)',
-  textMuted:     'rgba(158,78,92,0.55)',
-  textOnAccent:  '#06010a',
-  accent:        '#eb3c5a',
-  accentSoft:    'rgba(235,60,90,0.13)',
-  accentBorder:  'rgba(235,60,90,0.22)',
-  purple:        '#d05570',
-  purpleSoft:    'rgba(208,85,112,0.10)',
-  purpleBorder:  'rgba(208,85,112,0.22)',
-  border:        'rgba(180,15,35,0.20)',
-  divider:       'rgba(180,15,35,0.12)',
-  borderCard:    'rgba(235,60,90,0.18)',
-  success:       '#34d399',
-  error:         '#f87171',
-  warning:       '#fbbf24',
-  statusBar:     'light-content',
-  statusBg:      '#06010a',
-  crystalColor:  '#b0101e',
-  crystalLight:  '#ff8099',
-  crystalSoft:   'rgba(235,60,90,0.10)',
-  crystalBorder: 'rgba(235,60,90,0.20)',
-  orbColors:     ['#b0101e', '#780010', '#eb3c5a', '#b0101e'],
-  // canvas tokens
-  crystalC0:    '#3a0010',
-  crystalC1:    '#1e0008',
-  crystalGlow:  '#ff1133',
-  crystalPrism: ['#ff6688','#ffcc44','#ff44aa','#ff2244','#ffaa66','#ffddcc'],
-};
-
-export const CRYSTAL_EMERALD = {
-  id: 'crystal_emerald',
-  isCrystal: true,
-  isLight: false,
-  bg:          '#010904',
-  bgCard:      'rgba(2,100,70,0.16)',
-  bgElevated:  'rgba(2,100,70,0.22)',
-  bgInput:     'rgba(1,68,46,0.20)',
-  bgOverlay:   'rgba(0,0,0,0.75)',
-  textPrimary:   'rgba(185,248,208,0.96)',
-  textSecondary: 'rgba(100,195,140,0.75)',
-  textMuted:     'rgba(55,135,88,0.55)',
-  textOnAccent:  '#010904',
-  accent:        '#0aaa73',
-  accentSoft:    'rgba(10,170,115,0.13)',
-  accentBorder:  'rgba(10,170,115,0.22)',
-  purple:        '#28b882',
-  purpleSoft:    'rgba(40,184,130,0.10)',
-  purpleBorder:  'rgba(40,184,130,0.22)',
-  border:        'rgba(2,100,70,0.20)',
-  divider:       'rgba(2,100,70,0.12)',
-  borderCard:    'rgba(10,170,115,0.18)',
-  success:       '#34d399',
-  error:         '#f87171',
-  warning:       '#fbbf24',
-  statusBar:     'light-content',
-  statusBg:      '#010904',
-  crystalColor:  '#036845',
-  crystalLight:  '#00ff99',
-  crystalSoft:   'rgba(10,170,115,0.10)',
-  crystalBorder: 'rgba(10,170,115,0.20)',
-  orbColors:     ['#036845', '#024d32', '#0aaa73', '#036845'],
-  // canvas tokens
-  crystalC0:    '#003818',
-  crystalC1:    '#001e0c',
-  crystalGlow:  '#00cc66',
-  crystalPrism: ['#00ffaa','#aaff44','#00ffcc','#66ff88','#ccffaa','#eeffdd'],
-};
-
-export const CRYSTAL_SAPPHIRE = {
-  id: 'crystal_sapphire',
-  isCrystal: true,
-  isLight: false,
-  bg:          '#01020e',
-  bgCard:      'rgba(20,50,130,0.16)',
-  bgElevated:  'rgba(20,50,130,0.22)',
-  bgInput:     'rgba(10,26,82,0.22)',
-  bgOverlay:   'rgba(0,0,0,0.75)',
-  textPrimary:   'rgba(208,225,255,0.96)',
-  textSecondary: 'rgba(118,158,228,0.75)',
-  textMuted:     'rgba(62,102,182,0.55)',
-  textOnAccent:  '#01020e',
-  accent:        '#3273e6',
-  accentSoft:    'rgba(50,115,230,0.13)',
-  accentBorder:  'rgba(50,115,230,0.22)',
-  purple:        '#5495f0',
-  purpleSoft:    'rgba(84,149,240,0.10)',
-  purpleBorder:  'rgba(84,149,240,0.22)',
-  border:        'rgba(20,50,130,0.22)',
-  divider:       'rgba(20,50,130,0.13)',
-  borderCard:    'rgba(50,115,230,0.18)',
-  success:       '#34d399',
-  error:         '#f87171',
-  warning:       '#fbbf24',
-  statusBar:     'light-content',
-  statusBg:      '#01020e',
-  crystalColor:  '#1a3580',
-  crystalLight:  '#6699ff',
-  crystalSoft:   'rgba(50,115,230,0.10)',
-  crystalBorder: 'rgba(50,115,230,0.20)',
-  orbColors:     ['#1a3580', '#1a3aa0', '#3273e6', '#1a3580'],
-  // canvas tokens
-  crystalC0:    '#001440',
-  crystalC1:    '#000a28',
-  crystalGlow:  '#2255ff',
-  crystalPrism: ['#77ccff','#aaddff','#ffffff','#5588ff','#bb99ff','#cceeff'],
-};
-
-export const CRYSTAL_AMETHYST = {
-  id: 'crystal_amethyst',
-  isCrystal: true,
-  isLight: false,
-  bg:          '#030108',
-  bgCard:      'rgba(80,20,175,0.17)',
-  bgElevated:  'rgba(80,20,175,0.23)',
-  bgInput:     'rgba(48,10,112,0.22)',
-  bgOverlay:   'rgba(0,0,0,0.75)',
-  textPrimary:   'rgba(232,222,255,0.96)',
-  textSecondary: 'rgba(162,132,235,0.75)',
-  textMuted:     'rgba(102,68,185,0.55)',
-  textOnAccent:  '#030108',
-  accent:        '#804beb',
-  accentSoft:    'rgba(128,75,235,0.13)',
-  accentBorder:  'rgba(128,75,235,0.22)',
-  purple:        '#9d70f5',
-  purpleSoft:    'rgba(157,112,245,0.10)',
-  purpleBorder:  'rgba(157,112,245,0.22)',
-  border:        'rgba(80,20,175,0.22)',
-  divider:       'rgba(80,20,175,0.13)',
-  borderCard:    'rgba(128,75,235,0.18)',
-  success:       '#34d399',
-  error:         '#f87171',
-  warning:       '#fbbf24',
-  statusBar:     'light-content',
-  statusBg:      '#030108',
-  crystalColor:  '#521898',
-  crystalLight:  '#cc88ff',
-  crystalSoft:   'rgba(128,75,235,0.10)',
-  crystalBorder: 'rgba(128,75,235,0.20)',
-  orbColors:     ['#521898', '#421580', '#804beb', '#521898'],
-  // canvas tokens
-  crystalC0:    '#200038',
-  crystalC1:    '#100020',
-  crystalGlow:  '#9922ee',
-  crystalPrism: ['#ff88ff','#cc44ff','#8833ff','#ff55bb','#ddaaff','#ffccff'],
-};
-
-export const CRYSTAL_TOPAZ = {
-  id: 'crystal_topaz',
-  isCrystal: true,
-  isLight: false,
-  bg:          '#060501',
-  bgCard:      'rgba(140,115,0,0.15)',
-  bgElevated:  'rgba(140,115,0,0.21)',
-  bgInput:     'rgba(100,82,0,0.22)',
-  bgOverlay:   'rgba(0,0,0,0.75)',
-  textPrimary:   'rgba(255,248,180,0.96)',
-  textSecondary: 'rgba(210,178,42,0.75)',
-  textMuted:     'rgba(168,138,18,0.55)',
-  textOnAccent:  '#060501',
-  accent:        '#d4b800',
-  accentSoft:    'rgba(212,184,0,0.13)',
-  accentBorder:  'rgba(212,184,0,0.22)',
-  purple:        '#a89000',
-  purpleSoft:    'rgba(168,144,0,0.10)',
-  purpleBorder:  'rgba(168,144,0,0.22)',
-  border:        'rgba(140,115,0,0.22)',
-  divider:       'rgba(140,115,0,0.13)',
-  borderCard:    'rgba(212,184,0,0.18)',
-  success:       '#34d399',
-  error:         '#f87171',
-  warning:       '#fbbf24',
-  statusBar:     'light-content',
-  statusBg:      '#060501',
-  crystalColor:  '#8a7200',
-  crystalLight:  '#ffdd44',
-  crystalSoft:   'rgba(212,184,0,0.10)',
-  crystalBorder: 'rgba(212,184,0,0.20)',
-  orbColors:     ['#8a7200', '#6e5a00', '#d4b800', '#8a7200'],
-  // canvas tokens
-  crystalC0:    '#2a1800',
-  crystalC1:    '#160c00',
-  crystalGlow:  '#ffcc00',
-  crystalPrism: ['#ffff55','#ffcc00','#ff8800','#ffee77','#ffffff','#ffdd44'],
-};
-
-export const CRYSTAL_DIAMOND = {
-  id: 'crystal_diamond',
-  isCrystal: true,
-  isLight: false,
-  bg:          '#05070f',
-  bgCard:      'rgba(71,85,105,0.12)',
-  bgElevated:  'rgba(71,85,105,0.18)',
-  bgInput:     'rgba(30,41,59,0.25)',
-  bgOverlay:   'rgba(0,0,0,0.75)',
-  textPrimary:   'rgba(240,245,255,0.96)',
-  textSecondary: 'rgba(170,185,210,0.75)',
-  textMuted:     'rgba(100,120,155,0.55)',
-  textOnAccent:  '#05070f',
-  accent:        '#94a3b8',
-  accentSoft:    'rgba(148,163,184,0.15)',
-  accentBorder:  'rgba(148,163,184,0.25)',
-  purple:        '#cbd5e1',
-  purpleSoft:    'rgba(203,213,225,0.12)',
-  purpleBorder:  'rgba(203,213,225,0.28)',
-  border:        'rgba(71,85,105,0.25)',
-  divider:       'rgba(71,85,105,0.15)',
-  borderCard:    'rgba(148,163,184,0.18)',
-  success:       '#34d399',
-  error:         '#f87171',
-  warning:       '#fbbf24',
-  statusBar:     'light-content',
-  statusBg:      '#05070f',
-  crystalColor:  '#475569',
-  crystalLight:  '#e2e8f0',
-  crystalSoft:   'rgba(148,163,184,0.12)',
-  crystalBorder: 'rgba(148,163,184,0.20)',
-  orbColors:     ['#334155', '#1e293b', '#94a3b8', '#475569'],
-  // canvas tokens
-  crystalC0:    '#1a2240',
-  crystalC1:    '#0c1428',
-  crystalGlow:  '#88aaee',
-  crystalPrism: ['#ff7777','#ffdd44','#77ee88','#66aaff','#dd88ff','#ffaaee'],
-};
-
-// ══════════════════════════════════════════════════════════════
-//  📋 THEME_GROUPS + ALL_THEMES
-// ══════════════════════════════════════════════════════════════
-
-export const THEME_GROUPS = [
-  {
-    groupId: 'standard',
-    groupLabel: 'Standard',
-    groupLabelAr: 'قبل الضجيج الأول',
-    groupEmoji: '⭐',
-    themes: [
-      { theme: DARK,  id: 'dark',  label: 'Dark',  labelAr: 'داكن',  emoji: '🌙', previewBg: '#05050f', previewAccent: '#f5c518', price: 0 },
-      { theme: LIGHT, id: 'light', label: 'Light', labelAr: 'فاتح', emoji: '☀️', previewBg: '#fff8d6', previewAccent: '#6d28d9', price: 0 },
-    ],
-  },
-  {
-    groupId: 'mist',
-    groupLabel: 'Mist',
-    groupLabelAr: 'بين الوضوح والضباب',
-    groupEmoji: '🌫️',
-    themes: [
-      { theme: TRUE_MIST,    id: 'truemist',   label: 'True Mist',   labelAr: 'الضباب الثلجي', emoji: '❄️', previewBg: '#daeefa', previewAccent: '#3a8fd0', isMist: true, price: 0   },
-      { theme: BLUE_MIST,   id: 'bluemist',   label: 'Blue Mist',   labelAr: 'الضباب الأزرق', emoji: '🔵', previewBg: '#0e1228', previewAccent: '#aab8f0', isMist: true, price: 200 },
-      { theme: GREEN_MIST,  id: 'greenmist',  label: 'Green Mist',  labelAr: 'الضباب الأخضر', emoji: '🟢', previewBg: '#060e07', previewAccent: '#88d098', isMist: true, price: 350 },
-      { theme: ORANGE_MIST, id: 'orangemist', label: 'Orange Mist', labelAr: 'الضباب الذهبي', emoji: '🟠', previewBg: '#0c0802', previewAccent: '#d0a038', isMist: true, price: 500 },
-      { theme: BLACK_MIST,  id: 'blackmist',  label: 'Black Mist',  labelAr: 'الضباب الأسود', emoji: '🤎', previewBg: '#080504', previewAccent: '#c0a090', isMist: true, price: 800 },
-    ],
-  },
-  {
-    groupId: 'crystal',
-    groupLabel: 'Crystal',
-    groupLabelAr: 'حين يتحرر الضوء',
-    groupEmoji: '💎',
-    themes: [
-      { theme: CRYSTAL_DIAMOND,  id: 'crystal_diamond',  label: 'Diamond',  labelAr: 'الماس',           emoji: '⬜', previewBg: '#05070f', previewAccent: '#e2e8f0', isCrystal: true, price: 0    },
-      { theme: CRYSTAL_RUBY,     id: 'crystal_ruby',     label: 'Ruby',     labelAr: 'الياقوت',         emoji: '🔴', previewBg: '#06010a', previewAccent: '#ff8099', isCrystal: true, price: 300  },
-      { theme: CRYSTAL_EMERALD,  id: 'crystal_emerald',  label: 'Emerald',  labelAr: 'الزمرد',          emoji: '🟢', previewBg: '#010904', previewAccent: '#00ff99', isCrystal: true, price: 500  },
-      { theme: CRYSTAL_SAPPHIRE, id: 'crystal_sapphire', label: 'Sapphire', labelAr: 'الياقوت الأزرق', emoji: '🔵', previewBg: '#01020e', previewAccent: '#6699ff', isCrystal: true, price: 750  },
-      { theme: CRYSTAL_AMETHYST, id: 'crystal_amethyst', label: 'Amethyst', labelAr: 'الجمشت',          emoji: '🟣', previewBg: '#030108', previewAccent: '#cc88ff', isCrystal: true, price: 1000 },
-      { theme: CRYSTAL_TOPAZ,    id: 'crystal_topaz',    label: 'Topaz',    labelAr: 'التوباز',         emoji: '🟡', previewBg: '#060501', previewAccent: '#ffdd44', isCrystal: true, price: 1500 },
-    ],
-  },
-  {
-    groupId: 'cities',
-    groupLabel: 'Dusk till Dawn',
-    groupLabelAr: 'حين ينام الضوء',
-    groupEmoji: '🌆',
-    themes: [
-      // 🌕 ليل — الأرخص
-      { theme: CITY_PARIS,      id: 'city_paris',      label: 'Paris Night',     labelAr: 'ليل باريس',        emoji: '🗼', timeOfDay: 'night', previewBg: '#1e1a48', previewAccent: '#e8d040', isCityTheme: true, price: 0    },
-      { theme: CITY_NEWYORK,    id: 'city_newyork',    label: 'New York Night',  labelAr: 'ليل نيويورك',      emoji: '🗽', timeOfDay: 'night', previewBg: '#1c0e3a', previewAccent: '#e83848', isCityTheme: true, price: 400  },
-      { theme: CITY_LONDON,     id: 'city_london',     label: 'London Night',    labelAr: 'ليل لندن',         emoji: '🌁', timeOfDay: 'night', previewBg: '#1c1c2c', previewAccent: '#f0a028', isCityTheme: true, price: 500  },
-      { theme: CITY_RIYADH,     id: 'city_riyadh',     label: 'Riyadh Night',    labelAr: 'ليل الرياض',       emoji: '🏙️', timeOfDay: 'night', previewBg: '#0a1c38', previewAccent: '#e8f0ff', isCityTheme: true, price: 600  },
-      { theme: CITY_DUBAI,      id: 'city_dubai',      label: 'Dubai Night',     labelAr: 'ليل دبي',          emoji: '✨', timeOfDay: 'night', previewBg: '#14102a', previewAccent: '#f0c818', isCityTheme: true, price: 800  },
-      // 🌇 غروب
-      { theme: CITY_ALEXANDRIA, id: 'city_alexandria', label: 'Alexandria Dusk', labelAr: 'غروب الإسكندرية', emoji: '🌊', timeOfDay: 'dusk',  previewBg: '#3c2860', previewAccent: '#e89830', isCityTheme: true, price: 400  },
-      { theme: CITY_BAGHDAD,    id: 'city_baghdad',    label: 'Baghdad Dusk',    labelAr: 'غروب بغداد',       emoji: '🌴', timeOfDay: 'dusk',  previewBg: '#501838', previewAccent: '#d4a028', isCityTheme: true, price: 800  },
-      { theme: CITY_ISTANBUL,   id: 'city_istanbul',   label: 'Istanbul Dusk',   labelAr: 'غروب إسطنبول',    emoji: '🌉', timeOfDay: 'dusk',  previewBg: '#501848', previewAccent: '#d06030', isCityTheme: true, price: 1200 },
-      // 🌅 فجر — الأغلى
-      { theme: CITY_AMSTERDAM,  id: 'city_amsterdam',  label: 'Amsterdam Dawn',  labelAr: 'فجر أمستردام',    emoji: '🌫️', timeOfDay: 'dawn',  previewBg: '#1e2c3c', previewAccent: '#8ab5d5', isCityTheme: true, price: 600  },
-      { theme: CITY_JERUSALEM,  id: 'city_jerusalem',  label: 'Jerusalem Dawn',  labelAr: 'فجر القدس',        emoji: '🕌', timeOfDay: 'dawn',  previewBg: '#281440', previewAccent: '#c8a855', isCityTheme: true, price: 1200 },
-      { theme: CITY_TOKYO,      id: 'city_tokyo',      label: 'Tokyo Dawn',      labelAr: 'فجر طوكيو',       emoji: '🌸', timeOfDay: 'dawn',  previewBg: '#502458', previewAccent: '#f0a0b5', isCityTheme: true, price: 1800 },
-    ],
-  },
-];
-
-// للتوافق مع الكود القديم الذي يستخدم ALL_THEMES
-export const ALL_THEMES = THEME_GROUPS.flatMap(g => g.themes);
-
-const THEME_MAP = Object.fromEntries(ALL_THEMES.map(t => [t.id, t.theme]));
-
-// ══════════════════════════════════════════════════════════════
-//  Context
-// ══════════════════════════════════════════════════════════════
-
-const ThemeContext = createContext({
-  themeId:    'dark',
-  theme:      DARK,
-  isDark:     true,
-  setThemeId: () => {},
-  toggleTheme: () => {},
-  setDark:    () => {},
-});
-
 const CRASH_COUNT_KEY = 'arena_theme_crash_count';
-const CRASH_THEME_KEY = 'arena_theme_crash_id';
 
-export function ThemeProvider({ children }) {
-  const [themeId, setThemeIdState] = useState('dark');
+const { width: SW, height: SH } = Dimensions.get('window');
+
+// ══════════════════════════════════════════════════════════
+//  بيانات الثيمات للـ WebView
+// ══════════════════════════════════════════════════════════
+const MIST_DATA = {
+  truemist:   { pos:0.80, dark:'#141820', mid:'#222c38', accent:'#7888a0', secondary:'#505e70', light:'#a8b8c8' },
+  bluemist:   { pos:0.65, dark:'#060a12', mid:'#0e1c2e', accent:'#4a6890', secondary:'#2e4860', light:'#7a9ab8' },
+  blackmist:  { pos:0.50, dark:'#040506', mid:'#0e1014', accent:'#5a6870', secondary:'#3a4850', light:'#7a8a95' },
+  greenmist:  { pos:0.35, dark:'#030808', mid:'#0a1810', accent:'#3a6848', secondary:'#284838', light:'#608870' },
+  orangemist: { pos:0.20, dark:'#080400', mid:'#1c0e04', accent:'#b85820', secondary:'#7a3810', light:'#d88040' },
+};
+
+const CRYSTAL_DATA = {
+  crystal_diamond:  { bg:'#05070f', c0:'#1a2240', c1:'#0c1428', accent:'#94a3b8', light:'#ffffff',  glow:'#88aaee', prism:['#ff7777','#ffdd44','#77ee88','#66aaff','#dd88ff'] },
+  crystal_ruby:     { bg:'#06010a', c0:'#3a0010', c1:'#1e0008', accent:'#eb3c5a', light:'#ffccdd', glow:'#ff1133', prism:['#ff6688','#ffcc44','#ff44aa','#ff2244','#ffaa66'] },
+  crystal_emerald:  { bg:'#010904', c0:'#003818', c1:'#001e0c', accent:'#0aaa73', light:'#aaffd4', glow:'#00cc66', prism:['#00ffaa','#aaff44','#00ffcc','#66ff88','#ccffaa'] },
+  crystal_sapphire: { bg:'#01020e', c0:'#001440', c1:'#000a28', accent:'#3273e6', light:'#aaccff', glow:'#2255ff', prism:['#77ccff','#aaddff','#ffffff','#5588ff','#bb99ff'] },
+  crystal_amethyst: { bg:'#030108', c0:'#200038', c1:'#100020', accent:'#804beb', light:'#eeccff', glow:'#9922ee', prism:['#ff88ff','#cc44ff','#8833ff','#ff55bb','#ddaaff'] },
+  crystal_topaz:    { bg:'#060501', c0:'#2a1800', c1:'#160c00', accent:'#d4b800', light:'#ffeeaa', glow:'#ffcc00', prism:['#ffff55','#ffcc00','#ff8800','#ffee77','#ffffff']  },
+};
+
+function getWebViewTheme(theme) {
+  if (theme.isMist) {
+    const d = MIST_DATA[theme.id];
+    if (!d) return null;
+    return { type:'mist', id:theme.id, mistData:d };
+  }
+  if (theme.isCrystal) {
+    const d = CRYSTAL_DATA[theme.id];
+    if (!d) return null;
+    return { type:'crystal', id:theme.id, crystalData:d };
+  }
+  return null;
+}
+
+// ══════════════════════════════════════════════════════════
+//  HTML / Canvas للـ WebView
+// ══════════════════════════════════════════════════════════
+const WEBVIEW_HTML = `<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:#000}canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:block}</style>
+</head><body>
+<canvas id="c"></canvas>
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W,H,theme=null,raf=null,frame=0;
+
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+window.addEventListener('resize',resize);
+resize();
+
+window.addEventListener('message',e=>{try{setTheme(JSON.parse(e.data));}catch(_){}});
+document.addEventListener('message',e=>{try{setTheme(JSON.parse(e.data));}catch(_){}});
+
+function setTheme(t){
+  theme=t;frame=0;
+  if(raf){cancelAnimationFrame(raf);raf=null;}
+  if(t.type==='mist'||t.type==='crystal') loop();
+}
+
+// ── Mist ──
+function drawMist(t,fr){
+  const{pos,dark,mid,accent,secondary,light}=t.mistData;
+  const cx=W*pos,cy=H*0.44;
+  ctx.clearRect(0,0,W,H);
+  const sky=ctx.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0,dark);sky.addColorStop(0.30,mid);
+  sky.addColorStop(0.65,accent+'55');sky.addColorStop(1,dark);
+  ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+  if(t.id==='bluemist'){
+    for(let i=0;i<30;i++){
+      ctx.globalAlpha=0.10+(i%4)*0.05;ctx.fillStyle='#ffffff';
+      ctx.beginPath();ctx.arc((i*1377)%W,(i*983)%(H*.30),(0.4+(i%3)*.3)*(H/800),0,Math.PI*2);ctx.fill();
+    }ctx.globalAlpha=1;
+  }
+  const isBig=(t.id==='truemist'||t.id==='blackmist');
+  const rings=isBig?[{r:.13,a:.18},{r:.28,a:.11},{r:.45,a:.07},{r:.63,a:.04}]
+                   :[{r:.09,a:.40},{r:.20,a:.28},{r:.33,a:.17},{r:.48,a:.10},{r:.65,a:.06}];
+  rings.forEach(ring=>{
+    const r=ring.r*W;
+    const g=ctx.createRadialGradient(cx,cy,r*0.82,cx,cy,r);
+    const hex=v=>Math.round(Math.min(Math.max(v,0),1)*255).toString(16).padStart(2,'0');
+    g.addColorStop(0,'transparent');g.addColorStop(0.35,accent+hex(ring.a));
+    g.addColorStop(0.65,secondary+hex(Math.round(ring.a*0.5)));g.addColorStop(1,'transparent');
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  });
+  const pulse=0.85+0.15*Math.sin(fr*0.015);
+  const core=ctx.createRadialGradient(cx,cy,0,cx,cy,W*0.055*pulse);
+  core.addColorStop(0,light+'ee');core.addColorStop(0.35,accent+'88');core.addColorStop(1,'transparent');
+  ctx.fillStyle=core;ctx.fillRect(0,0,W,H);
+  const mg=ctx.createLinearGradient(0,H*0.25,0,H*0.85);
+  mg.addColorStop(0,'transparent');mg.addColorStop(0.35,'#ffffff12');mg.addColorStop(0.65,'#ffffff14');mg.addColorStop(1,'transparent');
+  ctx.fillStyle=mg;ctx.fillRect(0,H*0.25,W,H*0.6);
+  const topFog=ctx.createLinearGradient(0,0,0,H*0.3);
+  topFog.addColorStop(0,dark+'ee');topFog.addColorStop(1,'transparent');
+  ctx.fillStyle=topFog;ctx.fillRect(0,0,W,H*0.3);
+  const vig=ctx.createRadialGradient(cx,cy,H*0.2,cx,cy,W*0.68);
+  vig.addColorStop(0,'transparent');vig.addColorStop(0.7,'transparent');vig.addColorStop(1,dark+'aa');
+  ctx.fillStyle=vig;ctx.fillRect(0,0,W,H);
+}
+
+// ── Crystal ──
+function hexToRgb(h){const s=h.replace('#','');return[parseInt(s.slice(0,2),16),parseInt(s.slice(2,4),16),parseInt(s.slice(4,6),16)];}
+
+function drawCrystal(t,fr){
+  const{c0,c1,accent,light,glow,prism}=t.crystalData;
+  const cx=W/2+Math.sin(fr*0.003)*W*0.025;
+  const cy=H/2+Math.cos(fr*0.0025)*H*0.018;
+  const[ar,ag,ab]=hexToRgb(accent);
+  const[lr,lg,lb]=hexToRgb(light);
+  const[gr,gg,gb]=hexToRgb(glow);
+  const b1=(Math.sin(fr*0.0028)+1)*0.5;
+  const b3=(Math.sin(fr*0.0019+2.7)+1)*0.5;
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+  const bg=ctx.createRadialGradient(cx*0.85,cy*0.65,0,cx,cy*1.1,W*1.1);
+  bg.addColorStop(0,c0);bg.addColorStop(0.55,c1);bg.addColorStop(1,'#000000');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  const ls=-Math.PI*0.25+fr*0.0008;
+  for(let f=0;f<6;f++){
+    const a1=(f/6)*Math.PI*2-Math.PI/6,a2=((f+1)/6)*Math.PI*2-Math.PI/6;
+    const FAR=Math.hypot(W,H)*1.4;
+    const fx1=cx+Math.cos(a1)*FAR,fy1=cy+Math.sin(a1)*FAR;
+    const fx2=cx+Math.cos(a2)*FAR,fy2=cy+Math.sin(a2)*FAR;
+    const fm=(a1+a2)/2,lh=(Math.cos(fm-ls)+1)*0.5;
+    const wl=Math.pow(lh,1.6),pulse=wl*(0.55+0.45*Math.sin(fr*0.0035+f*1.05));
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(fx1,fy1);ctx.lineTo(fx2,fy2);ctx.closePath();
+    const wg=ctx.createRadialGradient(cx,cy,0,cx,cy,FAR*0.88);
+    wg.addColorStop(0,\`rgba(\${ar},\${ag},\${ab},0)\`);
+    wg.addColorStop(0.10,\`rgba(\${ar},\${ag},\${ab},\${0.05+wl*0.10})\`);
+    wg.addColorStop(0.42,\`rgba(\${gr},\${gg},\${gb},\${0.07+wl*0.14})\`);
+    wg.addColorStop(1,\`rgba(\${lr},\${lg},\${lb},\${0.08+wl*0.24})\`);
+    ctx.fillStyle=wg;ctx.fill();
+    [[14,0.06],[7,0.14],[3,0.28],[1.2,0.50]].forEach(([lw,ba])=>{
+      const a=ba*pulse;if(a<0.003)return;
+      const eg=ctx.createLinearGradient(cx,cy,fx1,fy1);
+      eg.addColorStop(0,'transparent');eg.addColorStop(0.04,\`rgba(\${lr},\${lg},\${lb},\${a*0.3})\`);
+      eg.addColorStop(0.30,\`rgba(255,255,255,\${a})\`);eg.addColorStop(0.65,\`rgba(\${lr},\${lg},\${lb},\${a*0.8})\`);
+      eg.addColorStop(1,\`rgba(\${ar},\${ag},\${ab},\${a*0.4})\`);
+      ctx.strokeStyle=eg;ctx.lineWidth=lw;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(fx1,fy1);ctx.stroke();
+    });
+  }
+  prism.forEach((col,i)=>{
+    const[pr,pg,pb]=hexToRgb(col);
+    const ph=(i/5)*Math.PI*2,sp=0.0012+i*0.00016;
+    const ang=ph+fr*sp,dist=0.45+0.28*Math.sin(ph+fr*sp*0.5);
+    const ox=cx+Math.cos(ang)*W*dist,oy=cy+Math.sin(ang)*H*dist*0.9;
+    const r=W*(0.24+0.10*Math.sin(ph*1.3+fr*0.0014));
+    const al=0.022+0.018*Math.sin(ph*1.8+fr*0.002);
+    const g=ctx.createRadialGradient(ox,oy,0,ox,oy,r);
+    g.addColorStop(0,\`rgba(\${pr},\${pg},\${pb},\${al*1.4})\`);
+    g.addColorStop(0.5,\`rgba(\${pr},\${pg},\${pb},\${al*0.5})\`);
+    g.addColorStop(1,'transparent');
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  });
+  const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,W*(0.06+b1*0.025));
+  cg.addColorStop(0,\`rgba(255,255,255,\${0.55+b1*0.25})\`);
+  cg.addColorStop(0.35,\`rgba(\${lr},\${lg},\${lb},\${0.22+b1*0.09})\`);
+  cg.addColorStop(1,'transparent');
+  ctx.fillStyle=cg;ctx.fillRect(0,0,W,H);
+  const cs=0.4+0.6*b3;
+  [8,4].forEach((rays,ri)=>{
+    for(let i=0;i<rays;i++){
+      const a=(i/rays)*Math.PI*2+ri*(Math.PI/(rays*2));
+      const len=W*(ri===0?0.10:0.045)*cs;
+      const sg=ctx.createLinearGradient(cx,cy,cx+Math.cos(a)*len,cy+Math.sin(a)*len);
+      sg.addColorStop(0,\`rgba(255,255,255,\${cs*0.70})\`);
+      sg.addColorStop(0.25,\`rgba(\${lr},\${lg},\${lb},\${cs*0.28})\`);
+      sg.addColorStop(1,'transparent');
+      ctx.strokeStyle=sg;ctx.lineWidth=ri===0?1.1:0.6;
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*len,cy+Math.sin(a)*len);ctx.stroke();
+    }
+  });
+  const vg=ctx.createRadialGradient(cx,cy,H*0.08,cx,cy,W*0.88);
+  vg.addColorStop(0,'transparent');vg.addColorStop(0.38,'transparent');
+  vg.addColorStop(0.65,'rgba(0,0,0,0.12)');vg.addColorStop(0.82,'rgba(0,0,0,0.52)');
+  vg.addColorStop(1,'rgba(0,0,0,0.95)');
+  ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);
+}
+
+function loop(){
+  if(!theme)return;
+  frame++;
+  if(theme.type==='mist') drawMist(theme,frame);
+  else if(theme.type==='crystal') drawCrystal(theme,frame);
+  raf=requestAnimationFrame(loop);
+}
+</script></body></html>`;
+
+// ══════════════════════════════════════════════════════════
+//  City stars cache
+// ══════════════════════════════════════════════════════════
+const STARS_CACHE = {};
+function getCityStars(theme, count) {
+  if (!STARS_CACHE[theme.id]) {
+    STARS_CACHE[theme.id] = [...Array(count)].map((_,i) => ({
+      key: i,
+      top:  `${(i*43+7)  % 65}%`,
+      left: `${(i*67+13) % 96}%`,
+      size: i%5===0 ? 2.5 : i%3===0 ? 1.8 : 1.2,
+      opacity: 0.25 + (i%4)*0.15,
+    }));
+  }
+  return STARS_CACHE[theme.id];
+}
+
+// ══════════════════════════════════════════════════════════
+//  ThemeBackground
+// ══════════════════════════════════════════════════════════
+const ThemeBackground = memo(({ theme }) => {
+  const webviewRef = useRef(null);
+  const fadeAnim   = useRef(new Animated.Value(0)).current;
+  const wvTheme    = getWebViewTheme(theme);
+
+  const [wvReady, setWvReady] = useState(false);
+
+  const sendTheme = useCallback(() => {
+    if (!wvTheme || !webviewRef.current) return;
+    try {
+      webviewRef.current.injectJavaScript(
+        `try { setTheme(${JSON.stringify(wvTheme)}); } catch(_) {} true;`
+      );
+    } catch (_) {
+      // injectJavaScript فشل — نتجاهل بصمت
+    }
+  }, [wvTheme]);
+
+  const handleLoad = useCallback(() => {
+    setWvReady(true);
+    // WebView نجحت في التحميل → نصفّر عداد الـ crash
+    AsyncStorage.setItem(CRASH_COUNT_KEY, '0').catch(() => {});
+    // تأخير أطول لضمان اكتمال تحميل الـ canvas على Android
+    setTimeout(() => {
+      sendTheme();
+      Animated.timing(fadeAnim, {
+        toValue: 1, duration: 400, useNativeDriver: true,
+      }).start();
+    }, 150);
+  }, [sendTheme]);
 
   useEffect(() => {
-    const loadTheme = async () => {
-      try {
-        const [val, crashCount, crashTheme] = await Promise.all([
-          AsyncStorage.getItem(THEME_KEY),
-          AsyncStorage.getItem(CRASH_COUNT_KEY),
-          AsyncStorage.getItem(CRASH_THEME_KEY),
-        ]);
+    if (!wvReady) return;
+    // عند تغيير الثيم بعد التحميل
+    const timer = setTimeout(sendTheme, 120);
+    return () => clearTimeout(timer);
+  }, [theme.id, wvReady]);
 
-        // حماية من الـ crash loop:
-        // إذا نفس الثيم تسبب في crash 2+ مرات متتالية → العودة لـ dark
-        const count = parseInt(crashCount || '0');
-        if (count >= 2 && crashTheme === val) {
-          await AsyncStorage.multiSet([
-            [THEME_KEY, 'dark'],
-            [CRASH_COUNT_KEY, '0'],
-            [CRASH_THEME_KEY, ''],
-          ]);
-          setThemeIdState('dark');
-          return;
-        }
+  // ── Dark / Light ──
+  if (!theme.isMist && !theme.isCrystal && !theme.isCityTheme) {
+    return null; // ThemeContext يضع backgroundColor: theme.bg على الـ root
+  }
 
-        if (val && THEME_MAP[val]) {
-          // سجّل أن هذا الثيم يحاول التشغيل (سيُصفَّر عند اكتمال التحميل)
-          await AsyncStorage.multiSet([
-            [CRASH_COUNT_KEY, String(count + 1)],
-            [CRASH_THEME_KEY, val],
-          ]);
-          setThemeIdState(val);
-        }
-      } catch {
-        // أي خطأ → dark
-        setThemeIdState('dark');
-      }
-    };
-    loadTheme();
-  }, []);
+  // ── Mist / Crystal → WebView ──
+  if (theme.isMist || theme.isCrystal) {
+    return (
+      <View style={s.fill} pointerEvents="none">
+        <Animated.View style={[s.fill, { opacity: fadeAnim }]}>
+          <WebView
+            ref={webviewRef}
+            style={s.fill}
+            source={{ html: WEBVIEW_HTML }}
+            scrollEnabled={false}
+            bounces={false}
+            overScrollMode="never"
+            showsVerticalScrollIndicator={false}
+            showsHorizontalScrollIndicator={false}
+            originWhitelist={['*']}
+            javaScriptEnabled={true}
+            domStorageEnabled={false}
+            allowsInlineMediaPlayback={false}
+            mediaPlaybackRequiresUserAction={true}
+            androidLayerType="hardware"
+            renderToHardwareTextureAndroid={true}
+            onLoad={handleLoad}
+            onError={() => {
+              // WebView فشلت — نُظهر خلفية بسيطة بدلاً من crash
+              // ThemeContext سيتعامل مع الـ AsyncStorage
+            }}
+            onHttpError={() => {}}
+          />
+        </Animated.View>
+      </View>
+    );
+  }
 
-  const setThemeId = useCallback((id) => {
-    if (!THEME_MAP[id]) return;
-    setThemeIdState(id);
-    // عند اختيار ثيم جديد → نعيد عداد الـ crash
-    AsyncStorage.multiSet([
-      [THEME_KEY, id],
-      [CRASH_COUNT_KEY, '0'],
-      [CRASH_THEME_KEY, id],
-    ]).catch(() => {});
-  }, []);
-
-  const toggleTheme = useCallback(() => {
-    setThemeId(themeId === 'dark' ? 'light' : 'dark');
-  }, [themeId, setThemeId]);
-
-  const setDark = useCallback((val) => {
-    setThemeId(val ? 'dark' : 'light');
-  }, [setThemeId]);
-
-  const theme  = THEME_MAP[themeId] || DARK;
-  const isDark = theme.isLight === true ? false : (themeId !== 'light');
+  // ── City ──
+  const stars = theme.starCount ? getCityStars(theme, theme.starCount) : [];
+  // Null safety: City themes must have skyGradient and skylineAsset
+  const skyColors = (theme.skyGradient && theme.skyGradient.length >= 2)
+    ? theme.skyGradient
+    : [theme.bg || '#05070f', theme.bg || '#05070f'];
+  const fadeColors = (theme.skyBottom)
+    ? [theme.skyBottom, theme.skyBottom + '00']
+    : ['#07091a', '#07091a00'];
 
   return (
-    <ThemeContext.Provider value={{
-      themeId,
-      theme,
-      isDark,
-      setThemeId,
-      toggleTheme,
-      setDark,
-    }}>
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.bg }]}>
-        <ThemeBackground theme={theme} />
-        <View style={StyleSheet.absoluteFill}>
-          {children}
+    <View style={s.fill} pointerEvents="none">
+      <LinearGradient
+        colors={skyColors}
+        style={s.fill}
+        start={{ x:0.5, y:1 }}
+        end={{ x:0.5, y:0 }}
+      />
+      {stars.map(st => (
+        <View key={st.key} style={{
+          position:'absolute', top:st.top, left:st.left,
+          width:st.size, height:st.size, borderRadius:99,
+          backgroundColor: (theme.accent || '#ffffff') + 'cc',
+          opacity: st.opacity,
+        }} />
+      ))}
+      {theme.skylineAsset ? (
+        <View style={s.skylineWrap}>
+          <ImageBackground
+            source={theme.skylineAsset}
+            style={s.skylineImg}
+            resizeMode="cover"
+            onError={() => {/* صورة الـ skyline غير موجودة — نتجاهل بصمت */}}
+          />
+          <LinearGradient
+            colors={fadeColors}
+            style={s.skylineFade}
+            start={{ x:0, y:1 }}
+            end={{ x:0, y:0 }}
+          />
         </View>
-      </View>
-    </ThemeContext.Provider>
+      ) : null}
+    </View>
   );
-}
+});
 
-export function useTheme() {
-  return useContext(ThemeContext);
-}
+export default ThemeBackground;
+
+const s = StyleSheet.create({
+  fill:        { ...StyleSheet.absoluteFillObject },
+  skylineWrap: { position:'absolute', bottom:0, left:0, right:0, height:190 },
+  skylineImg:  { width:'100%', height:'100%' },
+  skylineFade: { position:'absolute', bottom:0, left:0, right:0, height:65 },
+});

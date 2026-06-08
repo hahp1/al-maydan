@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useOnlineGame } from './useOnlineGame';
 import { useTheme } from './ThemeContext';
+import { useLanguage } from './I18n';
 import { WordleEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';

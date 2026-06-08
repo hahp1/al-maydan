@@ -445,22 +445,31 @@ export default function FriendsScreen({ user, setScreen, initialTab = TABS.CHATS
       </Animated.View>
 
       <Animated.View style={[styles.tabs, { opacity: fadeAnim }]}>
-        {TABS_LIST.map(tb => (
-          <ThemedCard
-            key={tb.key}
-            onPress={() => setTab(tb.key)}
-            style={styles.tabBtn}
-            variant={tab === tb.key ? 'accent' : 'default'}
-          >
-            <Text style={[
-              styles.tabText,
-              { color: tab === tb.key ? theme.accent : theme.textMuted },
-              tab === tb.key && { fontWeight: '800' },
-            ]}>
-              {tb.label}
-            </Text>
-          </ThemedCard>
-        ))}
+        {TABS_LIST.map(tb => {
+          const isActive = tab === tb.key;
+          return (
+            <TouchableOpacity
+              key={tb.key}
+              onPress={() => setTab(tb.key)}
+              activeOpacity={0.75}
+              style={[
+                styles.tabBtn,
+                {
+                  backgroundColor: isActive ? theme.accentSoft : theme.bgCard,
+                  borderColor:     isActive ? theme.accentBorder : theme.borderCard,
+                },
+              ]}
+            >
+              <Text style={[
+                styles.tabText,
+                { color: isActive ? theme.accent : theme.textMuted },
+                isActive && { fontWeight: '800' },
+              ]}>
+                {tb.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </Animated.View>
 
       <Animated.View style={[{ flex: 1, width: '100%' }, { opacity: fadeAnim }]}>
@@ -483,9 +492,9 @@ const styles = StyleSheet.create({
   headerTitle:       { fontSize: 18, fontWeight: '900' },
   addGroupBtn:       { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 12 },
   addGroupText:      { fontSize: 13, fontWeight: '700' },
-  tabs:              { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 4 },
-  tabBtn:            { flex: 1, paddingVertical: 9, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
-  tabText:           { fontSize: 12, fontWeight: '600' },
+  tabs:              { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 8 },
+  tabBtn:            { flex: 1, paddingVertical: 11, paddingHorizontal: 4, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  tabText:           { fontSize: 13, fontWeight: '600', textAlign: 'center' },
   listPad:           { padding: 16 },
   convCard:          { flexDirection: 'row', alignItems: 'center', borderRadius: 16, borderWidth: 1, padding: 14, gap: 12 },
   convAvatar:        { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

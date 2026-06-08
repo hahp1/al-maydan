@@ -12,10 +12,13 @@
  * تغيير الثيم → injectJavaScript فوري بدون reload
  */
 
-import { useRef, useEffect, useState, memo } from 'react';
+import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import { View, StyleSheet, Dimensions, ImageBackground, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const CRASH_COUNT_KEY = 'arena_theme_crash_count';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -235,28 +238,38 @@ const ThemeBackground = memo(({ theme }) => {
   const fadeAnim   = useRef(new Animated.Value(0)).current;
   const wvTheme    = getWebViewTheme(theme);
 
-  const sendTheme = () => {
-    if (!wvTheme || !webviewRef.current) return;
-    webviewRef.current.injectJavaScript(`
-      try { setTheme(${JSON.stringify(wvTheme)}); } catch(_) {}
-      true;
-    `);
-  };
+  const [wvReady, setWvReady] = useState(false);
 
-  const handleLoad = () => {
+  const sendTheme = useCallback(() => {
+    if (!wvTheme || !webviewRef.current) return;
+    try {
+      webviewRef.current.injectJavaScript(
+        `try { setTheme(${JSON.stringify(wvTheme)}); } catch(_) {} true;`
+      );
+    } catch (_) {
+      // injectJavaScript فشل — نتجاهل بصمت
+    }
+  }, [wvTheme]);
+
+  const handleLoad = useCallback(() => {
+    setWvReady(true);
+    // WebView نجحت في التحميل → نصفّر عداد الـ crash
+    AsyncStorage.setItem(CRASH_COUNT_KEY, '0').catch(() => {});
+    // تأخير أطول لضمان اكتمال تحميل الـ canvas على Android
     setTimeout(() => {
       sendTheme();
       Animated.timing(fadeAnim, {
-        toValue: 1, duration: 300, useNativeDriver: true,
+        toValue: 1, duration: 400, useNativeDriver: true,
       }).start();
-    }, 50);
-  };
+    }, 150);
+  }, [sendTheme]);
 
   useEffect(() => {
+    if (!wvReady) return;
     // عند تغيير الثيم بعد التحميل
-    const timer = setTimeout(sendTheme, 80);
+    const timer = setTimeout(sendTheme, 120);
     return () => clearTimeout(timer);
-  }, [theme.id]);
+  }, [theme.id, wvReady]);
 
   // ── Dark / Light ──
   if (!theme.isMist && !theme.isCrystal && !theme.isCityTheme) {
@@ -279,7 +292,17 @@ const ThemeBackground = memo(({ theme }) => {
             showsHorizontalScrollIndicator={false}
             originWhitelist={['*']}
             javaScriptEnabled={true}
+            domStorageEnabled={false}
+            allowsInlineMediaPlayback={false}
+            mediaPlaybackRequiresUserAction={true}
+            androidLayerType="hardware"
+            renderToHardwareTextureAndroid={true}
             onLoad={handleLoad}
+            onError={() => {
+              // WebView فشلت — نُظهر خلفية بسيطة بدلاً من crash
+              // ThemeContext سيتعامل مع الـ AsyncStorage
+            }}
+            onHttpError={() => {}}
           />
         </Animated.View>
       </View>
@@ -288,10 +311,18 @@ const ThemeBackground = memo(({ theme }) => {
 
   // ── City ──
   const stars = theme.starCount ? getCityStars(theme, theme.starCount) : [];
+  // Null safety: City themes must have skyGradient and skylineAsset
+  const skyColors = (theme.skyGradient && theme.skyGradient.length >= 2)
+    ? theme.skyGradient
+    : [theme.bg || '#05070f', theme.bg || '#05070f'];
+  const fadeColors = (theme.skyBottom)
+    ? [theme.skyBottom, theme.skyBottom + '00']
+    : ['#07091a', '#07091a00'];
+
   return (
     <View style={s.fill} pointerEvents="none">
       <LinearGradient
-        colors={theme.skyGradient}
+        colors={skyColors}
         style={s.fill}
         start={{ x:0.5, y:1 }}
         end={{ x:0.5, y:0 }}
@@ -300,23 +331,26 @@ const ThemeBackground = memo(({ theme }) => {
         <View key={st.key} style={{
           position:'absolute', top:st.top, left:st.left,
           width:st.size, height:st.size, borderRadius:99,
-          backgroundColor: theme.accent + 'cc',
+          backgroundColor: (theme.accent || '#ffffff') + 'cc',
           opacity: st.opacity,
         }} />
       ))}
-      <View style={s.skylineWrap}>
-        <ImageBackground
-          source={theme.skylineAsset}
-          style={s.skylineImg}
-          resizeMode="cover"
-        />
-        <LinearGradient
-          colors={[theme.skyBottom, theme.skyBottom + '00']}
-          style={s.skylineFade}
-          start={{ x:0, y:1 }}
-          end={{ x:0, y:0 }}
-        />
-      </View>
+      {theme.skylineAsset ? (
+        <View style={s.skylineWrap}>
+          <ImageBackground
+            source={theme.skylineAsset}
+            style={s.skylineImg}
+            resizeMode="cover"
+            onError={() => {/* صورة الـ skyline غير موجودة — نتجاهل بصمت */}}
+          />
+          <LinearGradient
+            colors={fadeColors}
+            style={s.skylineFade}
+            start={{ x:0, y:1 }}
+            end={{ x:0, y:0 }}
+          />
+        </View>
+      ) : null}
     </View>
   );
 });

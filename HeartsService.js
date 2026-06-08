@@ -147,9 +147,17 @@ export async function loadHearts() {
 export async function spendHeart(cost = 1) {
   try {
     const [heartsRaw, lastRefillRaw] = await AsyncStorage.multiGet([KEYS.hearts, KEYS.lastRefill]);
-    const hearts     = heartsRaw[1] ? parseInt(heartsRaw[1]) : 0;
+    const MAX = HEARTS_CONFIG.maxFreeDaily;
+
+    // إذا لم تُهيَّأ القلوب بعد → ابدأ بالسقف الكامل (أول تشغيل)
+    let hearts;
+    if (heartsRaw[1] === null || heartsRaw[1] === undefined) {
+      hearts = MAX;
+      await AsyncStorage.setItem(KEYS.hearts, String(MAX));
+    } else {
+      hearts = parseInt(heartsRaw[1]) || 0;
+    }
     const lastRefill = lastRefillRaw[1] ? parseInt(lastRefillRaw[1]) : 0;
-    const MAX        = HEARTS_CONFIG.maxFreeDaily;
 
     if (hearts < cost) return { success: false, hearts };
 

@@ -349,45 +349,59 @@ const TournamentPopup = memo(({
 //  ModeCard
 // ══════════════════════════════════════════════
 const ModeCard = memo(({ emoji, title, subtitle, heartCost = 1, costColor, costBg, borderColor,
-                          disabled, onPress, cardBg, badge }) => (
-  <ThemedCard
-    onPress={onPress}
-    style={[styles.modeCard, disabled && styles.modeDisabled]}
-    disabled={disabled}
+                          disabled, onPress, cardBg, badge, theme }) => (
+  <TouchableOpacity
+    onPress={disabled ? undefined : onPress}
+    activeOpacity={disabled ? 1 : 0.75}
+    style={[
+      styles.modeCard,
+      { backgroundColor: cardBg || 'transparent', borderColor: borderColor || costColor + '40' },
+      disabled && styles.modeDisabled,
+    ]}
   >
-    <View style={styles.modeLeft}>
-      <Text style={styles.modeEmoji}>{emoji}</Text>
-      <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={[styles.modeTitle, { color: costColor }]}>{title}</Text>
-          {badge ? (
-            <View style={[styles.modeBadge, { backgroundColor: costColor + '33' }]}>
-              <Text style={[styles.modeBadgeText, { color: costColor }]}>{badge}</Text>
-            </View>
-          ) : null}
-        </View>
-        <Text style={[styles.modeSubtitle, { color: '#6a6a90' }]}>{subtitle}</Text>
+    {/* أيقونة يمين */}
+    <Text style={styles.modeEmoji}>{emoji}</Text>
+
+    {/* نص وسط */}
+    <View style={styles.modeTextBlock}>
+      <View style={styles.modeTitleRow}>
+        <Text style={[styles.modeTitle, { color: costColor }]}>{title}</Text>
+        {badge ? (
+          <View style={[styles.modeBadge, { backgroundColor: costColor + '33' }]}>
+            <Text style={[styles.modeBadgeText, { color: costColor }]}>{badge}</Text>
+          </View>
+        ) : null}
       </View>
+      <Text style={[styles.modeSubtitle, { color: '#6a6a90' }]} numberOfLines={2}>{subtitle}</Text>
     </View>
-    <View style={[styles.modeCostBadge, { backgroundColor: costBg, flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+
+    {/* شارة القلوب يسار */}
+    <View style={[styles.modeCostBadge, { backgroundColor: costBg }]}>
       <Text style={[styles.modeCost, { color: costColor }]}>{heartCost}</Text>
-      <HeartIcon size={16} filled glow={false} />
+      <HeartIcon size={14} filled glow={false} />
     </View>
-  </ThemedCard>
+  </TouchableOpacity>
 ));
 
 // ══════════════════════════════════════════════
 //  SubOption
 // ══════════════════════════════════════════════
 const SubOption = memo(({ emoji, title, heartCost, ranked, disabled, onPress, onInfo, theme }) => (
-  <ThemedCard
-    onPress={onPress}
-    style={[styles.subOption, disabled && { opacity: 0.4 }]}
-    disabled={disabled}
+  <TouchableOpacity
+    onPress={disabled ? undefined : onPress}
+    activeOpacity={disabled ? 1 : 0.75}
+    style={[
+      styles.subOption,
+      { backgroundColor: theme.bgCard, borderColor: theme.borderCard },
+      disabled && { opacity: 0.4 },
+    ]}
   >
+    {/* أيقونة */}
     <Text style={styles.subEmoji}>{emoji}</Text>
-    <View style={{ flex: 1 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+
+    {/* معلومات */}
+    <View style={styles.subTextBlock}>
+      <View style={styles.subTitleRow}>
         <Text style={[styles.subTitle, { color: theme.accent }]}>{title}</Text>
         {ranked && (
           <View style={[styles.rankedBadge, { backgroundColor: '#f59e0b33' }]}>
@@ -395,15 +409,18 @@ const SubOption = memo(({ emoji, title, heartCost, ranked, disabled, onPress, on
           </View>
         )}
       </View>
-      <View style={[styles.subCostBadge, { backgroundColor: '#ef444418' }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Text style={[styles.subCostText, { color: '#ef4444' }]}>{heartCost}</Text>
-          <HeartIcon size={14} filled glow={false} />
-        </View>
+      {/* شارة القلوب */}
+      <View style={[styles.subCostBadge, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
+        <Text style={[styles.subCostText, { color: theme.accent }]}>{heartCost}</Text>
+        <HeartIcon size={13} filled glow={false} />
       </View>
     </View>
-    <ThemedButton onPress={onInfo} label='ⓘ' variant='ghost' size='small' style={styles.infoBtn} />
-  </ThemedCard>
+
+    {/* زر معلومات صغير */}
+    <TouchableOpacity onPress={onInfo} hitSlop={HIT_SLOP} style={styles.infoBtn}>
+      <Text style={[styles.infoBtnText, { color: theme.textMuted }]}>ⓘ</Text>
+    </TouchableOpacity>
+  </TouchableOpacity>
 ));
 
 // ══════════════════════════════════════════════
@@ -718,6 +735,7 @@ export default function KnowledgeArenaScreen({
             cardBg={theme.bgCard}
             badge="🏆 بطولة"
             onPress={() => setShowRankedSheet(true)}
+            theme={theme}
           />
         </Animated.View>
 
@@ -734,6 +752,7 @@ export default function KnowledgeArenaScreen({
             cardBg={theme.bgCard}
             badge="خيارين"
             onPress={() => setShowFriendlySheet(true)}
+            theme={theme}
           />
         </Animated.View>
 
@@ -749,6 +768,7 @@ export default function KnowledgeArenaScreen({
             borderColor={theme.accentBorder}
             cardBg={theme.bgCard}
             onPress={handleTeams}
+            theme={theme}
           />
         </Animated.View>
       </View>
@@ -889,13 +909,14 @@ const styles = StyleSheet.create({
   headerTitle:      { fontSize: 20, fontWeight: '900' },
   desc:             { fontSize: 14, textAlign: 'center', marginBottom: 8 },
   modes:            { gap: 12, flex: 1, justifyContent: 'center' },
-  modeCard:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 20, borderWidth: 1.5, padding: 16 },
+  modeCard:         { flexDirection: 'row', alignItems: 'center', borderRadius: 20, borderWidth: 1.5, padding: 16, gap: 12 },
   modeDisabled:     { opacity: 0.45 },
-  modeLeft:         { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  modeEmoji:        { fontSize: 30 },
+  modeTextBlock:    { flex: 1, gap: 3 },
+  modeTitleRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  modeEmoji:        { fontSize: 30, flexShrink: 0 },
   modeTitle:        { fontSize: 16, fontWeight: '800' },
-  modeSubtitle:     { fontSize: 11, marginTop: 2 },
-  modeCostBadge:    { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
+  modeSubtitle:     { fontSize: 11 },
+  modeCostBadge:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10, flexShrink: 0 },
   modeCost:         { fontSize: 12, fontWeight: '700' },
   modeBadge:        { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   modeBadgeText:    { fontSize: 10, fontWeight: '800' },
@@ -993,14 +1014,16 @@ const styles = StyleSheet.create({
 
   // SubOption
   subOption:        { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 16, gap: 12, borderWidth: 1 },
-  subEmoji:         { fontSize: 26 },
+  subEmoji:         { fontSize: 26, flexShrink: 0 },
+  subTextBlock:     { flex: 1, gap: 4 },
+  subTitleRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   subTitle:         { fontSize: 16, fontWeight: '800' },
-  subCostBadge:     { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, alignSelf: 'flex-start', marginTop: 4 },
+  subCostBadge:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, alignSelf: 'flex-start', borderWidth: 1 },
   subCostText:      { fontSize: 12, fontWeight: '700' },
   rankedBadge:      { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   rankedText:       { fontSize: 10, fontWeight: '800' },
-  infoBtn:          { padding: 6 },
-  infoBtnText:      { fontSize: 18, color: '#6a6a90', opacity: 0.7 },
+  infoBtn:          { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  infoBtnText:      { fontSize: 16 },
 
   // Tooltip
   tooltipOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 32 },

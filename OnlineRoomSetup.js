@@ -1,260 +1,307 @@
 /**
- * useOnlineGame.js — نسخة محدّثة
+ * OnlineRoomSetup.js — محدّث
  * ════════════════════════════════════════════════
- *  ✅ يدعم 3 أوضاع: random | create | join
- *  ✅ friendCode: كود الغرفة للمشاركة (6 حروف عشوائية)
- *  ✅ joinCode: الانضمام بكود صديق
- *  ✅ onGameReady: يُستدعى مرة واحدة عند انضمام اللاعب الثاني
- *  ✅ يبدأ تلقائياً فقط عند mode !== null
+ *  ✅ Layout مُصلح: الأيقونة + النص في صف واحد صحيح
+ *  ✅ textPrimary موثوق — fallback للـ accent
+ *  ✅ شاشة الانتظار مُحدّثة
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { db } from './firebaseConfig';
+import { useState, useEffect, useRef } from 'react';
 import {
-  doc, setDoc, updateDoc, onSnapshot, getDoc,
-  collection, query, where, getDocs, limit,
-} from 'firebase/firestore';
+  View, Text, TextInput, StyleSheet, StatusBar,
+  TouchableOpacity, Animated, Share, Alert,
+} from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { useTheme } from './ThemeContext';
+import { useLanguage } from './I18n';
+import ExitButton from './ExitButton';
+import { ThemedButton } from './ThemedComponents';
 
-// ── توليد كود غرفة صديق ──────────────────────────────────────
-function genFriendCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // بدون O,0,I,1
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
+export default function OnlineRoomSetup({
+  gameEmoji   = '🎮',
+  gameTitleAr = 'لعبة',
+  gameTitleEn = 'Game',
+  descAr      = '',
+  descEn      = '',
+  onBack,
+  onSelect,
+}) {
+  const { theme } = useTheme();
+  const { lang }  = useLanguage();
+  const isRTL     = lang === 'ar';
+
+  const [joinCode, setJoinCode] = useState('');
+  const [joinErr,  setJoinErr]  = useState('');
+
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 320, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 320, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  const title = isRTL ? gameTitleAr : gameTitleEn;
+  const desc  = isRTL ? descAr      : descEn;
+
+  const handleJoin = () => {
+    const code = joinCode.trim().toUpperCase();
+    if (code.length < 4) {
+      setJoinErr(isRTL ? 'أدخل الكود كاملاً' : 'Enter the full code');
+      return;
+    }
+    setJoinErr('');
+    onSelect('join', code);
+  };
+
+  // ألوان مضمونة
+  const textColor  = theme.textPrimary  || theme.accent || '#fff';
+  const subColor   = theme.textSecondary || theme.textMuted;
+  const cardBg     = theme.bgCard       || theme.bgElevated;
+  const cardBorder = theme.borderCard   || theme.border;
+
+  const OptionCard = ({ iconBg, emoji, titleText, subText, onPress, children }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.75}
+      style={[s.optionCard, { backgroundColor: cardBg, borderColor: cardBorder }]}
+    >
+      <View style={[s.optionIcon, { backgroundColor: iconBg }]}>
+        <Text style={s.optionEmoji}>{emoji}</Text>
+      </View>
+      <View style={s.optionText}>
+        {titleText ? (
+          <Text style={[s.optionTitle, { color: textColor }]}>{titleText}</Text>
+        ) : null}
+        {subText ? (
+          <Text style={[s.optionSub, { color: subColor }]}>{subText}</Text>
+        ) : null}
+        {children}
+      </View>
+      {onPress && <Text style={[s.arrow, { color: subColor }]}>{'←'}</Text>}
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={[s.container, { backgroundColor: 'transparent' }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
+      <ExitButton onPress={onBack} />
+
+      <Animated.View
+        style={[s.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+      >
+        {/* ── Header ── */}
+        <View style={s.header}>
+          <Text style={s.emoji}>{gameEmoji}</Text>
+          <Text style={[s.title, { color: textColor }]}>{title}</Text>
+          {!!desc && (
+            <Text style={[s.desc, { color: subColor }]}>{desc}</Text>
+          )}
+        </View>
+
+        {/* ── خيار عشوائي ── */}
+        <OptionCard
+          iconBg={theme.accentSoft}
+          emoji="🌐"
+          titleText={isRTL ? 'لعب عشوائي' : 'Random Match'}
+          subText={isRTL ? 'ابحث عن منافس تلقائياً' : 'Find an opponent automatically'}
+          onPress={() => onSelect('random')}
+        />
+
+        {/* ── إنشاء غرفة صديق ── */}
+        <OptionCard
+          iconBg="#10b98120"
+          emoji="🔗"
+          titleText={isRTL ? 'إنشاء غرفة مع صديق' : 'Create Friend Room'}
+          subText={isRTL ? 'احصل على كود وشاركه' : 'Get a code and share it'}
+          onPress={() => onSelect('create')}
+        />
+
+        {/* ── الانضمام بكود ── */}
+        <View style={[s.optionCard, s.joinCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          <View style={[s.optionIcon, { backgroundColor: '#f59e0b20' }]}>
+            <Text style={s.optionEmoji}>🔑</Text>
+          </View>
+          <View style={s.joinContent}>
+            <Text style={[s.optionTitle, { color: textColor }]}>
+              {isRTL ? 'انضم بكود' : 'Join with Code'}
+            </Text>
+            <View style={s.joinRow}>
+              <TextInput
+                style={[
+                  s.codeInput,
+                  {
+                    backgroundColor: theme.bgInput || theme.bgElevated,
+                    color:           textColor,
+                    borderColor:     joinErr ? '#ef4444' : (theme.border || cardBorder),
+                  },
+                ]}
+                placeholder={isRTL ? 'أدخل الكود...' : 'Enter code...'}
+                placeholderTextColor={subColor}
+                value={joinCode}
+                onChangeText={v => { setJoinCode(v.toUpperCase()); setJoinErr(''); }}
+                maxLength={8}
+                autoCapitalize="characters"
+                textAlign="center"
+                returnKeyType="go"
+                onSubmitEditing={handleJoin}
+              />
+              <ThemedButton
+                onPress={handleJoin}
+                label={isRTL ? 'انضم' : 'Join'}
+                variant="primary"
+                size="small"
+                style={s.joinBtn}
+              />
+            </View>
+            {!!joinErr && (
+              <Text style={s.errorText}>{joinErr}</Text>
+            )}
+          </View>
+        </View>
+      </Animated.View>
+    </View>
+  );
 }
 
-/**
- * useOnlineGame
- * @param {string}   gameType      — نوع اللعبة ('xo', 'wordle', ...)
- * @param {object}   currentUser   — { uid, name, lang }
- * @param {function} onGameReady   — يُستدعى عند بدء المباراة فعلياً
- * @param {string|null} mode       — null | 'random' | 'create' | 'join'
- * @param {string|null} joinCode   — كود الغرفة عند mode==='join'
- */
-export const useOnlineGame = (gameType, currentUser, onGameReady, mode, joinCode) => {
-  const [roomId,     setRoomId]     = useState(null);
-  const [isPlayer1,  setIsPlayer1]  = useState(false);
-  const [roomData,   setRoomData]   = useState(null);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState(null);
-  const [friendCode, setFriendCode] = useState(null);
+// ── شاشة الانتظار ────────────────────────────────────────────
+export function OnlineWaitingLobby({
+  friendCode,
+  isFriend,
+  isRTL,
+  theme,
+  onCancel,
+  gameEmoji = '🎮',
+}) {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  const unsubRef       = useRef(null);
-  const botTimeoutRef  = useRef(null);
-  const gameReadyFired = useRef(false);
-
-  const myUid  = currentUser?.uid  || `guest_${Math.random().toString(36).slice(2, 10)}`;
-  const myName = currentUser?.name || 'لاعب';
-  const myLang = currentUser?.lang || 'ar';
-
-  // ── مراقبة الغرفة ───────────────────────────────────────────
-  const listenToRoom = useCallback((rId) => {
-    unsubRef.current?.();
-    unsubRef.current = onSnapshot(doc(db, 'rooms', rId), (snap) => {
-      if (!snap.exists()) return;
-      const data = snap.data();
-      setRoomData(data);
-
-      // onGameReady: عند انضمام اللاعب الثاني (مرة واحدة فقط)
-      const bothJoined = data.player2?.uid && data.status === 'started';
-      if (bothJoined && !gameReadyFired.current) {
-        gameReadyFired.current = true;
-        clearTimeout(botTimeoutRef.current);
-        onGameReady?.();
-      }
-    }, (err) => {
-      setError(err.message);
-    });
-  }, [onGameReady]);
-
-  // ── وضع عشوائي ──────────────────────────────────────────────
-  const startRandom = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      gameReadyFired.current = false;
-
-      // ابحث عن غرفة منتظرة
-      const q = query(
-        collection(db, 'rooms'),
-        where('gameType', '==', gameType),
-        where('status',   '==', 'waiting'),
-        where('lang',     '==', myLang),
-        where('isFriend', '==', false),
-        limit(1)
-      );
-      const snap = await getDocs(q);
-
-      if (!snap.empty) {
-        const existingRoom = snap.docs[0];
-        const rId = existingRoom.id;
-        await updateDoc(doc(db, 'rooms', rId), {
-          'player2.uid':   myUid,
-          'player2.name':  myName,
-          'player2.ready': true,
-          status:          'started',
-          startedAt:       Date.now(),
-        });
-        setRoomId(rId);
-        setIsPlayer1(false);
-        listenToRoom(rId);
-      } else {
-        // أنشئ غرفة جديدة
-        const rId    = `${gameType}_${Date.now()}_${myUid.slice(0, 6)}`;
-        const newRoom = {
-          gameType, status: 'waiting', isFriend: false, lang: myLang,
-          player1: { uid: myUid, name: myName, score: 0, ready: true },
-          player2: { uid: null,  name: null,   score: 0, ready: false },
-          createdAt: Date.now(), lastUpdate: Date.now(),
-        };
-        await setDoc(doc(db, 'rooms', rId), newRoom);
-        setRoomId(rId);
-        setIsPlayer1(true);
-        listenToRoom(rId);
-
-        // بوت بعد 60 ثانية
-        botTimeoutRef.current = setTimeout(async () => {
-          try {
-            const room = await getDoc(doc(db, 'rooms', rId));
-            if (room.exists() && room.data().status === 'waiting') {
-              await updateDoc(doc(db, 'rooms', rId), {
-                'player2.uid':   'bot',
-                'player2.name':  '🤖 Bot',
-                'player2.ready': true,
-                status:          'started',
-                startedAt:       Date.now(),
-              });
-            }
-          } catch (_) {}
-        }, 60000);
-      }
-      setLoading(false);
-    } catch (e) {
-      setError(e.message || 'خطأ في البحث');
-      setLoading(false);
-    }
-  }, [gameType, myUid, myName, myLang, listenToRoom]);
-
-  // ── إنشاء غرفة صديق ─────────────────────────────────────────
-  const startCreate = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      gameReadyFired.current = false;
-
-      const code = genFriendCode();
-      const rId  = `friend_${gameType}_${code}`;
-      const newRoom = {
-        gameType, status: 'waiting', isFriend: true, friendCode: code, lang: myLang,
-        player1: { uid: myUid, name: myName, score: 0, ready: true },
-        player2: { uid: null,  name: null,   score: 0, ready: false },
-        createdAt: Date.now(), lastUpdate: Date.now(),
-      };
-      await setDoc(doc(db, 'rooms', rId), newRoom);
-      setFriendCode(code);
-      setRoomId(rId);
-      setIsPlayer1(true);
-      listenToRoom(rId);
-      setLoading(false);
-    } catch (e) {
-      setError(e.message || 'خطأ في إنشاء الغرفة');
-      setLoading(false);
-    }
-  }, [gameType, myUid, myName, myLang, listenToRoom]);
-
-  // ── الانضمام بكود ────────────────────────────────────────────
-  const startJoin = useCallback(async (code) => {
-    try {
-      setLoading(true);
-      setError(null);
-      gameReadyFired.current = false;
-
-      const rId  = `friend_${gameType}_${code.trim().toUpperCase()}`;
-      const snap = await getDoc(doc(db, 'rooms', rId));
-      const roomSnap = snap.exists() ? snap.data() : null;
-
-      if (!roomSnap || roomSnap.status !== 'waiting') {
-        setError('الغرفة غير موجودة أو امتلأت');
-        setLoading(false);
-        return;
-      }
-      // التحقق من نوع اللعبة
-      if (roomSnap.gameType && roomSnap.gameType !== gameType) {
-        setError('هذا الكود لنوع لعبة مختلف');
-        setLoading(false);
-        return;
-      }
-
-      await updateDoc(doc(db, 'rooms', rId), {
-        'player2.uid':   myUid,
-        'player2.name':  myName,
-        'player2.ready': true,
-        status:          'started',
-        startedAt:       Date.now(),
-      });
-      setRoomId(rId);
-      setIsPlayer1(false);
-      listenToRoom(rId);
-      setLoading(false);
-    } catch (e) {
-      setError(e.message || 'خطأ في الانضمام');
-      setLoading(false);
-    }
-  }, [gameType, myUid, myName, listenToRoom]);
-
-  // ── تشغيل تلقائي عند تغيير mode ─────────────────────────────
   useEffect(() => {
-    if (!mode) return; // انتظر حتى يختار اللاعب الوضع
-    if (mode === 'random') startRandom();
-    if (mode === 'create') startCreate();
-    if (mode === 'join' && joinCode) startJoin(joinCode);
-    return () => {
-      unsubRef.current?.();
-      clearTimeout(botTimeoutRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, joinCode, startRandom, startCreate, startJoin]);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1,    duration: 600, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
 
-  // ── تحديث الغرفة ────────────────────────────────────────────
-  const updateRoom = useCallback(async (updates) => {
-    if (!roomId) return;
-    try {
-      await updateDoc(doc(db, 'rooms', roomId), {
-        ...updates, lastUpdate: Date.now(),
-      });
-    } catch (e) { setError(e.message); }
-  }, [roomId]);
-
-  // ── إنهاء اللعبة ────────────────────────────────────────────
-  const endGame = useCallback(async (scores = {}) => {
-    if (!roomId) return;
-    try {
-      await updateDoc(doc(db, 'rooms', roomId), {
-        status: 'finished',
-        'player1.finalScore': scores.player1 || 0,
-        'player2.finalScore': scores.player2 || 0,
-        finishedAt: Date.now(),
-      });
-    } catch (_) {}
-    unsubRef.current?.();
-  }, [roomId]);
-
-  // ── مغادرة الغرفة ───────────────────────────────────────────
-  const leaveRoom = useCallback(async () => {
-    if (!roomId) return;
-    try {
-      await updateDoc(doc(db, 'rooms', roomId), {
-        status: 'abandoned', abandonedAt: Date.now(),
-      });
-    } catch (_) {}
-    unsubRef.current?.();
-    clearTimeout(botTimeoutRef.current);
-  }, [roomId]);
-
-  return {
-    roomId, isPlayer1, roomData, loading, error, friendCode,
-    updateRoom, endGame, leaveRoom,
+  const handleCopy = () => {
+    if (!friendCode) return;
+    Clipboard.setStringAsync(friendCode);
+    Alert.alert(isRTL ? '✓ تم النسخ' : '✓ Copied', friendCode);
   };
-};
+
+  const handleShare = async () => {
+    if (!friendCode) return;
+    try {
+      await Share.share({
+        message: isRTL
+          ? `انضم إليّ في Arena! كود الغرفة: ${friendCode}`
+          : `Join me in Arena! Room code: ${friendCode}`,
+      });
+    } catch (_) {}
+  };
+
+  const textColor = theme.textPrimary || theme.accent || '#fff';
+  const subColor  = theme.textSecondary || theme.textMuted;
+
+  return (
+    <View style={[wl.container, { backgroundColor: 'transparent' }]}>
+      <StatusBar barStyle={theme.statusBar} />
+      <ExitButton onPress={onCancel} />
+
+      <Animated.Text style={[wl.emoji, { transform: [{ scale: pulseAnim }] }]}>
+        {gameEmoji}
+      </Animated.Text>
+
+      <Text style={[wl.title, { color: textColor }]}>
+        {isRTL ? 'في انتظار صديق...' : 'Waiting for friend...'}
+      </Text>
+
+      {isFriend && friendCode ? (
+        <View style={wl.codeSection}>
+          <Text style={[wl.codeLbl, { color: subColor }]}>
+            {isRTL ? 'كود الغرفة' : 'Room Code'}
+          </Text>
+          <TouchableOpacity
+            onPress={handleCopy}
+            style={[wl.codeBox, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}
+            activeOpacity={0.7}
+          >
+            <Text style={[wl.codeText, { color: theme.accent }]}>{friendCode}</Text>
+            <Text style={[wl.copyHint, { color: subColor }]}>
+              {isRTL ? '📋 اضغط للنسخ' : '📋 Tap to copy'}
+            </Text>
+          </TouchableOpacity>
+          <View style={wl.btnsRow}>
+            <ThemedButton onPress={handleCopy} label={isRTL ? '📋 نسخ' : '📋 Copy'} variant="secondary" size="small" style={wl.actionBtn} />
+            <ThemedButton onPress={handleShare} label={isRTL ? '📤 مشاركة' : '📤 Share'} variant="primary" size="small" style={wl.actionBtn} />
+          </View>
+        </View>
+      ) : (
+        <Text style={[wl.subText, { color: subColor }]}>
+          {isRTL ? 'يبحث عن منافس... (بوت بعد 60 ثانية)' : 'Finding opponent... (bot in 60s)'}
+        </Text>
+      )}
+
+      <View style={wl.dotsRow}>
+        {[0, 1, 2].map(i => (
+          <View key={i} style={[wl.dot, { backgroundColor: theme.accent }]} />
+        ))}
+      </View>
+
+      <ThemedButton onPress={onCancel} label={isRTL ? 'إلغاء' : 'Cancel'} variant="ghost" size="medium" style={{ marginTop: 8 }} />
+    </View>
+  );
+}
+
+// ════════════════════════════════════════════════
+const s = StyleSheet.create({
+  container:   { flex: 1, paddingTop: 56 },
+  content:     { flex: 1, paddingHorizontal: 20, paddingBottom: 32, gap: 14 },
+  header:      { alignItems: 'center', paddingVertical: 12, gap: 6 },
+  emoji:       { fontSize: 48 },
+  title:       { fontSize: 22, fontWeight: '900' },
+  desc:        { fontSize: 13, textAlign: 'center' },
+  // بطاقة الخيار — row layout مباشر بدون ThemedCard
+  optionCard:  {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 18,
+    borderRadius: 18,
+    borderWidth: 1.5,
+  },
+  optionIcon:  { width: 50, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  optionEmoji: { fontSize: 24 },
+  optionText:  { flex: 1, gap: 3 },
+  optionTitle: { fontSize: 15, fontWeight: '800' },
+  optionSub:   { fontSize: 12 },
+  arrow:       { fontSize: 18, fontWeight: '700', flexShrink: 0 },
+  // بطاقة الكود
+  joinCard:    { alignItems: 'flex-start' },
+  joinContent: { flex: 1, gap: 10 },
+  joinRow:     { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  codeInput:   { flex: 1, height: 42, borderRadius: 10, borderWidth: 1.5, paddingHorizontal: 12, fontSize: 16, fontWeight: '800', letterSpacing: 3 },
+  joinBtn:     { flexShrink: 0 },
+  errorText:   { color: '#ef4444', fontSize: 12, textAlign: 'right' },
+});
+
+const wl = StyleSheet.create({
+  container:   { flex: 1, paddingTop: 56, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 12 },
+  emoji:       { fontSize: 60, marginBottom: 8 },
+  title:       { fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  codeSection: { width: '100%', alignItems: 'center', gap: 10 },
+  codeLbl:     { fontSize: 13, fontWeight: '600' },
+  codeBox:     { width: '100%', borderRadius: 16, borderWidth: 2, paddingVertical: 16, paddingHorizontal: 20, alignItems: 'center', gap: 4 },
+  codeText:    { fontSize: 32, fontWeight: '900', letterSpacing: 6 },
+  copyHint:    { fontSize: 12 },
+  btnsRow:     { flexDirection: 'row', gap: 12, width: '100%', justifyContent: 'center' },
+  actionBtn:   { flex: 1, maxWidth: 160 },
+  subText:     { fontSize: 14, textAlign: 'center' },
+  dotsRow:     { flexDirection: 'row', gap: 8, marginTop: 8 },
+  dot:         { width: 8, height: 8, borderRadius: 4, opacity: 0.7 },
+});

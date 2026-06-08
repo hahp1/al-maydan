@@ -109,7 +109,7 @@ function ChargingHeart({ size = 28, progress = 0 }) {
         toValue: 1,
         duration: 2500,
         easing: Easing.linear,
-        useNativeDriver: true,
+        useNativeDriver: false,
       })
     );
     loop.start();
@@ -129,7 +129,7 @@ function ChargingHeart({ size = 28, progress = 0 }) {
             toValue: 1,
             duration,
             easing: Easing.inOut(Easing.sin),
-            useNativeDriver: true,
+            useNativeDriver: false,
           }),
         ])
       );
@@ -147,8 +147,8 @@ function ChargingHeart({ size = 28, progress = 0 }) {
     if (safeProgress < 0.05) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
       ])
     );
     loop.start();

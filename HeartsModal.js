@@ -75,6 +75,10 @@ export default function HeartsModal({
         bounceHeart();
         playSound('reward_heart_ad');
         if (onAdWatched) onAdWatched();
+      } else if (result.reason === 'hearts_full') {
+        setInfoMsg('قلوبك ممتلئة بالفعل ❤️❤️❤️');
+      } else if (result.reason === 'limit_reached') {
+        setInfoMsg(`وصلت الحد اليومي — ${HEARTS_CONFIG.maxAdDaily} إعلانات/يوم`);
       } else {
         setInfoMsg('حدث خطأ، حاول مرة أخرى');
       }
@@ -92,12 +96,16 @@ export default function HeartsModal({
       return;
     }
     setBuying(true);
-    const result = await buyHeartsWithTokens(pkg.tokens, pkg.hearts, tokens);
+    setInfoMsg('');
+    // buyHeartsWithTokens(packageId, currentTokens, currentHearts)
+    const result = await buyHeartsWithTokens(pkg.id, tokens, hearts);
     if (result.success) {
       setHearts(result.hearts);
       setTokens(result.tokens);
       bounceHeart();
       playSound('reward_heart_refresh');
+    } else {
+      setInfoMsg(result.reason === 'not_enough_tokens' ? `رصيد غير كافٍ — تحتاج ${pkg.tokens} 🪙` : 'حدث خطأ');
     }
     setBuying(false);
   };
@@ -215,10 +223,15 @@ export default function HeartsModal({
               </View>
               <ThemedButton
                 onPress={handleWatchAd}
-                label={watchingAd ? '⏳ جاري الإعلان...' : (!isPro && adsLeft <= 0) ? '✋ حد اليوم' : '▶️ شاهد الآن'}
+                label={
+                  watchingAd               ? '⏳ جاري الإعلان...' :
+                  hearts >= HEARTS_CONFIG.maxFreeDaily && !isPro ? '❤️ ممتلئة' :
+                  (!isPro && adsLeft <= 0) ? '✋ حد اليوم' :
+                  '▶️ شاهد الآن'
+                }
                 variant="success"
                 size="medium"
-                disabled={watchingAd || (!isPro && adsLeft <= 0)}
+                disabled={watchingAd || (!isPro && adsLeft <= 0) || (hearts >= HEARTS_CONFIG.maxFreeDaily && !isPro)}
               />
             </View>
 
@@ -229,11 +242,11 @@ export default function HeartsModal({
                 const canAfford = tokens >= pkg.tokens;
                 return (
                   <ThemedCard
-                    key={pkg.tokens}
-                    onPress={() => handleBuy(pkg)}
+                    key={pkg.id}
+                    onPress={(!canAfford || buying) ? undefined : () => handleBuy(pkg)}
                     radius={14} padding={12}
-                    style={[{opacity: (!canAfford||buying)?0.5:1}]}
-                    variant={canAfford?'accent':'default'}
+                    style={[{opacity: (!canAfford||buying)?0.45:1}]}
+                    variant={canAfford && !buying ? 'accent' : 'default'}
                   >
                     <View style={{ flexDirection: 'row', gap: 2 }}>
                       {[...Array(Math.min(pkg.hearts, 5))].map((_, i) => (

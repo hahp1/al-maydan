@@ -578,21 +578,59 @@ const ThemeContext = createContext({
   setDark:    () => {},
 });
 
+const CRASH_COUNT_KEY = 'arena_theme_crash_count';
+const CRASH_THEME_KEY = 'arena_theme_crash_id';
+
 export function ThemeProvider({ children }) {
   const [themeId, setThemeIdState] = useState('dark');
 
   useEffect(() => {
-    AsyncStorage.getItem(THEME_KEY)
-      .then(val => {
-        if (val && THEME_MAP[val]) setThemeIdState(val);
-      })
-      .catch(() => {});
+    const loadTheme = async () => {
+      try {
+        const [val, crashCount, crashTheme] = await Promise.all([
+          AsyncStorage.getItem(THEME_KEY),
+          AsyncStorage.getItem(CRASH_COUNT_KEY),
+          AsyncStorage.getItem(CRASH_THEME_KEY),
+        ]);
+
+        // حماية من الـ crash loop:
+        // إذا نفس الثيم تسبب في crash 2+ مرات متتالية → العودة لـ dark
+        const count = parseInt(crashCount || '0');
+        if (count >= 2 && crashTheme === val) {
+          await AsyncStorage.multiSet([
+            [THEME_KEY, 'dark'],
+            [CRASH_COUNT_KEY, '0'],
+            [CRASH_THEME_KEY, ''],
+          ]);
+          setThemeIdState('dark');
+          return;
+        }
+
+        if (val && THEME_MAP[val]) {
+          // سجّل أن هذا الثيم يحاول التشغيل (سيُصفَّر عند اكتمال التحميل)
+          await AsyncStorage.multiSet([
+            [CRASH_COUNT_KEY, String(count + 1)],
+            [CRASH_THEME_KEY, val],
+          ]);
+          setThemeIdState(val);
+        }
+      } catch {
+        // أي خطأ → dark
+        setThemeIdState('dark');
+      }
+    };
+    loadTheme();
   }, []);
 
   const setThemeId = useCallback((id) => {
     if (!THEME_MAP[id]) return;
     setThemeIdState(id);
-    AsyncStorage.setItem(THEME_KEY, id).catch(() => {});
+    // عند اختيار ثيم جديد → نعيد عداد الـ crash
+    AsyncStorage.multiSet([
+      [THEME_KEY, id],
+      [CRASH_COUNT_KEY, '0'],
+      [CRASH_THEME_KEY, id],
+    ]).catch(() => {});
   }, []);
 
   const toggleTheme = useCallback(() => {

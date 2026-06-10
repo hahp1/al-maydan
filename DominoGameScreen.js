@@ -30,10 +30,10 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, StatusBar,
-  Dimensions, PanResponder, Animated, Platform, Share,
+  View, Text, TouchableOpacity, StyleSheet, StatusBar, PanResponder, Animated, Platform, Share,
   Alert, ActivityIndicator, TextInput, ScrollView,
-} from 'react-native';
+,
+  useWindowDimensions} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { db } from './firebaseConfig';
 import {
@@ -48,7 +48,6 @@ import { playSound } from './SoundService';
 import { ThemedButton, ThemedCard } from './ThemedComponents';
 import CrystalTable from './CrystalTable';
 
-const { width: SW, height: SH } = Dimensions.get('window');
 
 /* ═══════════════════════════════════════════════
    CONSTANTS
@@ -500,6 +499,7 @@ function ModeSelectScreen({ theme, isRTL, onBack, onSelect, joinCode, setJoinCod
    MAIN SCREEN
 ═══════════════════════════════════════════════ */
 export default function DominoGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
+  const { width: W } = useWindowDimensions();
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
   const isRTL = lang === 'ar';
@@ -526,6 +526,9 @@ export default function DominoGameScreen({ onBack, currentUser, onGameEnd, onGam
   const botTimerRef   = useRef(null);
   const roomIdRef     = useRef(null);
   const gameReadyRef  = useRef(false);
+  const passBubbleTimerRef = useRef(null);
+  const botMoveTimerRef    = useRef(null);
+  const roundTimerRef      = useRef(null);
 
   // ── Game state (mirrors Firestore) ──
   const [hands,      setHands]      = useState([[], [], [], []]);
@@ -543,7 +546,7 @@ export default function DominoGameScreen({ onBack, currentUser, onGameEnd, onGam
   const [dragPos,      setDragPos]      = useState({ x: 0, y: 0 });
   const [dragTileIdx,  setDragTileIdx]  = useState(null);
   const [timerPct,     setTimerPct]     = useState(100);
-  const [boardArea,    setBoardArea]    = useState({ x: 0, y: 0, width: SW, height: 400 });
+  const [boardArea,    setBoardArea]    = useState({ x: 0, y: 0, width: W, height: 400 });
 
   const timerRef        = useRef(null);
   const timerPctRef     = useRef(100);
@@ -552,7 +555,7 @@ export default function DominoGameScreen({ onBack, currentUser, onGameEnd, onGam
   const boardRef        = useRef([]);
   const roundOverRef    = useRef(false);
   const gameOverRef     = useRef(false);
-  const boardAreaRef    = useRef({ x: 0, y: 0, width: SW, height: 400 });
+  const boardAreaRef    = useRef({ x: 0, y: 0, width: W, height: 400 });
   const dragTileIdxRef  = useRef(null);
   const mySeatRef       = useRef(0);
 
@@ -570,6 +573,9 @@ export default function DominoGameScreen({ onBack, currentUser, onGameEnd, onGam
   useEffect(() => () => {
     unsubRef.current?.();
     clearTimeout(botTimerRef.current);
+    clearTimeout(passBubbleTimerRef.current);
+    clearTimeout(botMoveTimerRef.current);
+    clearTimeout(roundTimerRef.current);
     clearInterval(timerRef.current);
   }, []);
 
@@ -627,7 +633,11 @@ export default function DominoGameScreen({ onBack, currentUser, onGameEnd, onGam
     if (roomData.gameOver  !== undefined) { setGameOver(roomData.gameOver);   gameOverRef.current  = roomData.gameOver; }
     if (roomData.passBits) {
       setPassBubble(roomData.passBits);
-      setTimeout(() => setPassBubble([false,false,false,false]), 1800);
+      clearTimeout(passBubbleTimerRef.current);
+      passBubbleTimerRef.current = setTimeout(
+        () => setPassBubble([false, false, false, false]),
+        1800,
+      );
     }
 
     // Update playerInfo from room players
@@ -650,7 +660,11 @@ export default function DominoGameScreen({ onBack, currentUser, onGameEnd, onGam
       const curPlayer = players[cur];
       if (curPlayer?.isBot) {
         const delay = 800 + Math.random() * 1000;
-        setTimeout(() => botMove(cur, roomData.hands[cur], roomData.board), delay);
+        clearTimeout(botMoveTimerRef.current);
+        botMoveTimerRef.current = setTimeout(
+          () => botMove(cur, roomData.hands[cur], roomData.board),
+          delay,
+        );
       }
     }
 
@@ -863,7 +877,8 @@ export default function DominoGameScreen({ onBack, currentUser, onGameEnd, onGam
     } else {
       // جولة جديدة بعد 1.4 ثانية (host يوزع)
       await fbUpdate({ scores: newScores, roundOver: true });
-      setTimeout(async () => {
+      clearTimeout(roundTimerRef.current);
+      roundTimerRef.current = setTimeout(async () => {
         const deck = shuffle(buildDeck());
         const nH = [deck.slice(0,7), deck.slice(7,14), deck.slice(14,21), deck.slice(21,28)];
         let starter = winnerId >= 0 ? winnerId : 0;
@@ -1021,7 +1036,7 @@ export default function DominoGameScreen({ onBack, currentUser, onGameEnd, onGam
   const myHand = hands[mySeat] || [];
   const isMyTurn = current === mySeat && !roundOver && !gameOver;
   const canPass  = isMyTurn && !myHand.some(t => canPlayTile(t, board));
-  const boardPositions = computeBoardLayout(board, boardArea.width || SW - 16, boardArea.height || 400);
+  const boardPositions = computeBoardLayout(board, boardArea.width || W - 16, boardArea.height || 400);
 
   return (
     <View style={[styles.container, { backgroundColor: 'transparent' }]}>

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
-  StatusBar, ScrollView, Alert, Animated, Dimensions, Modal
-} from 'react-native';
+  StatusBar, ScrollView, Alert, Animated, Modal
+,
+  useWindowDimensions} from 'react-native';
 import { useOnlineGame } from './useOnlineGame';
 import { useTheme } from './ThemeContext';
 import ExitButton from './ExitButton';
@@ -13,7 +15,6 @@ import { playSound } from './SoundService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 import OnlineRoomSetup, { OnlineWaitingLobby } from './OnlineRoomSetup';
 
-const { width: SW, height: SH } = Dimensions.get('window');
 
 // ─────────────────────────────────────────────
 //  بيانات الكروت
@@ -263,7 +264,7 @@ function AccusationModal({ accusation, players, myUid, theme, onClose }) {
               backgroundColor: theme.bgCard,
               borderRadius: 20,
               padding: 28,
-              width: SW * 0.85,
+              width: W * 0.85,
               alignItems: 'center',
               borderWidth: 2,
               borderColor: resultColor,
@@ -324,6 +325,8 @@ function AccusationModal({ accusation, players, myUid, theme, onClose }) {
 //  الشاشة الرئيسية
 // ─────────────────────────────────────────────
 export default function BullshitGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
+  const { width: W, height: H } = useWindowDimensions();
+  const s = useMemo(() => makeStyles(W, H), [W, H]);
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
   const isRTL = lang === 'ar';
@@ -773,7 +776,7 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd, onG
 // ─────────────────────────────────────────────
 //  الستايلات
 // ─────────────────────────────────────────────
-const s = StyleSheet.create({
+function makeStyles(W, H) { return StyleSheet.create({
   container: { flex: 1, paddingTop: 48 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
 
@@ -813,7 +816,7 @@ const s = StyleSheet.create({
     marginHorizontal: 16,
     borderRadius: 16,
     borderWidth: 1,
-    height: SH * 0.18,
+    height: H * 0.18,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
@@ -882,4 +885,5 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
 });
+}
  

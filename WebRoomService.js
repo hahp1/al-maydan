@@ -21,7 +21,6 @@ import {
   StyleSheet, Pressable, Platform,
 } from 'react-native';
 
-
 // ══════════════════════════════════════════════════════════
 // توليد الكود:  W  +  6 عناصر عشوائية
 // ══════════════════════════════════════════════════════════
@@ -401,7 +400,7 @@ export function WebScreenButton({
       });
       setCode(c);
     } catch (e) {
-      console.log('WebScreenButton error:', e);
+      
     }
     setLoading(false);
   };

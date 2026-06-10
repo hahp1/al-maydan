@@ -38,19 +38,23 @@ function XPToast({ xpGained, visible, onHide, theme }) {
   const opacity   = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(40)).current;
 
+  const hideTimerRef = useRef(null);
+
   useEffect(() => {
     if (!visible) return;
     Animated.parallel([
       Animated.spring(translateY, { toValue: 0, friction: 7, useNativeDriver: true }),
       Animated.timing(opacity,    { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start(() => {
-      setTimeout(() => {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = setTimeout(() => {
         Animated.parallel([
           Animated.timing(opacity,    { toValue: 0, duration: 300, useNativeDriver: true }),
           Animated.timing(translateY, { toValue: -20, duration: 300, useNativeDriver: true }),
         ]).start(onHide);
       }, 1500);
     });
+    return () => clearTimeout(hideTimerRef.current);
   }, [visible]);
 
   if (!visible) return null;
@@ -71,13 +75,17 @@ function MissionBanner({ missionId, visible, onHide, theme }) {
   const translateY = useRef(new Animated.Value(-60)).current;
   const mission    = DAILY_MISSIONS_POOL.find(m => m.id === missionId);
 
+  const hideTimerRef = useRef(null);
+
   useEffect(() => {
     if (!visible || !mission) return;
     Animated.spring(translateY, { toValue: 0, friction: 8, useNativeDriver: true }).start(() => {
-      setTimeout(() => {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = setTimeout(() => {
         Animated.timing(translateY, { toValue: -60, duration: 300, useNativeDriver: true }).start(onHide);
       }, 2200);
     });
+    return () => clearTimeout(hideTimerRef.current);
   }, [visible, missionId]);
 
   if (!visible || !mission) return null;
@@ -143,7 +151,8 @@ export const XPNotification = forwardRef(function XPNotification(_, ref) {
 
   // Queue للمهام — يعرض واحدة تلو الأخرى
   const missionQueue = useRef([]);
-  const showingMission = useRef(false);
+  const showingMission   = useRef(false);
+  const missionDelayRef  = useRef(null);
 
   const showNextMission = useCallback(() => {
     if (showingMission.current || missionQueue.current.length === 0) return;
@@ -155,7 +164,8 @@ export const XPNotification = forwardRef(function XPNotification(_, ref) {
   const handleMissionHide = useCallback(() => {
     setMissionBanner({ visible: false, id: null });
     showingMission.current = false;
-    setTimeout(showNextMission, 200);
+    clearTimeout(missionDelayRef.current);
+    missionDelayRef.current = setTimeout(showNextMission, 200);
   }, [showNextMission]);
 
   // API عبر ref
@@ -177,7 +187,8 @@ export const XPNotification = forwardRef(function XPNotification(_, ref) {
       // Mission banners
       if (freshlyDone?.length > 0) {
         missionQueue.current.push(...freshlyDone);
-        setTimeout(showNextMission, xpGained > 0 ? 400 : 0);
+        clearTimeout(missionDelayRef.current);
+        missionDelayRef.current = setTimeout(showNextMission, xpGained > 0 ? 400 : 0);
       }
     },
   }), [showNextMission]);

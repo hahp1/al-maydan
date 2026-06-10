@@ -81,7 +81,7 @@ export async function mergeGuestToAccount(newUid, newUser) {
     // 7. احذف بيانات الضيف من الجهاز
     await AsyncStorage.removeItem(GUEST_KEY);
 
-    console.log(`[GuestMerge] ${guestUid} → ${newUid} ✅`);
+    // merge completed
     return { merged: true, mergedTokens, mergedHighScore };
 
   } catch (e) {

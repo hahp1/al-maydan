@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, StatusBar,
-  Dimensions, Animated, Platform, Modal,
-} from 'react-native';
-import { useTheme } from './ThemeContext';
+  View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated, Platform, Modal,
+,
+  useWindowDimensions} from 'react-native';
+import { useMemo, useTheme } from './ThemeContext';
 import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import { useOnlineGame } from './useOnlineGame';
@@ -13,7 +13,6 @@ import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedCompone
 import OnlineRoomSetup, { OnlineWaitingLobby } from './OnlineRoomSetup';
 import CrystalTable from './CrystalTable';
 
-const { width: SW, height: SH } = Dimensions.get('window');
 
 /* ═══════════════════════════════════════════════
    CONSTANTS
@@ -582,6 +581,8 @@ function GameOverModal({ visible, teamA, teamB, onNewGame, onExit }) {
    MAIN SCREEN
 ═══════════════════════════════════════════════ */
 export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
+  const { width: W, height: H } = useWindowDimensions();
+  const styles = useMemo(() => makeStyles(W, H), [W, H]);
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
   // ── اختيار الوضع ──
@@ -1285,7 +1286,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
 /* ═══════════════════════════════════════════════
    STYLES
 ═══════════════════════════════════════════════ */
-const styles = StyleSheet.create({
+function makeStyles(W, H) { return StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -1335,9 +1336,9 @@ const styles = StyleSheet.create({
   crystalTable: {
     position: 'absolute',
     top: '22%',
-    left: SW * 0.08,
-    right: SW * 0.08,
-    height: SH * 0.40,
+    left: W * 0.08,
+    right: W * 0.08,
+    height: H * 0.40,
     zIndex: 2,
   },
 
@@ -1508,7 +1509,7 @@ const styles = StyleSheet.create({
   bidModal: {
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.13)',
     borderRadius: 22,
-    padding: 20, width: SW - 48,
+    padding: 20, width: W - 48,
   },
   bidTitle: {
     fontSize: 16, fontWeight: '900', color: '#fff',
@@ -1579,3 +1580,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+}

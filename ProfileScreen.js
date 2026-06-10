@@ -403,7 +403,7 @@ export default function ProfileScreen({ user, setScreen, onLogin, onLogout }) {
           <View style={styles.userRow}>
             <View style={[styles.avatarWrap, { borderColor: theme.accent }]}>
               {user?.photo ? (
-                <Image source={{ uri: user.photo }} style={styles.avatar} />
+                <Image source={{ uri: user.photo }} style={styles.avatar} onError={(e) => e.target.setNativeProps({ src: [] })} />
               ) : (
                 <View style={[styles.avatarFallback, { backgroundColor: theme.accentSoft }]}>
                   <Text style={[styles.avatarLetter, { color: theme.accent }]}>

@@ -312,7 +312,7 @@ export async function distributePrizes(tournamentId) {
 
     // منع التوزيع المزدوج
     if (tourData.prizes_distributed) {
-      console.log('distributePrizes: already distributed for', tournamentId);
+      
       return;
     }
 
@@ -374,7 +374,6 @@ export async function distributePrizes(tournamentId) {
       prizes_distributed:  true,
     });
 
-    console.log('distributePrizes: done for', tournamentId, `— ${scoresSnap.size} players`);
   } catch (e) {
     console.error('distributePrizes error:', e);
   }
@@ -540,7 +539,6 @@ export async function autoCreateNextTournament() {
       createdAt:          serverTimestamp(),
     });
 
-    console.log(`[Tournament] auto-created week ${weekNumber}`, ref.id);
     return { success: true, id: ref.id, weekNumber, startsAt: startMs, endsAt: endMs };
   } catch (e) {
     console.error('autoCreateNextTournament error:', e);
@@ -571,7 +569,6 @@ export async function createTournament(weekNumber, startsAt) {
       createdAt:          serverTimestamp(),
     });
 
-    console.log('createTournament: created', ref.id, `week ${weekNumber}`);
     return { success: true, id: ref.id };
   } catch (e) {
     console.error('createTournament error:', e);

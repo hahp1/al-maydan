@@ -31,8 +31,9 @@ import React, {
 import {
   View, Text, TouchableOpacity, StyleSheet, StatusBar,
   PanResponder, Alert, Animated, TextInput, ScrollView,
-  Platform, Dimensions, Modal, ActivityIndicator,
-} from 'react-native';
+  Platform, Modal, ActivityIndicator,
+,
+  useWindowDimensions} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { db } from './firebaseConfig';
 import {
@@ -48,8 +49,7 @@ import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedCompone
 // ══════════════════════════════════════════════════════════
 //  Constants
 // ══════════════════════════════════════════════════════════
-const { width: SW } = Dimensions.get('window');
-const CANVAS_W      = SW - 32;
+const CANVAS_W      = W - 32;
 const CANVAS_H      = 260;
 const ROUND_TIME    = 60;
 const TOTAL_ROUNDS  = 6;
@@ -280,6 +280,8 @@ function GameOver({ players, scores, myUid, isRTL, theme, onBack }) {
 //  MAIN
 // ══════════════════════════════════════════════════════════
 export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
+  const { width: W } = useWindowDimensions();
+  const s = useMemo(() => makeStyles(W), [W]);
   const { theme, themeId } = useTheme();
   const { lang }  = useLanguage();
   const isRTL     = lang === 'ar';
@@ -1099,7 +1101,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
 // ══════════════════════════════════════════════════════════
 //  Styles
 // ══════════════════════════════════════════════════════════
-const s = StyleSheet.create({
+function makeStyles(W) { return StyleSheet.create({
   flex1: { flex: 1 },
 
   exitBtnAbs: {
@@ -1148,13 +1150,13 @@ const s = StyleSheet.create({
   guessBtnTxt: { fontSize: 14, fontWeight: '700' },
 
   modalBg:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center' },
-  wcCard:    { width: SW - 60, borderRadius: 20, padding: 24, borderWidth: 1.5, gap: 12, alignItems: 'stretch' },
+  wcCard:    { width: W - 60, borderRadius: 20, padding: 24, borderWidth: 1.5, gap: 12, alignItems: 'stretch' },
   wcTitle:   { fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 4 },
   wcBtn:     { paddingVertical: 14, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
   wcBtnText: { fontSize: 20, fontWeight: '700' },
 
   resultOverlay:  { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-  resultCard:     { width: SW - 60, borderRadius: 24, padding: 28, alignItems: 'center', borderWidth: 2, gap: 12 },
+  resultCard:     { width: W - 60, borderRadius: 24, padding: 28, alignItems: 'center', borderWidth: 2, gap: 12 },
   resultEmoji:    { fontSize: 56 },
   resultTitle:    { fontSize: 22, fontWeight: '800', textAlign: 'center' },
   resultWordBox:  { width: '100%', borderRadius: 14, padding: 14, alignItems: 'center', gap: 4 },
@@ -1163,7 +1165,7 @@ const s = StyleSheet.create({
   nextBtn:        { marginTop: 6, paddingHorizontal: 40, paddingVertical: 13, borderRadius: 14 },
   nextBtnText:    { fontSize: 16, fontWeight: '700' },
 
-  goCard:      { width: SW - 48, borderRadius: 24, padding: 28, alignItems: 'center', borderWidth: 1.5, gap: 10 },
+  goCard:      { width: W - 48, borderRadius: 24, padding: 28, alignItems: 'center', borderWidth: 1.5, gap: 10 },
   goEmoji:     { fontSize: 64 },
   goTitle:     { fontSize: 24, fontWeight: '800' },
   goWinner:    { fontSize: 18, fontWeight: '700' },
@@ -1208,3 +1210,4 @@ const s = StyleSheet.create({
   cancelBtn:    { paddingHorizontal: 28, paddingVertical: 11, borderRadius: 12, borderWidth: 1 },
   cancelBtnText:{ fontSize: 14, fontWeight: '600' },
 });
+}

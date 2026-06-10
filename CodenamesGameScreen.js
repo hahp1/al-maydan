@@ -25,11 +25,12 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
-  StatusBar, ScrollView, TextInput, Animated, Modal,
-  Dimensions, ImageBackground, Image,
-} from 'react-native';
+  StatusBar, ScrollView, TextInput, Animated, Modal, ImageBackground, Image,
+,
+  useWindowDimensions} from 'react-native';
 import { db } from './firebaseConfig';
 import {
   doc, setDoc, updateDoc, onSnapshot, getDoc,
@@ -172,15 +173,16 @@ const REV_BG = {
   black:   '#0f0f0f',
 };
 
-const { width: SW, height: SH } = Dimensions.get('window');
 const COLS     = 5;
 const H_PAD    = 16;
 const GAP      = 5;
-const CARD_W   = (SW - H_PAD * 2 - GAP * (COLS - 1)) / COLS;
+const CARD_W   = (W - H_PAD * 2 - GAP * (COLS - 1)) / COLS;
 const CARD_H   = CARD_W * 0.65; // نسبة أبعاد 16:9 تقريباً على شبكة صغيرة
 
 // ════════════════════════════════════════════════════════════════
 export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
+  const { width: W, height: H } = useWindowDimensions();
+  const cc = useMemo(() => makeStyles(W, H), [W, H]);
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
 
@@ -796,7 +798,7 @@ const SPY_DOT_COLOR = {
   black:   '#555',
 };
 
-const cc = StyleSheet.create({
+function makeStyles(W, H) { return StyleSheet.create({
   card: {
     borderRadius: 8,
     margin: GAP / 2,
@@ -976,3 +978,4 @@ const s = StyleSheet.create({
   startBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   winnerText:   { fontSize: 28, fontWeight: 'bold', marginTop: 12 },
 });
+}

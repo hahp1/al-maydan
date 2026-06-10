@@ -75,7 +75,6 @@ export async function syncServerTime() {
         syncedAt:         _lastSync,
       }));
 
-      console.log(`[ServerTime] Synced ✅ server=${serverMs} device=${clientMid}`);
     } catch (e) {
       console.warn('[ServerTime] Sync failed:', e?.message);
       // الوضع الإيمني — استخدم الـ offset المحفوظ
@@ -99,7 +98,7 @@ export async function initServerTime() {
       if (_serverTimeAtSync > 0) _isSynced = true;
       _deviceTimeAtSync = deviceTimeAtSync || 0;
       _lastSync         = syncedAt         || 0;
-      console.log(`[ServerTime] Loaded server=${_serverTimeAtSync} device=${_deviceTimeAtSync}`);
+      
     }
   } catch (e) {
     console.warn('[ServerTime] Init failed:', e?.message);

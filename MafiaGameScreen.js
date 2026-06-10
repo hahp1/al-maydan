@@ -18,10 +18,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
   StatusBar, ScrollView, Alert, Animated, Modal, TextInput,
-  Dimensions,
-} from 'react-native';
+,
+  useWindowDimensions} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { db } from './firebaseConfig';
+import { useMemo, db } from './firebaseConfig';
 import {
   doc, setDoc, updateDoc, onSnapshot, getDoc, collection,
   query, where, getDocs, deleteDoc
@@ -33,7 +33,6 @@ import LeaveModal from './LeaveModal';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
-const { width: SW } = Dimensions.get('window');
 
 // ═══════════════════════════════════════════
 //  ثوابت اللعبة
@@ -185,6 +184,8 @@ function CircleTimer({ total, remaining, color, theme }) {
 //  الشاشة الرئيسية
 // ═══════════════════════════════════════════
 export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
+  const { width: W } = useWindowDimensions();
+  const gs = useMemo(() => makeStyles(W), [W]);
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
 
@@ -1368,7 +1369,7 @@ function FinishedPhase({ theme, roomData, myUid, myRole, onLeave }) {
 // ═══════════════════════════════════════════
 //  الستايل العام
 // ═══════════════════════════════════════════
-const gs = StyleSheet.create({
+function makeStyles(W) { return StyleSheet.create({
   container: { flex: 1, paddingTop: 52 },
 
   // زر الخروج
@@ -1468,7 +1469,7 @@ const gs = StyleSheet.create({
 
   // Role reveal
   roleRevealCard: {
-    width: SW - 80, borderRadius: 24, borderWidth: 2,
+    width: W - 80, borderRadius: 24, borderWidth: 2,
     padding: 32, alignItems: 'center',
   },
   roleRevealEmoji: { fontSize: 64 },
@@ -1480,7 +1481,7 @@ const gs = StyleSheet.create({
   resultSub: { fontSize: 14, textAlign: 'center', marginTop: 8 },
   timerLabel: { fontSize: 12, textAlign: 'center', marginTop: 8 },
   detectiveBanner: {
-    marginTop: 20, padding: 16, borderRadius: 12, borderWidth: 1, width: SW - 60, alignItems: 'flex-start',
+    marginTop: 20, padding: 16, borderRadius: 12, borderWidth: 1, width: W - 60, alignItems: 'flex-start',
   },
 
   // Finished
@@ -1493,7 +1494,7 @@ const gs = StyleSheet.create({
     flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center',
   },
   rolesRevealCard: {
-    width: (SW - 60) / 3, borderRadius: 12, borderWidth: 1,
+    width: (W - 60) / 3, borderRadius: 12, borderWidth: 1,
     padding: 12, alignItems: 'center', gap: 2,
   },
   rolesRevealName: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
@@ -1513,7 +1514,7 @@ const gs = StyleSheet.create({
     justifyContent: 'center', marginTop: 12,
   },
   nightPlayerTile: {
-    width: (SW - 60) / 3,
+    width: (W - 60) / 3,
     borderRadius: 14,
     padding: 12,
     alignItems: 'center',
@@ -1565,3 +1566,4 @@ const gs = StyleSheet.create({
     opacity: 0.6,
   },
 });
+}

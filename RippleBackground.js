@@ -5,10 +5,10 @@
  */
 
 import React, { useEffect, useRef, memo } from 'react';
-import { Animated, Easing, StyleSheet, View, Dimensions } from 'react-native';
+import { Animated, Easing, StyleSheet, View ,
+  useWindowDimensions} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const { width: SW, height: SH } = Dimensions.get('window');
 
 const MIST_CFG = {
   truemist:   { accent: '#8898a8', secondary: 'rgba(104,120,144,0.25)', light: '#b0c0d0', cycle: 20000, gradients: ['#e8eaec', '#d8dcdf'] },
@@ -18,9 +18,9 @@ const MIST_CFG = {
   blackmist:  { accent: '#607080', secondary: 'rgba(72,88,104,0.15)',   light: '#8090a0', cycle: 22000, gradients: ['#0e0a08', '#080504'] },
 };
 
-const CX = SW * 0.5;
-const CY = SH * 0.42;
-const MAX_R = SW * 0.88;
+const CX = W * 0.5;
+const CY = H * 0.42;
+const MAX_R = W * 0.88;
 
 // حلقة واحدة خفيفة — useNativeDriver دائماً
 const RippleRing = memo(({ delay, cycle, size, accent, secondary }) => {
@@ -79,7 +79,7 @@ const MistCore = memo(({ accent, light }) => (
       shadowColor: accent,
       shadowOffset: { width: 0, height: 0 },
       shadowOpacity: 0.8,
-      shadowRadius: SW * 0.06,
+      shadowRadius: W * 0.06,
       elevation: 0,
     }}
   />
@@ -128,8 +128,8 @@ const RippleBackground = memo(({ theme }) => {
         style={{
           position: 'absolute',
           left: 0, right: 0,
-          top: SH * 0.28,
-          height: SH * 0.44,
+          top: H * 0.28,
+          height: H * 0.44,
           backgroundColor: '#ffffff03',
         }}
       />

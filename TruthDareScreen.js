@@ -9,8 +9,9 @@ import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Animated, Easing, StatusBar, ScrollView, TextInput,
-  KeyboardAvoidingView, Platform, Dimensions,
-} from 'react-native';
+  KeyboardAvoidingView, Platform,
+,
+  useWindowDimensions} from 'react-native';
 import Svg, { Path, Circle, Line, Text as SvgText, G } from 'react-native-svg';
 import { useTheme } from './ThemeContext';
 import ExitButton from './ExitButton';
@@ -23,9 +24,6 @@ import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './
 const TURNS_PER_PLAYER = 3;
 const TRUTH_PTS = 10;
 const DARE_PTS  = 15;
-const { width: SW } = Dimensions.get('window');
-const WHEEL_SIZE = Math.min(SW * 0.78, 300);
-const WHEEL_R    = WHEEL_SIZE / 2;
 
 const SLICE_COLORS_DARK  = ['#7c3aed','#db2777','#0891b2','#d97706','#059669','#dc2626','#2563eb','#7c3aed'];
 const SLICE_COLORS_LIGHT = ['#8b5cf6','#ec4899','#0ea5e9','#f59e0b','#10b981','#ef4444','#3b82f6','#a855f7'];
@@ -948,6 +946,9 @@ function GameScreen({ players, gameMode, onBack, theme, t, rs }) {
 //  Root
 // ══════════════════════════════════════════════════════════════
 export default function TruthDareScreen({ onBack, experience }) {
+  const { width: W } = useWindowDimensions();
+  const WHEEL_SIZE = Math.min(W * 0.78, 300);
+  const WHEEL_R    = WHEEL_SIZE / 2;
   const { theme, themeId } = useTheme();
   const t  = useT();
   const rs = useRTLStyles();

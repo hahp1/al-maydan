@@ -32,6 +32,7 @@ const CachedCategoryImage = memo(function CachedCategoryImage({
     return (
       <ExpoImage
         source={{ uri: imageUrl }}
+        onError={() => setHasError(true)}
         style={[{ width: size, height: size, borderRadius: size * 0.18 }, style]}
         placeholder={BLURHASH}
         contentFit="cover"

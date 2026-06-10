@@ -577,6 +577,8 @@ function PlayScreen({
               source={{ uri: currentImage.url }}
               style={styles.mainImage}
               resizeMode="cover"
+            
+              onError={() => setImageError(true)}
             />
           ) : null}
         </View>
@@ -724,7 +726,8 @@ function ResultScreen({ myScore, oppScore, opponentName, onRematch, onBack, them
 // ══════════════════════════════════════════════════════════════
 //  الشاشة الرئيسية — منطق اللعبة
 // ══════════════════════════════════════════════════════════════
-export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
+export default function GuessImageScreen({
+  const [imageError, setImageError] = React.useState(false); onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme } = useTheme();
   const t = useT();
 

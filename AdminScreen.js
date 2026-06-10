@@ -322,7 +322,7 @@ export default function AdminScreen({ onBack }) {
                 style={styles.catImageBox}
               >
                 {cat.imageUrl
-                  ? <ExpoImage source={{ uri: cat.imageUrl }} style={styles.catImage} cachePolicy="disk" contentFit="cover" />
+                  ? <ExpoImage source={{ uri: cat.imageUrl }} style={styles.catImage} onError={() => {}} cachePolicy="disk" contentFit="cover" />
                   : <Text style={styles.catEmoji}>{cat.emoji}</Text>}
                 <Text style={styles.uploadHint}>📷</Text>
               </ThemedCard>

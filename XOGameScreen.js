@@ -415,7 +415,7 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
         <View style={[s.opponentBar, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
           <View style={s.avatarWrap}>
             {opponentPhoto ? (
-              <Image source={{ uri: opponentPhoto }} style={s.avatar} />
+              <Image source={{ uri: opponentPhoto }} style={s.avatar} onError={(e) => e.target.setNativeProps({ src: [] })} />
             ) : (
               <View style={[s.avatarFallback, { backgroundColor: theme.bgElevated }]}>
                 <Text style={{ fontSize: 16 }}>

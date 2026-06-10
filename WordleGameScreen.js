@@ -233,7 +233,7 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
       <View style={[s.opponentBar,{backgroundColor:theme.bgCard,borderColor:theme.border}]}>
         <View style={s.avatarWrap}>
           {opponentPhoto
-            ? <Image source={{uri:opponentPhoto}} style={s.avatarImg}/>
+            ? <Image source={{uri:opponentPhoto}} style={s.avatarImg} onError={(e) => e.target.setNativeProps({ src: [] })} />
             : <View style={[s.avatarFallback,{backgroundColor:theme.bgElevated}]}>
                 <Text style={{fontSize:17}}>{isVsBot?'🤖':(isWaiting?'⏳':opponentName.charAt(0))}</Text>
               </View>}
@@ -575,3 +575,4 @@ const s = StyleSheet.create({
   actionKey:      { height:37, paddingHorizontal:14, borderRadius:9, alignItems:'center', justifyContent:'center', borderWidth:1 },
   submitKey:      { flex:1, maxWidth:150, height:37, borderRadius:9, alignItems:'center', justifyContent:'center', marginHorizontal:6 },
 });
+ 

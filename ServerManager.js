@@ -39,7 +39,6 @@ class ServerManager {
       this.localRoomCache[config.id] = new Map();
     }
 
-    console.log('✅ Servers initialized');
   }
 
   // ────────────────────────────────────────
@@ -129,8 +128,7 @@ class ServerManager {
         
         // ابدأ الـ local cache
         this.localRoomCache[serverId] = new Map();
-        
-        console.log(`✅ Server ${serverId} activated!`);
+
         return serverId;
       }
     }
@@ -161,8 +159,7 @@ class ServerManager {
 
         // إذا اقتربنا من الـ capacity (80%)
         if (roomCount > server.capacity * 0.8) {
-          console.log(`⚠️ Server ${serverId} is at ${Math.round((roomCount / server.capacity) * 100)}% capacity`);
-          
+
           // نشّط server احتياطي
           await this.activateNextStandbyServer();
         }
@@ -213,7 +210,6 @@ class ServerManager {
             games: leastLoaded.games
           });
 
-          console.log(`🔄 Moved ${gameToMove} from ${server.id} to ${leastLoaded.id}`);
         }
       }
     }
@@ -237,7 +233,6 @@ class ServerManager {
       createdAt: Date.now()
     });
 
-    console.log(`✅ Room ${roomData.id} added to ${serverId} cache`);
   }
 
   // ────────────────────────────────────────

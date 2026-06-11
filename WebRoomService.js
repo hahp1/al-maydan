@@ -221,11 +221,11 @@ export const GAME_HOW_TO = {
   biloot: {
     ar: {
       how: 'البلوت الكلاسيكي — فريقان من لاعبَين. تُوزَّع الأوراق ويتم المزايدة على الحكم (الأتو). الفريق الفائز بالمزاد يجب أن يحقق عدده.',
-      win: 'الفريق الذي يحقق عدده في المزاد يكسب النقاط. إن فشل يصبح "مسفولاً". أول من يصل 152 يفوز.',
+      win: 'الفريق الذي يحقق عدده في المزاد يكسب النقاط. إن فشل يصبح "مسفولاً". أول من يصل 51 نقطة يفوز.',
     },
     en: {
       how: 'Classic Baloot — two teams of two. Cards are dealt and teams bid for the trump suit. The winning bidder must achieve their declared score.',
-      win: 'The bidding team scores if they meet their bid, otherwise they go "underground". First to 152 wins.',
+      win: 'The bidding team scores if they meet their bid, otherwise they go "underground". First to 51 points wins.',
     },
   },
   rank_friends: {

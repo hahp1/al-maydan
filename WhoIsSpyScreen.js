@@ -395,7 +395,7 @@ const ACCENT_B = '#f9731640';
 // ══════════════════════════════════════════════════════════
 //  الشاشة الرئيسية للعبة
 // ══════════════════════════════════════════════════════════
-export default function WhoIsLyingScreen({ onBack, currentUser }) {
+export default function WhoIsSpyScreen({ onBack, currentUser }) {
   const { theme, themeId } = useTheme();
   // phase: 'menu' | 'local_setup' | 'local_play' | 'online_lobby'
   const [phase, setPhase] = useState('menu');

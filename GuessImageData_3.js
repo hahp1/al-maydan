@@ -192,18 +192,4 @@ export const GUESS_CATEGORIES = [
   { id: 'things',     emoji: '🔧', nameAr: 'أشياء'          },
 ];
 
-// ══════════════════════════════════════════════════════════════
-//  pickRandomImage — اختيار صورة عشوائية مع تجنب المكررة
-// ══════════════════════════════════════════════════════════════
-/**
- * @param {string}   catId    — معرّف الفئة
- * @param {string[]} usedIds  — معرّفات الصور المستخدمة مسبقاً
- * @returns {{ id, answer, url, info? } | null}
- */
-export function pickRandomImage(catId, usedIds = []) {
-  const pool = GUESS_IMAGE_DATA[catId];
-  if (!pool || pool.length === 0) return null;
-  const available = pool.filter(img => !usedIds.includes(img.id));
-  const source = available.length > 0 ? available : pool;
-  return source[Math.floor(Math.random() * source.length)];
-}
+// pickRandomImage مُعرَّفة في GuessImageData.js (الموجّه) حيث GUESS_IMAGE_DATA كاملة متاحة

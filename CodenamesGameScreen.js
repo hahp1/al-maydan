@@ -24,12 +24,10 @@
  * ══════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
   StatusBar, ScrollView, TextInput, Animated, Modal, ImageBackground, Image,
-,
   useWindowDimensions} from 'react-native';
 import { db } from './firebaseConfig';
 import {

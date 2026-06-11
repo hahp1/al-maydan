@@ -14,14 +14,13 @@
  * finished   → إعلان الفائز
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
   StatusBar, ScrollView, Alert, Animated, Modal, TextInput,
-,
   useWindowDimensions} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { useMemo, db } from './firebaseConfig';
+import { db } from './firebaseConfig';
 import {
   doc, setDoc, updateDoc, onSnapshot, getDoc, collection,
   query, where, getDocs, deleteDoc

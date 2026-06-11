@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Arena",
-    "slug": "al-maydan",
+    "slug": "arena",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -76,7 +76,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "b7485332-a4e4-43fc-ba40-631a8ff884b4"
+        "projectId": "4f18848f-a007-419d-a8cf-4106fe5c2a60"
       }
     },
     "owner": "haho1",

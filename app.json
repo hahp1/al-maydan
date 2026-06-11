@@ -76,10 +76,10 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "4f18848f-a007-419d-a8cf-4106fe5c2a60"
+        "projectId": "f1c8f78e-0712-47f6-a8fd-500984648031"
       }
     },
-    "owner": "haho1",
+    "owner": "hah01s-team",
     "androidStatusBar": {
       "backgroundColor": "#0a0a1a",
       "barStyle": "light-content",

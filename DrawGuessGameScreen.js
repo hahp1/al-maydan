@@ -32,7 +32,6 @@ import {
   View, Text, TouchableOpacity, StyleSheet, StatusBar,
   PanResponder, Alert, Animated, TextInput, ScrollView,
   Platform, Modal, ActivityIndicator,
-,
   useWindowDimensions} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { db } from './firebaseConfig';

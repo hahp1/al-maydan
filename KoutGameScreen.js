@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated, Platform, Modal,
-,
   useWindowDimensions} from 'react-native';
-import { useMemo, useTheme } from './ThemeContext';
+import { useTheme } from './ThemeContext';
 import ExitButton from './ExitButton';
 import { useLanguage } from './I18n';
 import { useOnlineGame } from './useOnlineGame';

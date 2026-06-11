@@ -10,7 +10,6 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   Animated, Easing, StatusBar, ScrollView, TextInput,
   KeyboardAvoidingView, Platform,
-,
   useWindowDimensions} from 'react-native';
 import Svg, { Path, Circle, Line, Text as SvgText, G } from 'react-native-svg';
 import { useTheme } from './ThemeContext';

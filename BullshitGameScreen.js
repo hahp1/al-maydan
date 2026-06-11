@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
-  StatusBar, ScrollView, Alert, Animated, Modal
-,
+  StatusBar, ScrollView, Alert, Animated, Modal,
   useWindowDimensions} from 'react-native';
 import { useOnlineGame } from './useOnlineGame';
 import { useTheme } from './ThemeContext';

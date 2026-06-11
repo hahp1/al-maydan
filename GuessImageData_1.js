@@ -225,7 +225,7 @@ export const GUESS_IMAGE_DATA_1 = {
     { "id": "fo48", "answer": "بقلاوة", "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Baklava_-_Turkish_special%2C_with_nuts.jpg/400px-Baklava_-_Turkish_special%2C_with_nuts.jpg", "info": { "البلد الأصلي": "تركيا عثمانية — منتشرة في الشرق الأوسط", "النوع": "حلوى ورقية بالمكسرات", "المكونات الأساسية": "ورق الفيلو، فستق أو جوز، سمن، قطر", "أشهر أنواع": "بقلاوة فستقية تركية وشامية" } },
     { "id": "fo49", "answer": "محاشي", "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Stuffed_Vegetables.jpg/400px-Stuffed_Vegetables.jpg", "info": { "البلد الأصلي": "الشرق الأوسط", "النوع": "خضار محشوة", "المكونات الأساسية": "كوسا أو ورق عنب أو بندورة، أرز، لحم، بهارات", "الانتشار": "شائع في كل مطابخ المنطقة العربية" } },
     { "id": "fo50", "answer": "أم علي", "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Om_Ali.jpg/400px-Om_Ali.jpg", "info": { "البلد الأصلي": "مصر", "النوع": "حلوى بالفرن", "المكونات الأساسية": "فطير أو خبز، حليب، كريمة، مكسرات، قرفة", "التاريخ": "يرجع إلى العصر المملوكي في مصر" } }
-  ]
+  ],
 
   // ══════════════════════════════════════════════
   //  THINGS — أشياء (50)

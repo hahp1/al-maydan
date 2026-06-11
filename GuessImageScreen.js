@@ -473,7 +473,7 @@ function RulesScreen({ onStart, theme }) {
 //  SCREEN: اللعب الرئيسي
 // ══════════════════════════════════════════════════════════════
 function PlayScreen({
-  myScore, oppScore, round, totalRounds,
+  myScore, oppScore, round,
   currentImage, imageVisible, countdown,
   blueUsed, blueCardCountdown, blueCardActive,
   onGuess, onBlueCard,
@@ -726,8 +726,7 @@ function ResultScreen({ myScore, oppScore, opponentName, onRematch, onBack, them
 // ══════════════════════════════════════════════════════════════
 //  الشاشة الرئيسية — منطق اللعبة
 // ══════════════════════════════════════════════════════════════
-export default function GuessImageScreen({
-  const [imageError, setImageError] = React.useState(false); onBack, currentUser, onGameEnd, onGameReady }) {
+export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGameReady }) {
   const { theme } = useTheme();
   const t = useT();
 
@@ -741,12 +740,13 @@ export default function GuessImageScreen({
   const [roomData, setRoomData]   = useState(null);
 
   // ── حالة اللعبة ──
-  const [myScore, setMyScore]       = useState(0);
-  const [oppScore, setOppScore]     = useState(0);
-  const [round, setRound]           = useState(1);
+  const [myScore, setMyScore]         = useState(0);
+  const [oppScore, setOppScore]       = useState(0);
+  const [round, setRound]             = useState(1);
   const [imageVisible, setImageVisible] = useState(false);
-  const [countdown, setCountdown]   = useState(10);
-  const [blueUsed, setBlueUsed]     = useState(false);
+  const [imageError, setImageError]   = useState(false);
+  const [countdown, setCountdown]     = useState(10);
+  const [blueUsed, setBlueUsed]       = useState(false);
   const [blueCardActive, setBlueCardActive] = useState(false);
   const [blueCardCountdown, setBlueCardCountdown] = useState(10);
   const [currentImage, setCurrentImage] = useState(null);
@@ -754,7 +754,6 @@ export default function GuessImageScreen({
   const [infoVisible, setInfoVisible] = useState(false);
   const [betweenData, setBetweenData] = useState(null);
   const [selectedCats, setSelectedCats] = useState([]);
-  const [roundCatIdx, setRoundCatIdx] = useState(0);
 
   const countdownRef   = useRef(null);
   const blueTimerRef   = useRef(null);

@@ -803,7 +803,25 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
       const winTeam = (winnerSeat === 0 || winnerSeat === 2) ? 'a' : 'b'; // seat 0=me, 2=top = team A
       const newTeamTricks = { ...teamTricks, [winTeam]: (teamTricks[winTeam] || 0) + 1 };
 
-      const roundDone = newHand.length === 0 && newTeamTricks.a + newTeamTricks.b === 9;
+      const totalTricks = 9; // 36 ورقة ÷ 4 لاعبين
+      const tricksPlayed = newTeamTricks.a + newTeamTricks.b;
+      const tricksLeft   = totalTricks - tricksPlayed;
+
+      // تحديد فريق المزايد
+      const bidderIdx  = players.findIndex(p => p.uid === highBidder);
+      const bidderSeat = (bidderIdx - myIdx + players.length) % players.length;
+      const bidTeam    = (bidderSeat === 0 || bidderSeat === 2) ? 'a' : 'b';
+
+      const bidTeamTricks = newTeamTricks[bidTeam];
+
+      // حالة 1: اكتملت كل الحيل
+      const allTricksDone   = tricksPlayed === totalTricks;
+      // حالة 2: فريق المزايد وصل للبيد مبكراً
+      const bidderReachedBid = bidTeamTricks >= highBid;
+      // حالة 3: الفريق الآخر جمع ما يكفي لإسقاط المزايد حتى لو كسب كل الباقي
+      const bidderCannotWin  = bidTeamTricks + tricksLeft < highBid;
+
+      const roundDone = allTricksDone || bidderReachedBid || bidderCannotWin;
 
       await updateRoom({
         [`hands.${myUid}`]: newHand,
@@ -820,11 +838,23 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
   const handleNextRound = async () => {
     // calculate scores
     const bidNum = highBid;
-    const aWon = teamTricks.a >= bidNum;
-    const pts = aWon ? bidNum : (isMalzoom ? bidNum : bidNum * 2);
+
+    // تحديد فريق المزايد بناءً على highBidder
+    const bidderIdx  = players.findIndex(p => p.uid === highBidder);
+    const bidderSeat = (bidderIdx - myIdx + players.length) % players.length;
+    const bidTeam    = (bidderSeat === 0 || bidderSeat === 2) ? 'a' : 'b';
+    const otherTeam  = bidTeam === 'a' ? 'b' : 'a';
+
+    const bidTeamTricks = teamTricks[bidTeam];
+    const bidTeamWon    = bidTeamTricks >= bidNum;
+
+    // المزايد فاز → يكسب bidNum، خسر → الآخر يكسب bidNum×2 (أو bidNum إن ملزوم)
+    const ptsForWinner = bidNum;
+    const ptsForLoser  = isMalzoom ? bidNum : bidNum * 2;
+
     const newScores = {
-      a: teamScores.a + (aWon ? bidNum : 0),
-      b: teamScores.b + (aWon ? 0 : pts),
+      [bidTeam]:   teamScores[bidTeam]   + (bidTeamWon ? ptsForWinner : 0),
+      [otherTeam]: teamScores[otherTeam] + (bidTeamWon ? 0 : ptsForLoser),
     };
 
     const gameOver = newScores.a >= 51 || newScores.b >= 51;

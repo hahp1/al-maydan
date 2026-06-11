@@ -13,14 +13,13 @@ import {
   StatusBar, ActivityIndicator, Animated, Platform, Alert, ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { db } from './firebaseConfig';
+import { db, auth } from './firebaseConfig';
 import { mergeGuestToAccount } from './GuestMergeService';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleAuthProvider, OAuthProvider, signInWithCredential } from 'firebase/auth';
-import { auth } from './firebaseConfig';
 import { saveUserToFirestore } from './UserService';
 import { useTheme } from './ThemeContext';
 import { useLanguage } from './I18n';

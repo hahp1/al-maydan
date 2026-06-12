@@ -31,12 +31,6 @@
       "ios": {
         "autoIncrement": "buildNumber"
       }
-    },
-    "debugapk": {
-      "distribution": "internal",
-      "android": {
-        "gradleCommand": ":app:assembleDebug"
-      }
     }
   },
   "submit": {

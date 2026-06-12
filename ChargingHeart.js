@@ -240,7 +240,7 @@ function ChargingHeart({ size = 28, progress = 0 }) {
         {/* ─── السائل: clipped بشكل القلب ─── */}
         <G clipPath="url(#chgHeartClip)">
           {/* الجسم السائل — يتحرك أفقياً بالموجة */}
-          <AnimatedG translateX={waveTranslateX}>
+          <AnimatedG style={{ transform: [{ translateX: waveTranslateX }] }}>
             {/* الجزء السفلي المملوء بالكامل */}
             <Rect
               x="-20"

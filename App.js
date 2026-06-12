@@ -19,6 +19,19 @@ import { initServerTime } from './ServerTime';
 
 const SESSION_KEY = 'almaydan_session';
 
+// ── Global crash reporter ──────────────────────────────────
+let _crashMessage = null;
+const _origHandler = global.ErrorUtils?.getGlobalHandler?.();
+global.ErrorUtils?.setGlobalHandler?.((error, isFatal) => {
+  _crashMessage = (isFatal ? '[FATAL] ' : '') + (error?.message || String(error));
+  Alert.alert(
+    '🔴 Crash',
+    _crashMessage + '\n\n' + (error?.stack?.slice(0, 300) || ''),
+    [{ text: 'OK' }]
+  );
+  _origHandler?.(error, isFatal);
+});
+
 // ── Providers ──
 import { ThemeProvider, useTheme, ALL_THEMES } from './ThemeContext';
 import { LanguageProvider, LangSync, tStatic } from './I18n';

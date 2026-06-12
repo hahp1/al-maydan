@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Arena",
-    "slug": "al-maydan",
+    "slug": "arena",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",

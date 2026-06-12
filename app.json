@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Arena",
-    "slug": "arena",
+    "slug": "al-maydan",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -76,10 +76,10 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "f1c8f78e-0712-47f6-a8fd-500984648031"
+        "projectId": "af3f8e44-f1a9-4fe9-ab65-d922761b4079"
       }
     },
-    "owner": "hah01s-team",
+    "owner": "haho1",
     "androidStatusBar": {
       "backgroundColor": "#0a0a1a",
       "barStyle": "light-content",

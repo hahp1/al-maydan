@@ -291,7 +291,8 @@ const ThemeBackground = memo(({ theme }) => {
             domStorageEnabled={false}
             allowsInlineMediaPlayback={false}
             mediaPlaybackRequiresUserAction={true}
-            androidLayerType="software"
+            androidLayerType="hardware"
+            renderToHardwareTextureAndroid={true}
             onLoad={handleLoad}
             onError={() => {}}
             onHttpError={() => {}}

@@ -12,12 +12,13 @@
  * تغيير الثيم → injectJavaScript فوري بدون reload
  */
 
-import { useRef, useEffect, useState, memo } from 'react';
-import { View, StyleSheet, Dimensions, ImageBackground, Animated } from 'react-native';
+import { useRef, useEffect, useState, useCallback, memo } from 'react';
+import { View, StyleSheet, ImageBackground, Animated, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width: SW, height: SH } = Dimensions.get('window');
+const CRASH_COUNT_KEY = 'arena_theme_crash_count';
 
 // ══════════════════════════════════════════════════════════
 //  بيانات الثيمات للـ WebView
@@ -211,14 +212,14 @@ function loop(){
 </script></body></html>`;
 
 // ══════════════════════════════════════════════════════════
-//  City stars cache
+//  City stars cache — positions as percentages (orientation-safe)
 // ══════════════════════════════════════════════════════════
 const STARS_CACHE = {};
 function getCityStars(theme, count) {
   if (!STARS_CACHE[theme.id]) {
     STARS_CACHE[theme.id] = [...Array(count)].map((_,i) => ({
       key: i,
-      top:  `${(i*43+7)  % 65}%`,
+      top:  `${(i*43+7)  % 62}%`,
       left: `${(i*67+13) % 96}%`,
       size: i%5===0 ? 2.5 : i%3===0 ? 1.8 : 1.2,
       opacity: 0.25 + (i%4)*0.15,
@@ -231,36 +232,44 @@ function getCityStars(theme, count) {
 //  ThemeBackground
 // ══════════════════════════════════════════════════════════
 const ThemeBackground = memo(({ theme }) => {
+  const { width: W, height: H } = useWindowDimensions();
+  const isLandscape = W > H;
+
   const webviewRef = useRef(null);
   const fadeAnim   = useRef(new Animated.Value(0)).current;
   const wvTheme    = getWebViewTheme(theme);
 
-  const sendTheme = () => {
-    if (!wvTheme || !webviewRef.current) return;
-    webviewRef.current.injectJavaScript(`
-      try { setTheme(${JSON.stringify(wvTheme)}); } catch(_) {}
-      true;
-    `);
-  };
+  const [wvReady, setWvReady] = useState(false);
 
-  const handleLoad = () => {
+  const sendTheme = useCallback(() => {
+    if (!wvTheme || !webviewRef.current) return;
+    try {
+      webviewRef.current.injectJavaScript(
+        `try { setTheme(${JSON.stringify(wvTheme)}); } catch(_) {} true;`
+      );
+    } catch (_) {}
+  }, [wvTheme]);
+
+  const handleLoad = useCallback(() => {
+    setWvReady(true);
+    AsyncStorage.setItem(CRASH_COUNT_KEY, '0').catch(() => {});
     setTimeout(() => {
       sendTheme();
       Animated.timing(fadeAnim, {
-        toValue: 1, duration: 300, useNativeDriver: true,
+        toValue: 1, duration: 400, useNativeDriver: true,
       }).start();
-    }, 50);
-  };
+    }, 150);
+  }, [sendTheme]);
 
   useEffect(() => {
-    // عند تغيير الثيم بعد التحميل
-    const timer = setTimeout(sendTheme, 80);
+    if (!wvReady) return;
+    const timer = setTimeout(sendTheme, 120);
     return () => clearTimeout(timer);
-  }, [theme.id]);
+  }, [theme.id, wvReady]);
 
   // ── Dark / Light ──
   if (!theme.isMist && !theme.isCrystal && !theme.isCityTheme) {
-    return null; // ThemeContext يضع backgroundColor: theme.bg على الـ root
+    return null;
   }
 
   // ── Mist / Crystal → WebView ──
@@ -279,7 +288,15 @@ const ThemeBackground = memo(({ theme }) => {
             showsHorizontalScrollIndicator={false}
             originWhitelist={['*']}
             javaScriptEnabled={true}
+            domStorageEnabled={false}
+            allowsInlineMediaPlayback={false}
+            mediaPlaybackRequiresUserAction={true}
+            androidLayerType="hardware"
+            renderToHardwareTextureAndroid={true}
             onLoad={handleLoad}
+            onError={() => {}}
+            onHttpError={() => {}}
+            onRenderProcessGone={() => {}}
           />
         </Animated.View>
       </View>
@@ -288,35 +305,70 @@ const ThemeBackground = memo(({ theme }) => {
 
   // ── City ──
   const stars = theme.starCount ? getCityStars(theme, theme.starCount) : [];
+
+  const skyColors = (theme.skyGradient && theme.skyGradient.length >= 2)
+    ? theme.skyGradient
+    : [theme.bg || '#05070f', theme.bg || '#05070f'];
+
+  const fadeColors = theme.skyBottom
+    ? [theme.skyBottom, theme.skyBottom + '00']
+    : ['#07091a', '#07091a00'];
+
+  // ارتفاع السكاي لاين: نسبة من الارتفاع الفعلي للشاشة
+  // portrait: 26% | landscape: 38% — شريط رفيع يحافظ على هوية المدينة بدون طغيان
+  const skylineHeight = isLandscape ? H * 0.38 : H * 0.26;
+  // fade أسفل: نصف الارتفاع في landscape لإذابة أنعم، ثلث في portrait
+  const skylineFadeH  = isLandscape ? skylineHeight * 0.55 : skylineHeight * 0.36;
+
   return (
     <View style={s.fill} pointerEvents="none">
+      {/* ── السماء: gradient كامل من أعلى لأسفل ── */}
       <LinearGradient
-        colors={theme.skyGradient}
+        colors={skyColors}
         style={s.fill}
-        start={{ x:0.5, y:1 }}
-        end={{ x:0.5, y:0 }}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
       />
+
+      {/* ── النجوم: تظهر في الثلثين العلويين فقط ── */}
       {stars.map(st => (
         <View key={st.key} style={{
-          position:'absolute', top:st.top, left:st.left,
-          width:st.size, height:st.size, borderRadius:99,
-          backgroundColor: theme.accent + 'cc',
+          position: 'absolute',
+          top: st.top,
+          left: st.left,
+          width: st.size,
+          height: st.size,
+          borderRadius: 99,
+          backgroundColor: (theme.accent || '#ffffff') + 'cc',
           opacity: st.opacity,
         }} />
       ))}
-      <View style={s.skylineWrap}>
-        <ImageBackground
-          source={theme.skylineAsset}
-          style={s.skylineImg}
-          resizeMode="cover"
-        />
-        <LinearGradient
-          colors={[theme.skyBottom, theme.skyBottom + '00']}
-          style={s.skylineFade}
-          start={{ x:0, y:1 }}
-          end={{ x:0, y:0 }}
-        />
-      </View>
+
+      {/* ── السكاي لاين: ارتفاع نسبي يتكيف مع الاتجاه ── */}
+      {theme.skylineAsset ? (
+        <View style={[s.skylineWrap, { height: skylineHeight }]}>
+          <ImageBackground
+            source={theme.skylineAsset}
+            style={s.skylineImg}
+            resizeMode={isLandscape ? 'cover' : 'cover'}
+            onError={() => {}}
+          />
+          {/* تدرج يُدمج السكاي لاين مع السماء من الأسفل */}
+          <LinearGradient
+            colors={fadeColors}
+            style={[s.skylineFade, { height: skylineFadeH }]}
+            start={{ x: 0, y: 1 }}
+            end={{ x: 0, y: 0 }}
+          />
+          {/* تدرج علوي يُدمج السكاي لاين مع السماء من الأعلى */}
+          <LinearGradient
+            colors={[skyColors[0] + '00', skyColors[0]]}
+            style={[s.skylineTopFade, { height: skylineHeight * (isLandscape ? 0.35 : 0.22) }]}
+            start={{ x: 0, y: 1 }}
+            end={{ x: 0, y: 0 }}
+          />
+        </View>
+      ) : null}
     </View>
   );
 });
@@ -324,8 +376,9 @@ const ThemeBackground = memo(({ theme }) => {
 export default ThemeBackground;
 
 const s = StyleSheet.create({
-  fill:        { ...StyleSheet.absoluteFillObject },
-  skylineWrap: { position:'absolute', bottom:0, left:0, right:0, height:190 },
-  skylineImg:  { width:'100%', height:'100%' },
-  skylineFade: { position:'absolute', bottom:0, left:0, right:0, height:65 },
+  fill:           { ...StyleSheet.absoluteFillObject },
+  skylineWrap:    { position: 'absolute', bottom: 0, left: 0, right: 0 },
+  skylineImg:     { width: '100%', height: '100%' },
+  skylineFade:    { position: 'absolute', bottom: 0, left: 0, right: 0 },
+  skylineTopFade: { position: 'absolute', top: 0,    left: 0, right: 0 },
 });

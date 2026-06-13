@@ -1,12 +1,11 @@
 /**
- * HomeScreen.js — محدّث v2
+ * HomeScreen.js — محدّث
  * ════════════════════════════════════════════════
- *  ✅ topBar موحد الارتفاع: قلوب + توكنز يمين، بروفايل+اسم يسار
- *  ✅ اسم الضيف: Guest#XXXXX | اسم المسجّل من Firebase
- *  ✅ بطاقات الميدان: أيقونة في المنتصف، عنوان في سطر واحد
- *  ✅ حذف badge (٣ أنماط / قريباً) من البطاقات
- *  ✅ BottomNav: مربع فقط بدون دائرة داخلية، أيقونات أكبر، نصوص متمركزة
- *  ✅ قسم "الأكثر استخداماً" أكبر وأوضح
+ *  ✅ أيقونة القلوب ❤️ طافية بجانب التوكنز 🪙 في userBar
+ *  ✅ نبض تحذيري عند صفر قلوب
+ *  ✅ عداد تنازلي للتجديد التلقائي
+ *  ✅ زر الملف الشخصي 👤 — يفتح ProfileScreen
+ *  ✅ اسم المستخدم قابل للنقر →ملف شخصي
  *  ✅ جميع الوظائف السابقة محفوظة
  */
 
@@ -77,7 +76,6 @@ const CityStarLayer = memo(({ theme }) => {
   );
 });
 
-// ── ويدجت القلوب ──
 function HeartsWidget({ hearts, countdown, onPress, theme }) {
   const pulseHeart = useRef(new Animated.Value(1)).current;
 
@@ -98,48 +96,37 @@ function HeartsWidget({ hearts, countdown, onPress, theme }) {
   const bgColor    = hearts > 0 ? theme.accentSoft : theme.bgElevated;
 
   return (
-    <TouchableOpacity
+    <ThemedCard
       onPress={onPress}
-      activeOpacity={0.75}
-      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-      style={[styles.topBarChip, { backgroundColor: bgColor, borderColor: heartColor + '55' }]}
+      style={[styles.heartsBtn, { backgroundColor: bgColor, borderColor: heartColor + '55' }]}
     >
       <Animated.View style={{ transform: [{ scale: pulseHeart }] }}>
-        <HeartIcon size={20} filled={hearts > 0} hearts={hearts} pulseWhenZero glow={false} />
+        <HeartIcon size={22} filled={hearts > 0} hearts={hearts} pulseWhenZero glow={false} />
       </Animated.View>
-      <Text style={[styles.chipText, { color: heartColor }]}>{hearts}</Text>
+      <Text style={[styles.heartsCount, { color: heartColor }]}>{hearts}</Text>
       {countdown && hearts === 0 && (
-        <Text style={[styles.chipSub, { color: theme.textMuted }]}>{countdown}</Text>
+        <Text style={[styles.heartsCountdown, { color: theme.textMuted }]}>{countdown}</Text>
       )}
-    </TouchableOpacity>
+    </ThemedCard>
   );
 }
 
-// ── بطاقة الملف الشخصي — اسم + معرف ──
-function ProfileChip({ user, theme, onPress }) {
+// ── بادج المستوى الصغير في الـ userBar ──
+function LevelBadge({ user, theme, onPress }) {
+  const level = user?.level || 1;
   const isGuest = !!user?.isGuest;
-  // الضيف: Guest#XXXXX حيث XXXXX = أول 5 أرقام من uid أو معرف عشوائي
-  const guestId = user?.uid
-    ? 'Guest#' + user.uid.replace(/\D/g, '').slice(0, 5).padEnd(5, '0')
-    : 'Guest#00000';
-  const displayName = isGuest ? guestId : (user?.name || user?.email?.split('@')[0] || 'Player');
-
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={[
-      styles.profileChip,
-      { backgroundColor: theme.bgElevated, borderColor: theme.borderCard },
-    ]}>
-      <Text style={[styles.profileChipIcon, { color: theme.accent }]}>
+    <ThemedCard
+      onPress={onPress}
+      style={styles.profileBtn}
+    >
+      <Text style={[styles.profileIcon, { color: theme.accent }]}>
         {isGuest ? '👤' : '⚡'}
       </Text>
-      <Text
-        style={[styles.profileChipName, { color: theme.textPrimary }]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {displayName}
-      </Text>
-    </TouchableOpacity>
+      {!isGuest && (
+        <Text style={[styles.profileLevel, { color: theme.accent }]}>{level}</Text>
+      )}
+    </ThemedCard>
   );
 }
 
@@ -208,12 +195,16 @@ export default function HomeScreen({
     setDailyVisible(false);
   }, [dailyStreak, dailyReward]);
 
-  const openTokenModal  = useCallback(() => setShowTokenModal(true),  [setShowTokenModal]);
-  const closeTokenModal = useCallback(() => setShowTokenModal(false), [setShowTokenModal]);
-  const addTokens       = useCallback((a) => setTokens(tk => tk + a), [setTokens]);
-  const openProfile     = useCallback(() => setScreen('profile'), [setScreen]);
+  const openTokenModal  = useCallback(() => setShowTokenModal(true),  []);
+  const closeTokenModal = useCallback(() => setShowTokenModal(false), []);
+  const addTokens       = useCallback((a) => setTokens(tk => tk + a), []);
+  const openProfile     = useCallback(() => setScreen('profile'), []);
 
   const isCityTheme = !!theme.isCityTheme;
+  const isGuest     = !!user?.isGuest;
+  const userName    = isGuest
+    ? (t('home.guestUser') || '👤 ضيف')
+    : `👤 ${user?.name || ''}`;
 
   // ── محتوى الشاشة ──
   const screenContent = (
@@ -227,12 +218,17 @@ export default function HomeScreen({
         <Animated.View style={[styles.titleRow, { transform: [{ scale: pulseAnim }] }]}>
           {/* A R E N A — تلوين الحروف حسب الثيم */}
           {(() => {
+            // Mist: logoVowel للحروف المتحركة (A,E,A) — logoCons للصوامت (R,N)
+            // Crystal: crystalLight للأوسط (R,E,N) — crystalColor للخارج (A,A)
+            // Standard: accent لكل الحروف
             const letters = ['A','r','e','n','a'];
             return letters.map((l, i) => {
               let color = theme.accent;
               if (theme.isMist) {
+                // vowels: A(0), e(2), a(4) — consonants: r(1), n(3)
                 color = [0,2,4].includes(i) ? theme.logoVowel : theme.logoCons;
               } else if (theme.isCrystal) {
+                // outer: A(0), a(4) — middle: r(1), e(2), n(3)
                 color = [0,4].includes(i) ? theme.crystalColor : theme.crystalLight;
               }
               return (
@@ -249,29 +245,18 @@ export default function HomeScreen({
         </Text>
       </Animated.View>
 
-      {/* ─── Top Bar موحد الارتفاع ─── */}
-      {/* يسار RTL = البروفايل | يمين RTL = القلوب+التوكنز */}
+      {/* ─── Top Bar شفاف ─── */}
       <Animated.View style={[styles.topBar, { opacity: fadeAnim }]}>
-        {/* يسار (في RTL = الطرف الأيمن فعلياً في LTR، لكن نضعه على اليمين في RTL = أول عنصر) */}
-        {/* في العربي: البروفايل يظهر على اليسار (بداية الصف في RTL) */}
-        <ProfileChip user={user} theme={theme} onPress={openProfile} />
-
-        {/* يمين: القلوب + التوكنز */}
-        <View style={styles.topRight}>
+        {/* يسار: قلوب + توكن */}
+        <View style={styles.topLeft}>
           <HeartsWidget hearts={hearts ?? 0} countdown={countdown} onPress={onOpenHeartsModal} theme={theme} />
-          <TouchableOpacity
-            onPress={openTokenModal}
-            activeOpacity={0.75}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            style={[styles.topBarChip, {
-              borderColor: theme.accentBorder,
-              backgroundColor: theme.accentSoft,
-            }]}
-          >
-            <Text style={[styles.chipText, { color: theme.accent }]}>🪙</Text>
-            <Text style={[styles.chipText, { color: theme.accent }]}>{tokens}</Text>
-          </TouchableOpacity>
+          <ThemedCard onPress={openTokenModal} style={styles.topTokenBtn}>
+            <Text style={[styles.topTokenText, { color: theme.accent }]}>🪙 {tokens}</Text>
+          </ThemedCard>
         </View>
+
+        {/* يمين: الملف الشخصي */}
+        <LevelBadge user={user} theme={theme} onPress={openProfile} />
       </Animated.View>
 
       {/* ─── أعلى نتيجة ─── */}
@@ -290,7 +275,6 @@ export default function HomeScreen({
 
       {/* ─── بطاقتا الميدانين ─── */}
       <View style={styles.arenaRow}>
-        {/* ميدان المعلومات */}
         <Animated.View style={{ transform: [{ translateY: slide1 }], opacity: fadeAnim, flex: 1 }}>
           <ThemedCard
             onPress={() => setScreen('knowledge')}
@@ -299,16 +283,14 @@ export default function HomeScreen({
             <View style={[styles.arenaIconWrap, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
               <Text style={styles.arenaEmoji}>🧠</Text>
             </View>
-            <Text style={[styles.arenaTitle, { color: theme.accent }]}>
-              {lang === 'en' ? 'Knowledge Arena' : 'ميدان المعلومات'}
-            </Text>
-            <Text style={[styles.arenaDesc, { color: theme.textMuted }]}>
-              {t('home.knowledgeDesc')}
-            </Text>
+            <Text style={[styles.arenaTitle, { color: theme.accent }]}>{t('home.knowledgeTitle')}</Text>
+            <Text style={[styles.arenaDesc,  { color: theme.textMuted }]}>{t('home.knowledgeDesc')}</Text>
+            <View style={[styles.arenaBadge, { backgroundColor: theme.accentSoft }]}>
+              <Text style={[styles.arenaBadgeText, { color: theme.accent }]}>{t('home.knowledgeBadge')}</Text>
+            </View>
           </ThemedCard>
         </Animated.View>
 
-        {/* ميدان الألعاب */}
         <Animated.View style={{ transform: [{ translateY: slide2 }], opacity: fadeAnim, flex: 1 }}>
           <ThemedCard
             onPress={() => setScreen('games')}
@@ -317,12 +299,11 @@ export default function HomeScreen({
             <View style={[styles.arenaIconWrap, { backgroundColor: theme.purpleSoft, borderColor: theme.purpleBorder }]}>
               <Text style={styles.arenaEmoji}>🎲</Text>
             </View>
-            <Text style={[styles.arenaTitle, { color: theme.purple }]}>
-              {lang === 'en' ? 'Games Arena' : 'ميدان الألعاب'}
-            </Text>
-            <Text style={[styles.arenaDesc, { color: theme.textMuted }]}>
-              {t('home.gamesDesc')}
-            </Text>
+            <Text style={[styles.arenaTitle, { color: theme.purple }]}>{t('home.gamesTitle')}</Text>
+            <Text style={[styles.arenaDesc,  { color: theme.textMuted }]}>{t('home.gamesDesc')}</Text>
+            <View style={[styles.arenaBadge, { backgroundColor: theme.purpleSoft }]}>
+              <Text style={[styles.arenaBadgeText, { color: theme.purple }]}>{t('home.gamesBadge')}</Text>
+            </View>
           </ThemedCard>
         </Animated.View>
       </View>
@@ -342,13 +323,10 @@ export default function HomeScreen({
             <ThemedCard
               key={item.screen}
               onPress={() => setScreen(item.screen)}
-              style={[styles.quickItem, {
-                backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
-                borderColor: theme.borderCard,
-              }]}
+              style={styles.quickItem}
             >
               <Text style={styles.quickEmoji}>{item.emoji}</Text>
-              <Text style={[styles.quickName, { color: theme.textPrimary }]}>
+              <Text style={[styles.quickName, { color: theme.textMuted }]}>
                 {lang === 'en' ? item.nameEn : item.nameAr}
               </Text>
             </ThemedCard>
@@ -360,54 +338,33 @@ export default function HomeScreen({
       <Animated.View style={[styles.friendsWrap, { opacity: fadeAnim, gap: 10 }]}>
         {/* زر البطولة — يظهر فقط إذا كانت بطولة نشطة */}
         {activeTournament?.isActive && (
-          <TouchableOpacity
-            onPress={() => setScreen('knowledge')}
-            activeOpacity={0.75}
-            style={[styles.tournamentBtn, {
-              backgroundColor: '#f59e0b0e',
-              borderColor: '#f59e0b55',
-            }]}
-          >
+          <ThemedCard onPress={() => setScreen('knowledge')} style={[styles.friendsBtn, { flexDirection: 'row', gap: 8 }]}>
             <Text style={{ fontSize: 18 }}>🏆</Text>
-            <Text style={[styles.tournamentText, { color: '#f59e0b' }]}>{t('home.tournament') || 'البطولة الأسبوعية'}</Text>
-          </TouchableOpacity>
+            <Text style={[styles.friendsBtnText, { color: '#f59e0b' }]}>{t('home.tournament') || 'البطولة الأسبوعية'}</Text>
+          </ThemedCard>
         )}
-
-        {/* ── BottomNav — مربعات بدون دائرة داخلية ── */}
-        <View style={[styles.bottomNav, {
-          backgroundColor: isCityTheme ? theme.accent + '08' : theme.bgCard,
-          borderColor: theme.borderCard,
-        }]}>
+        {/* ── BottomNav ── */}
+        <View style={styles.bottomNav}>
           {(lang === 'en' ? [
-            { emoji: '⚙️', label: 'Settings', active: false, onPress: () => setScreen('settings') },
-            { emoji: '👥', label: 'Friends',  active: false, onPress: () => setScreen('friends') },
             { emoji: '⚔️', label: 'Arena',    active: true,  onPress: () => {}                },
+            { emoji: '👥', label: 'Friends',  active: false, onPress: () => setScreen('friends') },
+            { emoji: '⚙️', label: 'Settings', active: false, onPress: () => setScreen('settings') },
           ] : [
             { emoji: '⚙️', label: 'إعدادات', active: false, onPress: () => setScreen('settings') },
             { emoji: '👥', label: 'أصدقاء',  active: false, onPress: () => setScreen('friends')  },
             { emoji: '⚔️', label: 'الميدان', active: true,  onPress: () => {}                    },
           ]).map((item, i) => (
-            <TouchableOpacity
-              key={i}
-              onPress={item.onPress}
-              activeOpacity={0.7}
-              style={[styles.navItem, {
-                backgroundColor: item.active
-                  ? (isCityTheme ? theme.accent + '22' : theme.accentSoft)
-                  : 'transparent',
-                borderColor: item.active ? theme.accent + '66' : 'transparent',
-              }]}
-            >
-              <Text style={[styles.navEmoji, item.active && { fontSize: 28 }]}>
-                {item.emoji}
-              </Text>
-              <Text style={[styles.navLabel, {
-                color: item.active ? theme.accent : theme.textMuted,
-                fontWeight: item.active ? '800' : '600',
+            <ThemedCard key={i} onPress={item.onPress} style={styles.navItem}>
+              <View style={[styles.navCircle, {
+                borderColor:     item.active ? theme.accent : theme.borderCard,
+                backgroundColor: item.active ? theme.accentSoft : (isCityTheme ? theme.accent + '0c' : theme.bgCard),
               }]}>
+                <Text style={styles.navEmoji}>{item.emoji}</Text>
+              </View>
+              <Text style={[styles.navLabel, { color: item.active ? theme.accent : theme.textMuted }]}>
                 {item.label}
               </Text>
-            </TouchableOpacity>
+            </ThemedCard>
           ))}
         </View>
       </Animated.View>
@@ -417,6 +374,7 @@ export default function HomeScreen({
     </>
   );
 
+  // ── الخلفية من ThemeBackground في ThemeContext ──
   return (
     <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       {screenContent}
@@ -425,8 +383,6 @@ export default function HomeScreen({
 }
 
 
-const TOP_BAR_H = 50; // ارتفاع موحد لكل عناصر الـ topBar
-
 const styles = StyleSheet.create({
   container:       { flex: 1, alignItems: 'center', justifyContent: 'space-between', paddingVertical: 52, paddingHorizontal: 20 },
   star:            { position: 'absolute', borderRadius: 99 },
@@ -434,150 +390,57 @@ const styles = StyleSheet.create({
   skylineWrap:     { position: 'absolute', bottom: 0, left: 0, right: 0, height: 190, zIndex: 5 },
   skylineImg:      { width: '100%', height: '100%' },
   skylineFade:     { position: 'absolute', bottom: 0, left: 0, right: 0, height: 65 },
-
-  // ── Header / Title ──
   header:          { alignItems: 'center', marginTop: 10 },
   titleRow:        { flexDirection: 'row', alignItems: 'baseline' },
   titleLetter:     { fontSize: 68, fontWeight: '900', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 24, letterSpacing: 2 },
   subtitle:        { fontSize: 16, marginTop: 6, letterSpacing: 1 },
-
-  // ── Top Bar ──
-  topBar:          {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingHorizontal: 4,
-    height: TOP_BAR_H,
-  },
-  topRight:        { flexDirection: 'row', alignItems: 'center', gap: 8, height: TOP_BAR_H },
-
-  // Chip مشترك للقلوب والتوكنز
-  topBarChip:      {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 0,
-    borderRadius: 14,
-    borderWidth: 1,
-    height: TOP_BAR_H,
-  },
-  chipText:        { fontSize: 15, fontWeight: '800' },
-  chipSub:         { fontSize: 9, marginLeft: 2 },
-
-  // Profile Chip — يسار
-  profileChip:     {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 0,
-    borderRadius: 14,
-    borderWidth: 1,
-    height: TOP_BAR_H,
-    maxWidth: 150,
-  },
-  profileChipIcon: { fontSize: 16 },
-  profileChipName: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
-
-  // ── High Score ──
+  // topBar (replaced userBar)
+  topBar:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 4 },
+  topLeft:         { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topTokenBtn:     { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  topTokenText:    { fontSize: 14, fontWeight: '700' },
+  settingsBtn:     { padding: 4 },
+  settingsIcon:    { fontSize: 20 },
+  currencyRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // القلوب
+  heartsBtn:       { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  heartIcon:       { fontSize: 13 },
+  heartsCount:     { fontSize: 14, fontWeight: '800' },
+  heartsCountdown: { fontSize: 10, marginLeft: 2 },
+  // التوكنز
+  tokenBtn:        { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  tokenText:       { fontSize: 14, fontWeight: '700' },
+  // زر المستخدم/الملف الشخصي
+  userInfoBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  profileBtn:      { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 7, paddingVertical: 5, borderRadius: 14, borderWidth: 1 },
+  profileIcon:     { fontSize: 13 },
+  profileLevel:    { fontSize: 11, fontWeight: '900' },
+  userText:        { fontSize: 12, fontWeight: '600', maxWidth: 72 },
+  // باقي العناصر
+  // ── Quick Games ──
+  quickSection:   { gap: 6, marginBottom: 10 },
+  quickLabel:     { fontSize: 11, textAlign: 'center' },
+  quickRow:       { flexDirection: 'row', gap: 8 },
+  quickItem:      { flex: 1, borderRadius: 14, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 4, alignItems: 'center', gap: 5, minWidth: 0 },
+  quickEmoji:     { fontSize: 20 },
+  quickName:      { fontSize: 10, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
+  // ── BottomNav ──
+  bottomNav:      { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', width: '100%', paddingTop: 8 },
+  navItem:        { alignItems: 'center', gap: 4 },
+  navCircle:      { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  navEmoji:       { fontSize: 20 },
+  navLabel:       { fontSize: 9, fontWeight: '800' },
   highScoreBar:    { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14, borderWidth: 1, width: '100%', alignItems: 'center' },
   highScoreText:   { fontSize: 14, fontWeight: '700' },
-
-  // ── Arena Cards ──
   arenaRow:        { flexDirection: 'row', gap: 14, width: '100%' },
-  arenaCard:       {
-    borderRadius: 24,
-    borderWidth: 1.5,
-    padding: 20,
-    alignItems: 'center',
-    gap: 10,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  arenaIconWrap:   {
-    width: 76,
-    height: 76,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // مركز أفقياً داخل البطاقة
-    alignSelf: 'center',
-  },
-  arenaEmoji:      { fontSize: 38 },
-  arenaTitle:      {
-    fontSize: 16,
-    fontWeight: '900',
-    textAlign: 'center',
-    // سطر واحد — إذا احتاج يضغط الخط
-    lineHeight: 22,
-    flexShrink: 1,
-  },
+  arenaCard:       { borderRadius: 24, borderWidth: 1.5, padding: 20, alignItems: 'center', gap: 10, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.14, shadowRadius: 12, elevation: 6 },
+  arenaIconWrap:   { width: 72, height: 72, borderRadius: 20, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  arenaEmoji:      { fontSize: 36 },
+  arenaTitle:      { fontSize: 18, fontWeight: '900', textAlign: 'center', lineHeight: 26 },
   arenaDesc:       { fontSize: 11, textAlign: 'center', lineHeight: 17 },
-
-  // ── Quick Games (الأكثر استخداماً) ──
-  quickSection:   { gap: 8, width: '100%' },
-  quickLabel:     { fontSize: 12, textAlign: 'center', fontWeight: '600', letterSpacing: 0.5 },
-  quickRow:       { flexDirection: 'row', gap: 8, width: '100%' },
-  quickItem:      {
-    flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    minWidth: 0,
-  },
-  quickEmoji:     { fontSize: 24 },
-  quickName:      { fontSize: 12, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
-
-  // ── BottomNav ──
+  arenaBadge:      { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, marginTop: 2 },
+  arenaBadgeText:  { fontSize: 11, fontWeight: '700' },
   friendsWrap:     { width: '100%' },
-  tournamentBtn:   {
-    flexDirection: 'row',
-    gap: 8,
-    borderWidth: 1.5,
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  tournamentText:  { fontSize: 17, fontWeight: '800' },
-
-  bottomNav:      {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'stretch',
-    width: '100%',
-    borderRadius: 20,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  navItem:        {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    gap: 4,
-    borderWidth: 0,
-    borderRadius: 0,
-  },
-  navEmoji:       { fontSize: 24, textAlign: 'center' },
-  navLabel:       {
-    fontSize: 11,
-    textAlign: 'center',
-    // يضمن أن النص في المنتصف دائماً
-    width: '100%',
-  },
+  friendsBtn:      { borderWidth: 1.5, borderRadius: 16, paddingVertical: 14, alignItems: 'center', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 4 },
+  friendsBtnText:  { fontSize: 17, fontWeight: '800' },
 });

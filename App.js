@@ -1,53 +1,755 @@
-import React from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+/**
+ * App.js — نسخة احترافية
+ * ════════════════════════════════════════════════════════════
+ *  ✅ State Machine واحدة بدل states متفرقة تتسابق
+ *  ✅ Offline-first: جلسة محفوظة تعمل بدون إنترنت
+ *  ✅ Firebase Auth: timeout ذكي + fallback فوري من cache
+ *  ✅ لا race condition ممكن — كل تحديث دفعة وحدة
+ *  ✅ ThemeBackground في ThemeContext — لا خلفيات في الشاشات
+ *  ✅ شاشة واحدة نشطة — لا KeepAlive لا تراكم
+ */
 
-// ── Core imports — نصف الأول ──
-import { ThemeProvider, useTheme, ALL_THEMES } from './ThemeContext';
-import { LanguageProvider, LangSync } from './I18n';
-import { ThemedButton } from './ThemedComponents';
-import ErrorBoundary from './ErrorBoundary';
-import NetStatus from './NetStatus';
-import { useTokenSync } from './useTokenSync';
-import { XPNotification, useXPNotify } from './XPNotification';
-import { useProStatus, usePurchasedThemes, isThemeUnlocked } from './ProService';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { BackHandler, Alert, View, ActivityIndicator, Modal, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCachedCategories } from './UseCachedCategories';
 import { auth } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import { initServerTime } from './ServerTime';
-import { useCachedCategories } from './UseCachedCategories';
 
-// ── شاشات أساسية ──
-import LoginScreen from './LoginScreen';
-import HomeScreen from './HomeScreen';
-import HeartsModal from './HeartsModal';
-import { loadHearts } from './HeartsService';
-import { initSoundService, playBgMusic } from './SoundService';
+const SESSION_KEY = 'almaydan_session';
+
+// ── Global crash reporter ──────────────────────────────────
+let _crashMessage = null;
+const _origHandler = global.ErrorUtils?.getGlobalHandler?.();
+global.ErrorUtils?.setGlobalHandler?.((error, isFatal) => {
+  _crashMessage = (isFatal ? '[FATAL] ' : '') + (error?.message || String(error));
+  Alert.alert(
+    '🔴 Crash',
+    _crashMessage + '\n\n' + (error?.stack?.slice(0, 300) || ''),
+    [{ text: 'OK' }]
+  );
+  _origHandler?.(error, isFatal);
+});
+
+// ── Providers ──
+import { ThemeProvider, useTheme, ALL_THEMES } from './ThemeContext';
+import { LanguageProvider, LangSync, tStatic } from './I18n';
+
+// ── Themed Components ──
+import { ThemedButton } from './ThemedComponents';
+
+// ── موثوقية التطبيق ──
+import ErrorBoundary from './ErrorBoundary';
+import NetStatus     from './NetStatus';
+import { useTokenSync }    from './useTokenSync';
+import { XPNotification, useXPNotify } from './XPNotification';
+import { useProStatus, usePurchasedThemes, isThemeUnlocked } from './ProService';
+
+// ── شاشات ──
 import OnboardingScreen, { EXPERIENCE_KEY, EXPERIENCES } from './OnboardingScreen';
+import LoginScreen          from './LoginScreen';
+import GameSetupScreen      from './GameSetupScreen';
+import GameBoardScreen      from './GameBoardScreen';
+import ResultsScreen        from './ResultsScreen';
+import AdminScreen          from './AdminScreen';
+import SettingsScreen       from './SettingsScreen';
+import TokenModal           from './TokenModal';
+import SoloGameScreen       from './SoloGameScreen';
+import OnlineGameScreen     from './OnlineGameScreen';
+import HomeScreen           from './HomeScreen';
+import KnowledgeArenaScreen from './KnowledgeArenaScreen';
+import GamesArenaScreen     from './GamesArenaScreen';
+import FriendsScreen        from './FriendsScreen';
+import ProfileScreen        from './ProfileScreen';
+import XOGameScreen         from './XOGameScreen';
+import BullshitGameScreen   from './BullshitGameScreen';
+import MafiaGameScreen      from './MafiaGameScreen';
+import CodenamesGameScreen  from './CodenamesGameScreen';
+import KoutGameScreen       from './KoutGameScreen';
+import ManAnaScreen         from './ManAnaScreen';
+import ActItOutScreen       from './ActItOutScreen';
+import TruthDareScreen      from './TruthDareScreen';
+import DominoGameScreen     from './DominoGameScreen';
+import BilootGameScreen     from './BilootGameScreen';
+import RankFriendsScreen    from './RankFriends';
+import NeverHaveIEver       from './NeverHaveIEverScreen';
+import DrawGuessScreen      from './DrawGuessGameScreen';
+import WordleGameScreen     from './WordleGameScreen';
+import WhoIsSpyScreen       from './WhoIsSpyScreen';
+import GuessImageScreen     from './GuessImageScreen';
 
-function Inner() {
+// ── القلوب ──
+import { loadHearts, spendHeart } from './HeartsService';
+import HeartsModal from './HeartsModal';
+
+// ── البطولة ──
+import { getActiveTournament, addTournamentScore, autoCreateNextTournament } from './TournamentService';
+
+// ── XP ──
+import {
+  recordOnlineGameEnd,
+  recordSoloGameEnd,
+  recordDailyLogin,
+  recordAdWatched,
+} from './XPService';
+
+// ── الأصوات ──
+import {
+  initSoundService,
+  playBgMusic,
+  playSound,
+} from './SoundService';
+
+const HIGHSCORE_KEY = 'almaydan_highscore';
+
+const AUTH_STATUS = {
+  LOADING:         'loading',
+  UNAUTHENTICATED: 'unauthenticated',
+  AUTHENTICATED:   'authenticated',
+};
+
+// ══════════════════════════════════════════════════════════════
+//  NoHeartsModal
+// ══════════════════════════════════════════════════════════════
+function NoHeartsModal({ visible, cost, onClose, onOpenHearts }) {
   const { theme } = useTheme();
+  if (!visible) return null;
   return (
-    <View style={[s.root, { backgroundColor: theme.bg }]}>
-      <Text style={[s.text, { color: theme.accent }]}>✅ Build 2 يعمل</Text>
-      <Text style={[s.sub, { color: theme.textSecondary }]}>Core imports OK</Text>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={nhStyles.overlay}>
+        <View style={[nhStyles.box, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+          <Text style={nhStyles.emoji}>💔</Text>
+          <Text style={[nhStyles.title, { color: theme.accent }]}>قلوب غير كافية</Text>
+          <Text style={[nhStyles.desc, { color: theme.textMuted }]}>
+            تحتاج {cost} {cost === 1 ? 'قلب' : 'قلبين'} لبدء هذه اللعبة
+          </Text>
+          <ThemedButton onPress={() => { onClose(); onOpenHearts(); }} label='احصل على قلوب ❤️' variant='primary' size='large' style={nhStyles.btn} />
+          <ThemedButton onPress={onClose} label='إلغاء' variant='ghost' size='medium' style={nhStyles.cancelBtn} />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+//  ExitAppModal — مودال الخروج المُصمَّم بالثيم
+// ══════════════════════════════════════════════════════════════
+function ExitAppModal({ visible, onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  if (!visible) return null;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={exitStyles.overlay}>
+        <View style={[exitStyles.box, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+          <Text style={[exitStyles.emoji]}>🚪</Text>
+          <Text style={[exitStyles.title, { color: theme.accent }]}>{tStatic('common.exit')}</Text>
+          <Text style={[exitStyles.msg, { color: theme.textMuted }]}>
+            {tStatic('common.exitConfirm') || 'هل تريد الخروج من التطبيق؟'}
+          </Text>
+          <View style={exitStyles.btns}>
+            <ThemedButton
+              onPress={onCancel}
+              label={tStatic('common.cancel')}
+              variant="ghost"
+              size="medium"
+              style={exitStyles.btn}
+            />
+            <ThemedButton
+              onPress={onConfirm}
+              label={tStatic('common.exit')}
+              variant="danger"
+              size="medium"
+              style={exitStyles.btn}
+            />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const exitStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 32 },
+  box:     { width: '100%', maxWidth: 340, borderRadius: 24, padding: 28, alignItems: 'center', gap: 10, borderWidth: 1 },
+  emoji:   { fontSize: 40 },
+  title:   { fontSize: 20, fontWeight: '900' },
+  msg:     { fontSize: 14, textAlign: 'center', lineHeight: 22 },
+  btns:    { flexDirection: 'row', gap: 12, marginTop: 8, width: '100%' },
+  btn:     { flex: 1 },
+});
+
+const nhStyles = StyleSheet.create({
+  overlay:    { flex: 1, backgroundColor: '#00000099', justifyContent: 'center', alignItems: 'center', padding: 32 },
+  box:        { width: '100%', borderRadius: 24, padding: 28, alignItems: 'center', gap: 12, borderWidth: 1 },
+  emoji:      { fontSize: 52 },
+  title:      { fontSize: 20, fontWeight: '900' },
+  desc:       { fontSize: 14, textAlign: 'center', lineHeight: 22 },
+  btn:        { paddingVertical: 14, paddingHorizontal: 32, borderRadius: 16, marginTop: 4 },
+  btnText:    { fontSize: 16, fontWeight: '800', color: '#fff' },
+  cancelBtn:  { paddingVertical: 8 },
+  cancelText: { fontSize: 14 },
+});
+
+const ADMIN_UIDS = ['Haho1'];
+
+const GAME_SCREENS = [
+  'xo', 'bullshit', 'mafia', 'codenames', 'kout', 'manana', 'actitout',
+  'wordle', 'truthdare', 'dominoes', 'biloot', 'rankfriends',
+  'neverhaveiever', 'drawguess', 'board', 'solo', 'soloTournament', 'online',
+  'whoisspy', 'guessimage',
+];
+
+// ══════════════════════════════════════════════════════════════
+//  MainApp
+// ══════════════════════════════════════════════════════════════
+function MainApp() {
+  const { theme, themeId, setThemeId } = useTheme();
+
+  const [authStatus,  setAuthStatus]  = useState(AUTH_STATUS.LOADING);
+  const [user,        setUser]        = useState(null);
+  const [experience,  setExperience]  = useState(null);
+  const [screen,      setScreen]      = useState('home');
+
+  const [initialTokens,     setInitialTokens]     = useState(30);
+  const [tokens, setTokens] = useTokenSync(user, initialTokens);
+  const [gameData,          setGameData]          = useState(null);
+  const [finalScores,       setFinalScores]       = useState(null);
+  const { categories } = useCachedCategories();
+
+  const { isPro }     = useProStatus(user);
+  const { purchased } = usePurchasedThemes(user);
+
+  useEffect(() => {
+    const current = ALL_THEMES.find(t => t.id === themeId);
+    if (current && !isThemeUnlocked(current, isPro, purchased)) {
+      setThemeId('dark');
+    }
+  }, [isPro]);
+
+  const [showTokenModal,    setShowTokenModal]    = useState(false);
+  const [highScore,         setHighScore]         = useState(0);
+  const [gameMode,          setGameMode]          = useState('local');
+  const [friendsInitialTab, setFriendsInitialTab] = useState('friends');
+
+  const [hearts,          setHearts]          = useState(3);
+  const [adsLeft,         setAdsLeft]         = useState(5);
+  const [showHeartsModal, setShowHeartsModal] = useState(false);
+  const [noHeartsVisible, setNoHeartsVisible] = useState(false);
+  const [noHeartsCost,    setNoHeartsCost]    = useState(1);
+  const [exitVisible,     setExitVisible]     = useState(false);
+
+  const activeTournamentRef = useRef(null);
+  const userRef             = useRef(null);
+  const xpNotify            = useXPNotify();
+  const authUnsubRef        = useRef(null);
+  const authTimeoutRef      = useRef(null);
+
+  useEffect(() => { userRef.current = user; }, [user]);
+
+  const commitSession = useCallback((sessionUser, sessionExp, targetScreen = 'home') => {
+    setUser(sessionUser);
+    setInitialTokens(sessionUser?.tokens ?? (sessionUser?.isGuest ? 0 : 30));
+    setExperience(sessionExp);
+    setScreen(targetScreen);
+    setAuthStatus(AUTH_STATUS.AUTHENTICATED);
+    // تهيئة القلوب دائماً (حتى بدون إنترنت) لتجنّب race condition مع spendHeart
+    loadHearts().then(h => { setHearts(h.hearts); setAdsLeft(h.adsLeft); }).catch(() => {});
+  }, []);
+
+  const commitLogout = useCallback(() => {
+    setUser(null);
+    setInitialTokens(30);
+    setScreen('home');
+    setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+  }, []);
+
+  useEffect(() => {
+    initSoundService().then(() => playBgMusic());
+  }, []);
+
+  useEffect(() => {
+    initServerTime().catch(() => {});
+
+    const boot = async () => {
+      try {
+        const [sessionRaw, expRaw, highScoreRaw] = await Promise.all([
+          AsyncStorage.getItem(SESSION_KEY),
+          AsyncStorage.getItem(EXPERIENCE_KEY),
+          AsyncStorage.getItem(HIGHSCORE_KEY),
+        ]);
+
+        if (highScoreRaw) setHighScore(parseInt(highScoreRaw, 10));
+
+        const savedExp = (expRaw === EXPERIENCES.GLOBAL || expRaw === EXPERIENCES.ARABIC)
+          ? expRaw
+          : EXPERIENCES.ARABIC;
+
+        if (!sessionRaw) {
+          setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+          return;
+        }
+
+        const session = JSON.parse(sessionRaw);
+
+        if (session?.isGuest) {
+          commitSession(session, savedExp);
+          return;
+        }
+
+        // Firebase Auth check with 2s timeout
+        let settled = false;
+        authTimeoutRef.current = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            commitSession(session, savedExp);
+          }
+        }, 2000);
+
+        authUnsubRef.current = onAuthStateChanged(auth, async (firebaseUser) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(authTimeoutRef.current);
+
+          if (!firebaseUser) {
+            commitLogout();
+            return;
+          }
+
+          const merged = { ...session, uid: firebaseUser.uid, email: firebaseUser.email };
+          await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(merged)).catch(() => {});
+          commitSession(merged, savedExp);
+
+          // load hearts
+          try {
+            const h = await loadHearts();
+            setHearts(h.hearts);
+            setAdsLeft(h.adsLeft);
+          } catch (_) {}
+
+          // daily login XP
+          try {
+            const r = await recordDailyLogin(firebaseUser.uid);
+            if (r?.isNew) xpNotify.current?.show(r);
+          } catch (_) {}
+
+          // tournament
+          try {
+            const tour = await getActiveTournament();
+            activeTournamentRef.current = tour;
+            await autoCreateNextTournament();
+          } catch (_) {}
+        });
+      } catch (e) {
+        setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+      }
+    };
+
+    boot();
+
+    return () => {
+      clearTimeout(authTimeoutRef.current);
+      authUnsubRef.current?.();
+    };
+  }, []);
+
+  const handleLogin = useCallback(async (userData) => {
+    const expRaw = await AsyncStorage.getItem(EXPERIENCE_KEY).catch(() => null);
+    const exp = (expRaw === EXPERIENCES.GLOBAL || expRaw === EXPERIENCES.ARABIC)
+      ? expRaw : EXPERIENCES.ARABIC;
+    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData)).catch(() => {});
+    commitSession(userData, exp);
+    try { const h = await loadHearts(); setHearts(h.hearts); setAdsLeft(h.adsLeft); } catch (_) {}
+    try {
+      const r = await recordDailyLogin(userData.uid);
+      if (r?.isNew) xpNotify.current?.show(r);
+    } catch (_) {}
+    try {
+      const tour = await getActiveTournament();
+      activeTournamentRef.current = tour;
+      await autoCreateNextTournament();
+    } catch (_) {}
+  }, [commitSession]);
+
+  const handleGuest = useCallback(async (guestData) => {
+    const expRaw = await AsyncStorage.getItem(EXPERIENCE_KEY).catch(() => null);
+    const exp = (expRaw === EXPERIENCES.GLOBAL || expRaw === EXPERIENCES.ARABIC)
+      ? expRaw : EXPERIENCES.ARABIC;
+    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(guestData)).catch(() => {});
+    commitSession(guestData, exp);
+  }, [commitSession]);
+
+  const handleLogout = useCallback(async () => {
+    clearTimeout(authTimeoutRef.current);
+    authUnsubRef.current?.();
+    try { await auth.signOut(); } catch (_) {}
+    await AsyncStorage.removeItem(SESSION_KEY).catch(() => {});
+    commitLogout();
+  }, [commitLogout]);
+
+  const tryStartGame = useCallback(async (targetScreen, cost = 1, extraAction = null, deferred = false) => {
+    if (isPro) {
+      if (extraAction) extraAction();
+      setScreen(targetScreen);
+      return;
+    }
+    if (deferred) {
+      if (extraAction) extraAction();
+      setScreen(targetScreen);
+      return;
+    }
+    const result = await spendHeart(cost);
+    if (!result.success) {
+      setNoHeartsCost(cost);
+      setNoHeartsVisible(true);
+      return;
+    }
+    setHearts(result.hearts);
+    if (extraAction) extraAction();
+    setScreen(targetScreen);
+  }, [isPro]);
+
+  const spendHeartNow = useCallback(async (cost = 1) => {
+    if (isPro) return true;
+    const result = await spendHeart(cost);
+    if (!result.success) {
+      setNoHeartsCost(cost);
+      setNoHeartsVisible(true);
+      return false;
+    }
+    setHearts(result.hearts);
+    return true;
+  }, [isPro]);
+
+  const onTournamentScore = useCallback(async (scoreToAdd) => {
+    if (!scoreToAdd || scoreToAdd <= 0) return;
+    const tournament = activeTournamentRef.current;
+    if (!tournament?.id || !tournament.isActive) return;
+    const u = userRef.current;
+    const userId = u?.uid ?? u?.id;
+    const name = u?.name ?? 'لاعب';
+    if (!userId) return;
+    await addTournamentScore(tournament.id, userId, name, scoreToAdd).catch(() => {});
+  }, []);
+
+  const onOnlineGameEnd = useCallback(async (gameName, won) => {
+    const u = userRef.current;
+    const uid = u?.uid || u?.guestId;
+    const isGuest = !!u?.isGuest;
+    playSound(won ? 'win' : 'lose');
+    if (!uid) return;
+    try {
+      const result = await recordOnlineGameEnd(uid, gameName, won, isGuest);
+      xpNotify.current?.show(result);
+      if (result?.levelReward > 0) setTokens(t => t + result.levelReward);
+    } catch (_) {}
+  }, []);
+
+  const onSoloGameEnd = useCallback(async (won) => {
+    const u = userRef.current;
+    const uid = u?.uid || u?.guestId;
+    const isGuest = !!u?.isGuest;
+    playSound(won ? 'win' : 'lose');
+    if (!uid) return;
+    try {
+      const result = await recordSoloGameEnd(uid, won, isGuest);
+      xpNotify.current?.show(result);
+      if (result?.levelReward > 0) setTokens(t => t + result.levelReward);
+    } catch (_) {}
+  }, []);
+
+  const onAdWatched = useCallback(async () => {
+    const u = userRef.current;
+    const uid = u?.uid || u?.guestId;
+    if (!uid) return;
+    try { await recordAdWatched(uid, !!u?.isGuest); } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (authStatus !== AUTH_STATUS.AUTHENTICATED) return false;
+      if (GAME_SCREENS.includes(screen)) {
+        Alert.alert(tStatic('common.leave') + ' 🚪', tStatic('leave.message'), [
+          { text: tStatic('common.cancel'), style: 'cancel' },
+          { text: tStatic('common.leave'), style: 'destructive', onPress: () => setScreen('games') },
+        ]);
+        return true;
+      }
+      if (['games','knowledge','friends','settings','profile'].includes(screen)) {
+        setScreen('home'); return true;
+      }
+      if (screen === 'home') {
+        setExitVisible(true);
+        return true;
+      }
+      return false;
+    });
+    return () => handler.remove();
+  }, [screen, authStatus]);
+
+  // ── LOADING ──
+  if (authStatus === AUTH_STATUS.LOADING) {
+    return (
+      <View style={{ flex:1, justifyContent:'center', alignItems:'center', backgroundColor:'#0f0f1a' }}>
+        <ActivityIndicator size="large" color="#f5c518" />
+      </View>
+    );
+  }
+
+  // ── UNAUTHENTICATED ──
+  if (authStatus === AUTH_STATUS.UNAUTHENTICATED) {
+    return <LoginScreen onLogin={handleLogin} onGuest={handleGuest} />;
+  }
+
+  // ── AUTHENTICATED ──
+  const isGlobal = experience === EXPERIENCES.GLOBAL;
+  const cats = isGlobal
+    ? categories.filter(c => !c.lang || c.lang === 'en')
+    : categories.filter(c => !c.lang || c.lang === 'ar');
+
+  const sharedProps = {
+    user, tokens, setTokens, setScreen,
+    showTokenModal, setShowTokenModal,
+    highScore, experience, isGlobal,
+    hearts, setHearts,
+    isPro,
+    onOpenHeartsModal: () => setShowHeartsModal(true),
+    activeTournament: activeTournamentRef.current,
+  };
+
+  const commonModals = (
+    <>
+      {/* مودال تأكيد الخروج — مُصمَّم بالثيم */}
+      <ExitAppModal
+        visible={exitVisible}
+        onCancel={() => setExitVisible(false)}
+        onConfirm={() => { setExitVisible(false); BackHandler.exitApp(); }}
+      />
+      <HeartsModal
+        visible={showHeartsModal}
+        onClose={() => setShowHeartsModal(false)}
+        hearts={hearts}
+        setHearts={setHearts}
+        tokens={tokens}
+        setTokens={setTokens}
+        adsLeft={adsLeft}
+        setAdsLeft={setAdsLeft}
+        onAdWatched={onAdWatched}
+      />
+      <NoHeartsModal
+        visible={noHeartsVisible}
+        cost={noHeartsCost}
+        onClose={() => setNoHeartsVisible(false)}
+        onOpenHearts={() => { setNoHeartsVisible(false); setShowHeartsModal(true); }}
+      />
+    </>
+  );
+
+  // ── renderScreen: شاشة واحدة نشطة فقط ──
+  function renderScreen() {
+    switch (screen) {
+      case 'home':
+        return <HomeScreen {...sharedProps} />;
+
+      case 'games':
+        return (
+          <GamesArenaScreen
+            setScreen={setScreen}
+            user={user}
+            setGameMode={setGameMode}
+            tryStartGame={(sc, cost, extra) => tryStartGame(sc, cost, extra, true)}
+          />
+        );
+
+      case 'knowledge':
+        return (
+          <KnowledgeArenaScreen
+            {...sharedProps}
+            tryStartGame={tryStartGame}
+            currentUser={user}
+            categories={cats}
+          />
+        );
+
+      case 'friends':
+        return <FriendsScreen user={user} setScreen={setScreen} initialTab={friendsInitialTab} />;
+
+      case 'profile':
+        return <ProfileScreen user={user} setScreen={setScreen} onLogout={handleLogout} />;
+
+      case 'settings':
+        return (
+          <SettingsScreen
+            onBack={() => setScreen('home')}
+            user={user} tokens={tokens} setTokens={setTokens}
+            experience={experience} isPro={isPro} purchased={purchased}
+            onChangeExperience={async (newExp) => {
+              await AsyncStorage.setItem(EXPERIENCE_KEY, newExp).catch(() => {});
+              setExperience(newExp);
+            }}
+            onLogout={handleLogout}
+          />
+        );
+
+      case 'admin':
+        return ADMIN_UIDS.includes(user?.uid)
+          ? <AdminScreen onBack={() => setScreen('home')} />
+          : null;
+
+      case 'setup':
+        return (
+          <GameSetupScreen
+            onStart={({ team1, team2, categories: catCount, selected }) => {
+              const selectedCats = categories.filter(c => selected.includes(c.id));
+              setGameData({ team1, team2, categories: catCount, selectedCategories: selectedCats });
+              setScreen('board');
+            }}
+            onBack={() => setScreen('knowledge')}
+            categories={categories}
+            experience={experience}
+            tokens={tokens}
+            setTokens={setTokens}
+            onOpenTokenModal={() => setShowTokenModal(true)}
+          />
+        );
+
+      case 'board':
+        return gameData ? (
+          <GameBoardScreen
+            {...gameData}
+            onBack={() => setScreen('knowledge')}
+            onGameEnd={(scores) => { setFinalScores(scores); setScreen('results'); }}
+            tokens={tokens}
+            setTokens={setTokens}
+            currentUser={user}
+          />
+        ) : null;
+
+      case 'results':
+        return finalScores ? (
+          <ResultsScreen
+            scores={finalScores}
+            onBack={() => setScreen('knowledge')}
+            onPlayAgain={() => setScreen('setup')}
+            onTournamentScore={onTournamentScore}
+          />
+        ) : null;
+
+      case 'solo':
+        return (
+          <SoloGameScreen
+            categories={cats}
+            onBack={() => setScreen('knowledge')}
+            playerName={user?.name || 'لاعب'}
+            onHighScoreUpdate={(s) => setHighScore(s)}
+            onGameEnd={(won) => onSoloGameEnd(won)}
+            tokens={tokens}
+            setTokens={setTokens}
+            currentUser={user}
+            onAdWatched={onAdWatched}
+          />
+        );
+
+      case 'soloTournament':
+        return (
+          <SoloGameScreen
+            categories={cats}
+            onBack={() => setScreen('knowledge')}
+            playerName={user?.name || 'لاعب'}
+            onHighScoreUpdate={(s) => setHighScore(s)}
+            isTournament={true}
+            currentUser={user}
+            onTournamentScore={onTournamentScore}
+            onGameEnd={(won) => onSoloGameEnd(won)}
+            tokens={tokens}
+            setTokens={setTokens}
+            onAdWatched={onAdWatched}
+          />
+        );
+
+      case 'online':
+        return (
+          <OnlineGameScreen
+            categories={cats}
+            onBack={() => setScreen('knowledge')}
+            currentUser={user}
+            onTournamentScore={onTournamentScore}
+            onGameEnd={(won) => onOnlineGameEnd('trivia', won)}
+            tokens={tokens}
+            setTokens={setTokens}
+            onAdWatched={onAdWatched}
+          />
+        );
+
+      case 'xo':
+        return <XOGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('xo', won)} onGameReady={() => spendHeartNow(1)} />;
+      case 'bullshit':
+        return <BullshitGameScreen onBack={() => setScreen('games')} currentUser={user} mode={gameMode} onGameEnd={(won) => onOnlineGameEnd('bullshit', won)} onGameReady={() => spendHeartNow(1)} />;
+      case 'mafia':
+        return <MafiaGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('mafia', won)} onGameReady={() => spendHeartNow(1)} />;
+      case 'codenames':
+        return <CodenamesGameScreen onBack={() => setScreen('games')} currentUser={user} experience={experience} onGameEnd={(won) => onOnlineGameEnd('codenames', won)} onGameReady={() => spendHeartNow(1)} />;
+      case 'kout':
+        return <KoutGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('kout', won)} onGameReady={() => spendHeartNow(1)} />;
+      case 'dominoes':
+        return <DominoGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('domino', won)} onGameReady={() => spendHeartNow(1)} />;
+      case 'biloot':
+        return <BilootGameScreen onBack={() => setScreen('games')} currentUser={user} onGameEnd={(won) => onOnlineGameEnd('biloot', won)} onGameReady={() => spendHeartNow(1)} />;
+      case 'drawguess':
+        return <DrawGuessScreen onBack={() => setScreen('games')} currentUser={user} mode={gameMode} onGameEnd={(won) => onOnlineGameEnd('drawguess', won)} onGameReady={() => spendHeartNow(1)} />;
+      case 'wordle':
+        return <WordleGameScreen onBack={() => setScreen('games')} currentUser={user} experience={experience} onGameEnd={(won) => onOnlineGameEnd('wordle', won)} onGameReady={() => spendHeartNow(1)} />;
+      case 'actitout':
+        return <ActItOutScreen onBack={() => setScreen('games')} experience={experience} />;
+      case 'manana':
+        return !isGlobal ? <ManAnaScreen onBack={() => setScreen('games')} isGlobal={isGlobal} /> : null;
+      case 'truthdare':
+        return !isGlobal ? <TruthDareScreen onBack={() => setScreen('games')} /> : null;
+      case 'rankfriends':
+        return !isGlobal ? <RankFriendsScreen onBack={() => setScreen('games')} experience={experience} /> : null;
+      case 'neverhaveiever':
+        return <NeverHaveIEver onBack={() => setScreen('games')} experience={experience} />;
+      case 'whoisspy':
+        return !isGlobal ? <WhoIsSpyScreen onBack={() => setScreen('games')} currentUser={user} /> : null;
+      case 'guessimage':
+        return !isGlobal ? (
+          <GuessImageScreen
+            onBack={() => setScreen('games')}
+            currentUser={user}
+            onGameEnd={(won) => onOnlineGameEnd('guessimage', won)}
+            onGameReady={() => spendHeartNow(1)}
+          />
+        ) : null;
+
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      <NetStatus />
+      <XPNotification ref={xpNotify} />
+      <View style={{ flex: 1 }}>
+        {renderScreen()}
+      </View>
+      {commonModals}
     </View>
   );
 }
 
+// ══════════════════════════════════════════════════════════════
+//  App — Providers
+// ══════════════════════════════════════════════════════════════
 export default function App() {
   return (
     <ErrorBoundary>
       <LanguageProvider>
         <ThemeProvider>
-          <Inner />
+          <LangSync />
+          <MainApp />
         </ThemeProvider>
       </LanguageProvider>
     </ErrorBoundary>
   );
 }
-
-const s = StyleSheet.create({
-  root: { flex:1, alignItems:'center', justifyContent:'center' },
-  text: { fontSize:28, fontWeight:'900', marginBottom:8 },
-  sub:  { fontSize:16 },
-});

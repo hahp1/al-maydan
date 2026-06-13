@@ -109,7 +109,7 @@ function ChargingHeart({ size = 28, progress = 0 }) {
         toValue: 1,
         duration: 2500,
         easing: Easing.linear,
-        useNativeDriver: false,
+        useNativeDriver: true,
       })
     );
     loop.start();
@@ -129,7 +129,7 @@ function ChargingHeart({ size = 28, progress = 0 }) {
             toValue: 1,
             duration,
             easing: Easing.inOut(Easing.sin),
-            useNativeDriver: false,
+            useNativeDriver: true,
           }),
         ])
       );
@@ -147,8 +147,8 @@ function ChargingHeart({ size = 28, progress = 0 }) {
     if (safeProgress < 0.05) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
-        Animated.timing(glowAnim, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
+        Animated.timing(glowAnim, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
     );
     loop.start();
@@ -161,7 +161,12 @@ function ChargingHeart({ size = 28, progress = 0 }) {
     outputRange: [-30, 0],   // موجة تنزلق من اليسار لليمين
   });
 
-  // ─── فقاعات: opacity نابض ──
+  // ─── فقاعات: عمودي من أسفل السائل لسطحه ──
+  const bubbleTranslate = (anim) => anim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [10, -40 * safeProgress],  // ترتفع
+  });
+
   const bubbleOpacity = (anim) => anim.interpolate({
     inputRange:  [0, 0.1, 0.85, 1],
     outputRange: [0,   0.7, 0.7, 0],
@@ -173,39 +178,8 @@ function ChargingHeart({ size = 28, progress = 0 }) {
     outputRange: [0.25, 0.55],
   });
 
-  // ─── bubble Y positions كـ Animated props مباشرة ──
-  const b1y = bubble1Anim.interpolate({ inputRange: [0, 1], outputRange: [HEART_Y_BOTTOM - 5, HEART_Y_BOTTOM - 5 - 40 * safeProgress] });
-  const b2y = bubble2Anim.interpolate({ inputRange: [0, 1], outputRange: [HEART_Y_BOTTOM - 8, HEART_Y_BOTTOM - 8 - 40 * safeProgress] });
-  const b3y = bubble3Anim.interpolate({ inputRange: [0, 1], outputRange: [HEART_Y_BOTTOM - 4, HEART_Y_BOTTOM - 4 - 40 * safeProgress] });
-
   return (
     <View style={{ width: size, height: size }}>
-      {/* ─── Glow overlay: Animated.View خارج Svg تماماً ─── */}
-      {safeProgress > 0.05 && (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFillObject,
-            { opacity: glowOpacity, overflow: 'hidden' },
-          ]}
-        >
-          <Svg width={size} height={size} viewBox="0 0 100 100">
-            <Defs>
-              <RadialGradient id="chgGlowOuter" cx="50%" cy="70%" r="50%">
-                <Stop offset="0%"   stopColor={colors.xlight} stopOpacity="0.4" />
-                <Stop offset="100%" stopColor={colors.base}   stopOpacity="0" />
-              </RadialGradient>
-              <ClipPath id="chgGlowClip">
-                <Path d={HEART_PATH} />
-              </ClipPath>
-            </Defs>
-            <G clipPath="url(#chgGlowClip)">
-              <Path d={HEART_PATH} fill="url(#chgGlowOuter)" />
-            </G>
-          </Svg>
-        </Animated.View>
-      )}
-
       <Svg width={size} height={size} viewBox="0 0 100 100">
         <Defs>
           {/* ─── خلفية القلب الفارغة (outline) ─── */}
@@ -228,6 +202,12 @@ function ChargingHeart({ size = 28, progress = 0 }) {
             <Stop offset="100%" stopColor="#ffffff" stopOpacity="0.0" />
           </LinearGradient>
 
+          {/* ─── glow داخلي ─── */}
+          <RadialGradient id="chgGlow" cx="50%" cy="70%" r="50%">
+            <Stop offset="0%"   stopColor={colors.xlight} stopOpacity="0.4" />
+            <Stop offset="100%" stopColor={colors.base}   stopOpacity="0" />
+          </RadialGradient>
+
           {/* ─── clip path: كل ما هو داخل القلب فقط ─── */}
           <ClipPath id="chgHeartClip">
             <Path d={HEART_PATH} />
@@ -239,7 +219,8 @@ function ChargingHeart({ size = 28, progress = 0 }) {
 
         {/* ─── السائل: clipped بشكل القلب ─── */}
         <G clipPath="url(#chgHeartClip)">
-          {/* الجسم السائل — يتحرك أفقياً بالموجة */}
+          {/* الجسم السائل — مستطيل يرتفع حسب progress */}
+          {/* نمدّ width لتغطية حركة الموجة */}
           <AnimatedG style={{ transform: [{ translateX: waveTranslateX }] }}>
             {/* الجزء السفلي المملوء بالكامل */}
             <Rect
@@ -249,6 +230,7 @@ function ChargingHeart({ size = 28, progress = 0 }) {
               height={100 - waterY}
               fill="url(#chgLiquid)"
             />
+
             {/* الموجة في الأعلى — path منحني sine */}
             <Path
               d={buildWavePath(waterY, 0)}
@@ -262,29 +244,45 @@ function ChargingHeart({ size = 28, progress = 0 }) {
             />
           </AnimatedG>
 
-          {/* ─── فقاعات: props مباشرة بدون style ─── */}
+          {/* glow داخلي */}
+          <Animated.View style={{ opacity: glowOpacity }}>
+            <Svg width="100%" height="100%" viewBox="0 0 100 100">
+              <Path d={HEART_PATH} fill="url(#chgGlow)" />
+            </Svg>
+          </Animated.View>
+
+          {/* ─── فقاعات (تظهر فقط إذا في سائل) ─── */}
           {safeProgress > 0.1 && (
             <>
               <AnimatedCircle
                 cx="38"
-                cy={b1y}
+                cy={HEART_Y_BOTTOM - 5}
                 r="1.8"
                 fill={colors.xlight}
-                fillOpacity={bubbleOpacity(bubble1Anim)}
+                style={{
+                  opacity: bubbleOpacity(bubble1Anim),
+                  transform: [{ translateY: bubbleTranslate(bubble1Anim) }],
+                }}
               />
               <AnimatedCircle
                 cx="55"
-                cy={b2y}
+                cy={HEART_Y_BOTTOM - 8}
                 r="1.2"
                 fill={colors.xlight}
-                fillOpacity={bubbleOpacity(bubble2Anim)}
+                style={{
+                  opacity: bubbleOpacity(bubble2Anim),
+                  transform: [{ translateY: bubbleTranslate(bubble2Anim) }],
+                }}
               />
               <AnimatedCircle
                 cx="48"
-                cy={b3y}
+                cy={HEART_Y_BOTTOM - 4}
                 r="1.5"
                 fill={colors.xlight}
-                fillOpacity={bubbleOpacity(bubble3Anim)}
+                style={{
+                  opacity: bubbleOpacity(bubble3Anim),
+                  transform: [{ translateY: bubbleTranslate(bubble3Anim) }],
+                }}
               />
             </>
           )}

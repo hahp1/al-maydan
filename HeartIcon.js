@@ -155,8 +155,8 @@ function HeartIcon({
     if (styleType === 'crystal' || styleType === 'city') {
       const loop = Animated.loop(
         Animated.sequence([
-          Animated.timing(shimmerAnim, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
-          Animated.timing(shimmerAnim, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
+          Animated.timing(shimmerAnim, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(shimmerAnim, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         ])
       );
       loop.start();

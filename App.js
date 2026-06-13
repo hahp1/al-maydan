@@ -1,5 +1,5 @@
 /**
- * App.js — نسخة احترافية
+ * App.js — نسخة احترافية + Lazy Loading للألعاب
  * ════════════════════════════════════════════════════════════
  *  ✅ State Machine واحدة بدل states متفرقة تتسابق
  *  ✅ Offline-first: جلسة محفوظة تعمل بدون إنترنت
@@ -7,9 +7,10 @@
  *  ✅ لا race condition ممكن — كل تحديث دفعة وحدة
  *  ✅ ThemeBackground في ThemeContext — لا خلفيات في الشاشات
  *  ✅ شاشة واحدة نشطة — لا KeepAlive لا تراكم
+ *  ✅ Lazy Loading: كل لعبة تُحمَّل عند فتحها فقط (أسرع + ذاكرة أقل)
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { BackHandler, Alert, View, ActivityIndicator, Modal, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCachedCategories } from './UseCachedCategories';
@@ -18,19 +19,6 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { initServerTime } from './ServerTime';
 
 const SESSION_KEY = 'almaydan_session';
-
-// ── Global crash reporter ──────────────────────────────────
-let _crashMessage = null;
-const _origHandler = global.ErrorUtils?.getGlobalHandler?.();
-global.ErrorUtils?.setGlobalHandler?.((error, isFatal) => {
-  _crashMessage = (isFatal ? '[FATAL] ' : '') + (error?.message || String(error));
-  Alert.alert(
-    '🔴 Crash',
-    _crashMessage + '\n\n' + (error?.stack?.slice(0, 300) || ''),
-    [{ text: 'OK' }]
-  );
-  _origHandler?.(error, isFatal);
-});
 
 // ── Providers ──
 import { ThemeProvider, useTheme, ALL_THEMES } from './ThemeContext';
@@ -46,38 +34,41 @@ import { useTokenSync }    from './useTokenSync';
 import { XPNotification, useXPNotify } from './XPNotification';
 import { useProStatus, usePurchasedThemes, isThemeUnlocked } from './ProService';
 
-// ── شاشات ──
+// ── شاشات أساسية (تُحمَّل فوراً — تظهر عند البدء) ──
 import OnboardingScreen, { EXPERIENCE_KEY, EXPERIENCES } from './OnboardingScreen';
 import LoginScreen          from './LoginScreen';
-import GameSetupScreen      from './GameSetupScreen';
-import GameBoardScreen      from './GameBoardScreen';
-import ResultsScreen        from './ResultsScreen';
-import AdminScreen          from './AdminScreen';
-import SettingsScreen       from './SettingsScreen';
-import TokenModal           from './TokenModal';
-import SoloGameScreen       from './SoloGameScreen';
-import OnlineGameScreen     from './OnlineGameScreen';
 import HomeScreen           from './HomeScreen';
 import KnowledgeArenaScreen from './KnowledgeArenaScreen';
 import GamesArenaScreen     from './GamesArenaScreen';
 import FriendsScreen        from './FriendsScreen';
 import ProfileScreen        from './ProfileScreen';
-import XOGameScreen         from './XOGameScreen';
-import BullshitGameScreen   from './BullshitGameScreen';
-import MafiaGameScreen      from './MafiaGameScreen';
-import CodenamesGameScreen  from './CodenamesGameScreen';
-import KoutGameScreen       from './KoutGameScreen';
-import ManAnaScreen         from './ManAnaScreen';
-import ActItOutScreen       from './ActItOutScreen';
-import TruthDareScreen      from './TruthDareScreen';
-import DominoGameScreen     from './DominoGameScreen';
-import BilootGameScreen     from './BilootGameScreen';
-import RankFriendsScreen    from './RankFriends';
-import NeverHaveIEver       from './NeverHaveIEverScreen';
-import DrawGuessScreen      from './DrawGuessGameScreen';
-import WordleGameScreen     from './WordleGameScreen';
-import WhoIsSpyScreen       from './WhoIsSpyScreen';
-import GuessImageScreen     from './GuessImageScreen';
+import SettingsScreen       from './SettingsScreen';
+
+// ══════════════════════════════════════════════════════════════
+//  Lazy Screens — تُحمَّل عند فتحها فقط (ذاكرة أقل + فتح أسرع)
+// ══════════════════════════════════════════════════════════════
+const GameSetupScreen   = lazy(() => import('./GameSetupScreen'));
+const GameBoardScreen   = lazy(() => import('./GameBoardScreen'));
+const ResultsScreen     = lazy(() => import('./ResultsScreen'));
+const AdminScreen       = lazy(() => import('./AdminScreen'));
+const SoloGameScreen    = lazy(() => import('./SoloGameScreen'));
+const OnlineGameScreen  = lazy(() => import('./OnlineGameScreen'));
+const XOGameScreen      = lazy(() => import('./XOGameScreen'));
+const BullshitGameScreen= lazy(() => import('./BullshitGameScreen'));
+const MafiaGameScreen   = lazy(() => import('./MafiaGameScreen'));
+const CodenamesGameScreen= lazy(() => import('./CodenamesGameScreen'));
+const KoutGameScreen    = lazy(() => import('./KoutGameScreen'));
+const ManAnaScreen      = lazy(() => import('./ManAnaScreen'));
+const ActItOutScreen    = lazy(() => import('./ActItOutScreen'));
+const TruthDareScreen   = lazy(() => import('./TruthDareScreen'));
+const DominoGameScreen  = lazy(() => import('./DominoGameScreen'));
+const BilootGameScreen  = lazy(() => import('./BilootGameScreen'));
+const RankFriendsScreen = lazy(() => import('./RankFriends'));
+const NeverHaveIEver    = lazy(() => import('./NeverHaveIEverScreen'));
+const DrawGuessScreen   = lazy(() => import('./DrawGuessGameScreen'));
+const WordleGameScreen  = lazy(() => import('./WordleGameScreen'));
+const WhoIsSpyScreen    = lazy(() => import('./WhoIsSpyScreen'));
+const GuessImageScreen  = lazy(() => import('./GuessImageScreen'));
 
 // ── القلوب ──
 import { loadHearts, spendHeart } from './HeartsService';
@@ -108,6 +99,22 @@ const AUTH_STATUS = {
   UNAUTHENTICATED: 'unauthenticated',
   AUTHENTICATED:   'authenticated',
 };
+
+// ══════════════════════════════════════════════════════════════
+//  ScreenLoader — شاشة تحميل أنيقة بالثيم (تظهر جزء من الثانية)
+// ══════════════════════════════════════════════════════════════
+function ScreenLoader() {
+  const { theme } = useTheme();
+  return (
+    <View style={[loaderStyles.root, { backgroundColor: theme.bg }]}>
+      <ActivityIndicator size="large" color={theme.accent} />
+    </View>
+  );
+}
+
+const loaderStyles = StyleSheet.create({
+  root: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+});
 
 // ══════════════════════════════════════════════════════════════
 //  NoHeartsModal
@@ -731,7 +738,9 @@ function MainApp() {
       <NetStatus />
       <XPNotification ref={xpNotify} />
       <View style={{ flex: 1 }}>
-        {renderScreen()}
+        <Suspense fallback={<ScreenLoader />}>
+          {renderScreen()}
+        </Suspense>
       </View>
       {commonModals}
     </View>

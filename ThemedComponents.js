@@ -257,21 +257,6 @@ export const ThemedCard = memo(function ThemedCard({
   const cardShadow = variant === 'accent'   ? tk.shadow        :
     { shadowColor: theme.accent, shadowOffset:{width:0,height:2}, shadowOpacity:0.08, shadowRadius:6, elevation:2 };
 
-  // استخرج layout props من style لتمريرها للـ View الداخلي
-  // حتى يعمل flexDirection:'row' وغيره على الـ children مباشرة
-  const flatStyle = style ? (Array.isArray(style) ? Object.assign({}, ...style.map(s => s||{})) : style) : {};
-  const layoutProps = {
-    flexDirection:    flatStyle.flexDirection,
-    alignItems:       flatStyle.alignItems,
-    justifyContent:   flatStyle.justifyContent,
-    flexWrap:         flatStyle.flexWrap,
-    gap:              flatStyle.gap,
-    flex:             flatStyle.flex,
-    alignSelf:        flatStyle.alignSelf,
-  };
-  // احذف القيم undefined لتجنب تأثيرات غير مقصودة
-  Object.keys(layoutProps).forEach(k => layoutProps[k] === undefined && delete layoutProps[k]);
-
   const inner = (
     <LinearGradient
       colors={variant === 'accent' ? tk.gradColors :
@@ -296,7 +281,7 @@ export const ThemedCard = memo(function ThemedCard({
       {theme.isLight && variant==='accent' && (
         <GlowPulse color={theme.lightGlow||hexToRgba(theme.accent,0.10)} borderRadius={radius}/>
       )}
-      <View style={{position:'relative', zIndex:2, ...layoutProps}}>{children}</View>
+      <View style={{position:'relative',zIndex:2}}>{children}</View>
     </LinearGradient>
   );
 

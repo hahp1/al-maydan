@@ -575,7 +575,6 @@ export function WhoIsSpyEngraving({ theme }) {
 const CITY_STARS_CACHE_GB = {};
 function getCityStarsGB(themeId, count) {
   if (!CITY_STARS_CACHE_GB[themeId]) {
-  const { theme } = useTheme();
     CITY_STARS_CACHE_GB[themeId] = [...Array(count)].map((_, i) => ({
       key:     i,
       top:     `${(i * 43 + 7)  % 65}%`,

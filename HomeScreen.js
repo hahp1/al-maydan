@@ -292,9 +292,13 @@ export default function HomeScreen({
       <View style={styles.arenaRow}>
         {/* ميدان المعلومات */}
         <Animated.View style={{ transform: [{ translateY: slide1 }], opacity: fadeAnim, flex: 1 }}>
-          <ThemedCard
+          <TouchableOpacity
             onPress={() => setScreen('knowledge')}
-            style={styles.arenaCard}
+            activeOpacity={0.8}
+            style={[styles.arenaCard, {
+              backgroundColor: theme.accent + (theme.isLight ? '14' : '10'),
+              borderColor: theme.accent + (theme.isLight ? '50' : '38'),
+            }]}
           >
             <View style={[styles.arenaIconWrap, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
               <Text style={styles.arenaEmoji}>🧠</Text>
@@ -305,14 +309,18 @@ export default function HomeScreen({
             <Text style={[styles.arenaDesc, { color: theme.textMuted }]}>
               {t('home.knowledgeDesc')}
             </Text>
-          </ThemedCard>
+          </TouchableOpacity>
         </Animated.View>
 
         {/* ميدان الألعاب */}
         <Animated.View style={{ transform: [{ translateY: slide2 }], opacity: fadeAnim, flex: 1 }}>
-          <ThemedCard
+          <TouchableOpacity
             onPress={() => setScreen('games')}
-            style={styles.arenaCard}
+            activeOpacity={0.8}
+            style={[styles.arenaCard, {
+              backgroundColor: ( theme.purple || theme.accent ) + (theme.isLight ? '14' : '10'),
+              borderColor: ( theme.purple || theme.accent ) + (theme.isLight ? '50' : '38'),
+            }]}
           >
             <View style={[styles.arenaIconWrap, { backgroundColor: theme.purpleSoft, borderColor: theme.purpleBorder }]}>
               <Text style={styles.arenaEmoji}>🎲</Text>
@@ -323,7 +331,7 @@ export default function HomeScreen({
             <Text style={[styles.arenaDesc, { color: theme.textMuted }]}>
               {t('home.gamesDesc')}
             </Text>
-          </ThemedCard>
+          </TouchableOpacity>
         </Animated.View>
       </View>
 
@@ -339,19 +347,20 @@ export default function HomeScreen({
             { emoji: '🎭', nameAr: 'مافيا',    nameEn: 'Mafia',    screen: 'mafia'    },
             { emoji: '🤔', nameAr: 'من أنا؟',  nameEn: 'Who Am I', screen: 'manana'   },
           ].map(item => (
-            <ThemedCard
+            <TouchableOpacity
               key={item.screen}
               onPress={() => setScreen(item.screen)}
+              activeOpacity={0.75}
               style={[styles.quickItem, {
-                backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
-                borderColor: theme.borderCard,
+                backgroundColor: theme.accent + (theme.isLight ? '18' : '14'),
+                borderColor: theme.accent + (theme.isLight ? '55' : '40'),
               }]}
             >
               <Text style={styles.quickEmoji}>{item.emoji}</Text>
-              <Text style={[styles.quickName, { color: theme.textPrimary }]}>
+              <Text style={[styles.quickName, { color: theme.textPrimary }]} numberOfLines={1}>
                 {lang === 'en' ? item.nameEn : item.nameAr}
               </Text>
-            </ThemedCard>
+            </TouchableOpacity>
           ))}
         </View>
       </Animated.View>

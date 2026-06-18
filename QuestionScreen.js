@@ -10,7 +10,8 @@
  */
 
 import { useState, useEffect, useCallback, memo, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, StatusBar, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, StatusBar, ScrollView, ActivityIndicator } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useTheme } from './ThemeContext';
 import { useT } from './I18n';
 import LifelinesBar from './LifelineBar';
@@ -58,10 +59,11 @@ const QuestionImage = memo(({ imageUrl, theme }) => {
       {error ? (
         <Text style={[imgStyles.errorText, { color: theme.textMuted }]}>📷 تعذّر تحميل الصورة</Text>
       ) : (
-        <Image
+        <ExpoImage
           source={{ uri: imageUrl }}
           style={imgStyles.image}
-          resizeMode="contain"
+          contentFit="contain"
+          cachePolicy="disk"
           onLoad={() => setLoading(false)}
           onError={() => { setLoading(false); setError(true); }}
         />

@@ -19,7 +19,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { GoogleAuthProvider, OAuthProvider, signInWithCredential } from 'firebase/auth';
+import { GoogleAuthProvider, OAuthProvider, signInWithCredential, signInAnonymously } from 'firebase/auth';
 import { saveUserToFirestore } from './UserService';
 import { useTheme } from './ThemeContext';
 import { useLanguage } from './I18n';
@@ -30,40 +30,54 @@ WebBrowser.maybeCompleteAuthSession();
 
 const GUEST_KEY = 'arena_guest_profile';
 
+const guestNameFor = (lang, suffix) => (lang === 'ar' ? `ضيف${suffix}` : `Guest${suffix}`);
+const randSuffix = () => {
+  const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const num = String(Date.now()).slice(-4);
+  const rand = CHARS[Math.floor(Math.random() * CHARS.length)] + CHARS[Math.floor(Math.random() * CHARS.length)];
+  return `${num}${rand}`;
+};
+
 const getOrCreateGuest = async (lang) => {
+  // 1) ضيف محفوظ مسبقاً؟ أرجِعه — مع ضمان جلسة Auth صالحة
   try {
     const raw = await AsyncStorage.getItem(GUEST_KEY);
-    if (raw) return JSON.parse(raw);
-    // 4 أرقام من timestamp + حرفان عشوائيان = فريد عملياً
-    const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const ts    = Date.now();
-    const num   = String(ts).slice(-4);
-    const rand  = CHARS[Math.floor(Math.random() * CHARS.length)] +
-                  CHARS[Math.floor(Math.random() * CHARS.length)];
-    const suffix = `${num}${rand}`;                           // مثال: 3847KX
-    const uid    = `#guest${suffix}`;                         // مثال: #guest3847KX
-    const name   = lang === 'ar' ? `ضيف${suffix}` : `Guest${suffix}`;
+    if (raw) {
+      const saved = JSON.parse(raw);
+      // إن لم تكن هناك جلسة Firebase Auth (ضيف قديم أو انتهت)، سجّل مجهولاً
+      if (!auth.currentUser) {
+        try { await signInAnonymously(auth); } catch (_) { /* offline — نُكمل بالمحفوظ */ }
+      }
+      return saved;
+    }
+  } catch (_) {}
+
+  // 2) ضيف جديد — سجّل دخولاً مجهولاً للحصول على auth.uid حقيقي
+  const suffix = randSuffix();
+  const name   = guestNameFor(lang, suffix);
+  const ts     = Date.now();
+
+  try {
+    const cred = await signInAnonymously(auth);
+    const uid  = cred.user.uid; // uid حقيقي من Firebase — تقبله كل القواعد
     const profile = { guestId: uid, uid, name, isGuest: true, tokens: 0, createdAt: ts };
     await AsyncStorage.setItem(GUEST_KEY, JSON.stringify(profile));
-    // سجّل الضيف في Firestore
+    // يُكتب الآن بنجاح لأن request.auth.uid == uid
     try {
       await setDoc(doc(db, 'users', uid), {
-        uid, name, isGuest: true, tokens: 0,
-        createdAt: ts, mergedTo: null,
+        uid, name, isGuest: true, tokens: 0, createdAt: ts, mergedTo: null,
       });
     } catch (e) {
       console.warn('Guest Firestore save:', e?.message);
     }
     return profile;
-  } catch {
-    const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const ts    = Date.now();
-    const num   = String(ts).slice(-4);
-    const rand  = CHARS[Math.floor(Math.random() * CHARS.length)] +
-                  CHARS[Math.floor(Math.random() * CHARS.length)];
-    const suffix = `${num}${rand}`;
-    const uid    = `#guest${suffix}`;
-    return { guestId: uid, uid, name: lang === 'ar' ? `ضيف${suffix}` : `Guest${suffix}`, isGuest: true, tokens: 0 };
+  } catch (e) {
+    // فشل Anonymous Auth (offline أو غير مفعّل) — fallback محلي بـ #guest
+    // يعمل أوفلاين؛ عند توفّر الإنترنت ستُنشأ جلسة Auth في فتح لاحق.
+    const uid     = `#guest${suffix}`;
+    const profile = { guestId: uid, uid, name, isGuest: true, tokens: 0, createdAt: ts };
+    try { await AsyncStorage.setItem(GUEST_KEY, JSON.stringify(profile)); } catch (_) {}
+    return profile;
   }
 };
 
@@ -197,6 +211,53 @@ async function checkMergeConflict(newUid) {
   }
 }
 
+// ════════════════════════════════════════════════════════════
+//  resolveAccountLogin — منطق الدخول بحساب (الحالات الثلاث)
+// ────────────────────────────────────────────────────────────
+//  1) ضيف له تقدّم → حساب جوجل/آبل جديد (لم يُسجّل من قبل):
+//       ننقل كامل تقدّم الضيف (توكنز/قلوب/ثيمات/XP/highScore) للحساب.
+//  2) ضيف → حساب مسجّل سابقاً (موجود في Firestore):
+//       لا دمج. نستخدم الحساب كما هو (المستخدم يريد تقدّمه القديم).
+//  3) لا ضيف → حساب (جديد أو قديم):
+//       سلوك عادي. جديد = 50 توكن ترحيبية، قديم = رصيده.
+//
+//  المفتاح: نفحص وجود المستند *قبل* إنشائه — لأن saveUserToFirestore
+//  يُنشئه بـ 50 توكن، وهذا كان يُفسد كشف "الحساب الجديد".
+// ════════════════════════════════════════════════════════════
+async function resolveAccountLogin(firebaseUser, profile) {
+  const uid = firebaseUser.uid;
+
+  // 1) هل الحساب موجود في Firestore قبل أن نلمسه؟
+  let existedBefore = false;
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    existedBefore = snap.exists();
+  } catch (_) {
+    existedBefore = false; // offline أو تعذّر — نعامله كجديد بحذر
+  }
+
+  // أنشئ/حدّث مستند المستخدم (إن كان موجوداً يحدّث الاسم/الصورة فقط)
+  const userData = await saveUserToFirestore({
+    uid, name: profile.name, email: profile.email, photo: profile.photo,
+  });
+
+  // 2) حساب مسجّل سابقاً → لا دمج، استخدمه كما هو
+  if (existedBefore) {
+    // لا نحذف بيانات الضيف المحلية (قد يعود لها لاحقاً)، فقط لا ندمج
+    return userData;
+  }
+
+  // 3) حساب جديد → إن وُجد ضيف له تقدّم، انقله بالكامل
+  try {
+    const result = await mergeGuestToAccount(uid, userData);
+    if (result?.merged && result.userData) {
+      return result.userData; // userData بعد نقل تقدّم الضيف
+    }
+  } catch (_) { /* تجاهل — نُكمل بالحساب الجديد العادي */ }
+
+  return userData;
+}
+
 export default function LoginScreen({ onLogin, onGuest }) {
   const { theme } = useTheme();
   const { t, lang, setLang } = useLanguage();
@@ -276,8 +337,8 @@ export default function LoginScreen({ onLogin, onGuest }) {
           const credential = GoogleAuthProvider.credential(null, accessToken);
           const result = await signInWithCredential(auth, credential);
           const u = result.user;
-          const userData = await saveUserToFirestore({
-            uid: u.uid, name: u.displayName, email: u.email, photo: u.photoURL,
+          const userData = await resolveAccountLogin(u, {
+            name: u.displayName, email: u.email, photo: u.photoURL,
           });
           await saveExperience(experience);
           onLogin(userData, experience);
@@ -287,17 +348,10 @@ export default function LoginScreen({ onLogin, onGuest }) {
         const credential = GoogleAuthProvider.credential(idToken);
         const result = await signInWithCredential(auth, credential);
         const u = result.user;
-        const userData = await saveUserToFirestore({
-          uid: u.uid, name: u.displayName, email: u.email, photo: u.photoURL,
+
+        const userData = await resolveAccountLogin(u, {
+          name: u.displayName, email: u.email, photo: u.photoURL,
         });
-        // تحقق من تعارض الضيف مع حساب موجود
-        const conflict = await checkMergeConflict(u.uid);
-        if (conflict) {
-          setMergeConflict({ newUid: u.uid, userData, exp: experience });
-          setLoadingGoogle(false);
-          return;
-        }
-        await mergeGuestToAccount(u.uid, userData).catch(() => {});
         await saveExperience(experience);
         onLogin(userData, experience);
       } catch (e) {
@@ -337,15 +391,9 @@ export default function LoginScreen({ onLogin, onGuest }) {
       const displayName = credential.fullName
         ? `${credential.fullName.givenName || ''} ${credential.fullName.familyName || ''}`.trim() || fallback
         : u.displayName || fallback;
-      const userData = await saveUserToFirestore({ uid: u.uid, name: displayName, email: u.email || credential.email, photo: u.photoURL });
-      // تحقق من تعارض الضيف مع حساب موجود
-      const conflict = await checkMergeConflict(u.uid);
-      if (conflict) {
-        setMergeConflict({ newUid: u.uid, userData, exp: experience });
-        setLoadingApple(false);
-        return;
-      }
-      await mergeGuestToAccount(u.uid, userData).catch(() => {});
+      const userData = await resolveAccountLogin(u, {
+        name: displayName, email: u.email || credential.email, photo: u.photoURL,
+      });
       await saveExperience(experience);
       onLogin(userData, experience);
     } catch (e) {

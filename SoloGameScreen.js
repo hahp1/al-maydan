@@ -63,20 +63,23 @@ function pickThreeCategories(allCategories, level) {
 }
 
 function pickQuestion(category, level) {
-  const qs = (category.questions || []).filter(q => q.level === level);
-  if (qs.length === 0) return null;
-  return qs[Math.floor(Math.random() * qs.length)];
+  const all = category.questions || [];
+  if (all.length === 0) return null;
+  // فضّل أسئلة المستوى الحالي
+  const atLevel = all.filter(q => q.level === level);
+  const pool = atLevel.length > 0 ? atLevel : all; // وإلا أي سؤال متاح
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 const CategoryCard = memo(({ cat, currentLevel, onPress, theme, t }) => {
-  const qCount = useMemo(() =>
-    (cat.questions || []).filter(q => q.level === currentLevel).length,
-  [cat.questions, currentLevel]);
+  // إجمالي الأسئلة المتاحة (أي مستوى) — الفئة قابلة للّعب طالما لديها أسئلة
+  const totalCount = useMemo(() => (cat.questions || []).length, [cat.questions]);
+  const playable = totalCount > 0;
 
   return (
     <ThemedCard
-      onPress={() => qCount > 0 && onPress(cat)}
-      style={[styles.catCard, qCount === 0 && { opacity: 0.4 }]}
+      onPress={() => playable && onPress(cat)}
+      style={[styles.catCard, !playable && { opacity: 0.4 }]}
     >
       {cat.isSpecial && (
         <View style={[styles.specialBadge, { backgroundColor: theme.accent }]}>
@@ -84,8 +87,10 @@ const CategoryCard = memo(({ cat, currentLevel, onPress, theme, t }) => {
         </View>
       )}
       <CachedCategoryImage imageUrl={cat.imageUrl} emoji={cat.emoji} size={52} />
-      <Text style={[styles.catName, { color: theme.textPrimary }]}>{cat.name}</Text>
-      <Text style={[styles.catCount, { color: theme.textMuted }]}>{qCount} {t('solo.questions')}</Text>
+      <Text style={[styles.catName, { color: theme.textPrimary }]} numberOfLines={2}>{cat.name}</Text>
+      <Text style={[styles.catCount, { color: theme.textMuted }]}>
+        {playable ? `${totalCount} ${t('solo.questions')}` : '🌐'}
+      </Text>
     </ThemedCard>
   );
 });
@@ -176,35 +181,46 @@ export default function SoloGameScreen({
 
   const startPicking = useCallback(async (levelIndex = currentLevelIndex) => {
     if (categories.length === 0) return; // الفئات لم تُحمَّل بعد
-    setLoadingPick(true);
     setSelectedCategory(null);
     setPhase('picking');
     const picked = pickThreeCategories(categories, LEVELS[levelIndex]);
+
+    // اعرض الفئات فوراً (بلا أسئلة بعد) — لا spinner، لا تعليق
+    setThreeCategories(picked.map(c => ({ ...c, questions: c.questions || [] })));
+    setLoadingPick(false);
+
+    // أثرِ بالأسئلة في الخلفية (الكاش يرجع فوراً أوفلاين، الشبكة تحدّث)
     try {
-      const qMap     = await fetchQuestionsForCategories(picked.map(c => c.id));
-      const enriched = picked.map(c => ({ ...c, questions: qMap[c.id] ?? [] }));
-      setThreeCategories(enriched);
+      const qMap = await fetchQuestionsForCategories(picked.map(c => c.id));
+      setThreeCategories(prev =>
+        prev.map(c => ({ ...c, questions: qMap[c.id] ?? c.questions ?? [] }))
+      );
     } catch {
-      setThreeCategories(picked);
-    } finally {
-      setLoadingPick(false);
+      /* نُبقي ما عُرض */
     }
   }, [currentLevelIndex, categories]);
 
-  const handlePickCategory = useCallback((cat) => {
-    const q = pickQuestion(cat, LEVELS[currentLevelIndex]);
+  const handlePickCategory = useCallback(async (cat) => {
+    let category = cat;
+    // إن لم تصل أسئلة الفئة بعد (عُرضت فوراً)، اجلبها الآن (كاش/شبكة)
+    if (!category.questions || category.questions.length === 0) {
+      try {
+        const qMap = await fetchQuestionsForCategories([cat.id]);
+        category = { ...cat, questions: qMap[cat.id] ?? [] };
+      } catch { /* نُكمل بما لدينا */ }
+    }
+    const q = pickQuestion(category, LEVELS[currentLevelIndex]);
     if (!q) { Alert.alert('', t('board.noCatsQ')); return; }
-    setSelectedCategory(cat);
+    setSelectedCategory(category);
     setCurrentQuestion(q);
     setChoices(shuffle([q.correct, ...q.wrong]));
     setSelectedChoice(null);
     setEliminated(new Set());
-    // وسائل المساعدة لا تتجدد بين الأسئلة — فقط عند لعبة جديدة
     setFrozen(false);
     setTimeLeft(TIMER_SECONDS);
     setPhase('question');
     startTimer();
-  }, [currentLevelIndex, t]);
+  }, [currentLevelIndex, t, startTimer]);
 
   const startTimer = useCallback(() => {
     clearInterval(timerRef.current);
@@ -407,7 +423,7 @@ export default function SoloGameScreen({
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' style={styles.headerBack} />
+            <ExitButton onPress={onBack} size={36} icon="back" />
             <GameInfoButton gameType="solo" lang={lang} />
             <WebScreenButton
               playerUid={currentUser?.uid || 'solo_p0'}
@@ -590,8 +606,8 @@ const styles = StyleSheet.create({
   roundDots:         { flexDirection: 'row', justifyContent: 'center', gap: 10 },
   dot:               { width: 10, height: 10, borderRadius: 5 },
   pickTitle:         { fontSize: 18, fontWeight: '800', textAlign: 'center' },
-  catsContainer:     { flex: 1, flexDirection: 'row', gap: 12, alignItems: 'stretch' },
-  catCard:           { flex: 1, borderRadius: 20, alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1.5, padding: 12, position: 'relative' },
+  catsContainer:     { flexDirection: 'row', gap: 12, alignItems: 'flex-start', justifyContent: 'center', marginTop: 16 },
+  catCard:           { flex: 1, aspectRatio: 0.72, maxWidth: 200, borderRadius: 20, alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1.5, padding: 12, position: 'relative' },
   specialBadge:      { position: 'absolute', top: 8, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   specialBadgeText:  { fontSize: 10, fontWeight: '800', color: '#000' },
   catEmoji:          { fontSize: 40 },

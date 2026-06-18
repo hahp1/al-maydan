@@ -395,7 +395,7 @@ const ACCENT_B = '#f9731640';
 // ══════════════════════════════════════════════════════════
 //  الشاشة الرئيسية للعبة
 // ══════════════════════════════════════════════════════════
-export default function WhoIsSpyScreen({ onBack, currentUser }) {
+export default function WhoIsSpyScreen({ onBack, currentUser, onHeartSpent }) {
   const { theme, themeId } = useTheme();
   // phase: 'menu' | 'local_setup' | 'local_play' | 'online_lobby'
   const [phase, setPhase] = useState('menu');
@@ -490,6 +490,7 @@ export default function WhoIsSpyScreen({ onBack, currentUser }) {
       <OnlineLobbyPhase
         theme={theme}
         currentUser={currentUser}
+        onHeartSpent={onHeartSpent}
         onBack={() => setPhase('menu')}
       />
     );
@@ -1111,7 +1112,7 @@ function ScoreChip({ players, scores, theme }) {
 // ══════════════════════════════════════════════════════════
 //  نمط 2 — روم الأونلاين (إنشاء / انضمام)
 // ══════════════════════════════════════════════════════════
-function OnlineLobbyPhase({ theme, currentUser, onBack }) {
+function OnlineLobbyPhase({ theme, currentUser, onBack, onHeartSpent }) {
   const [lobbyPhase, setLobbyPhase] = useState('choose'); // choose | create | join | waiting | play
   const [roomCode,   setRoomCode]   = useState('');
   const [inputCode,  setInputCode]  = useState('');
@@ -1137,8 +1138,9 @@ function OnlineLobbyPhase({ theme, currentUser, onBack }) {
       Alert.alert('💔 لا يوجد قلوب', 'تحتاج قلباً للعب. انتظر التجديد أو شاهد إعلاناً.');
       return false;
     }
+    onHeartSpent?.(); // حدّث عدّاد القلوب في الواجهة الرئيسية
     return true;
-  }, []);
+  }, [onHeartSpent]);
 
   // ── إنشاء روم ────────────────────────────────────────
   const createRoom = useCallback(async () => {

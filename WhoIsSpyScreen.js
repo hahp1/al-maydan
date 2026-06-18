@@ -1438,6 +1438,7 @@ function OnlineLobbyPhase({ theme, currentUser, onBack, onHeartSpent }) {
 //  نمط 2 — اللعب الأونلاين (داخل الروم)
 // ══════════════════════════════════════════════════════════
 function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName, isHost, onBack }) {
+  const { themeId } = useTheme();
   const [roomData,  setRoomData]  = useState(initialData);
   const [myVote,    setMyVote]    = useState(null);
   const [voted,     setVoted]     = useState(false);

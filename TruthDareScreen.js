@@ -479,6 +479,9 @@ function pick5(pool, usedRef) {
 //  SpinWheel
 // ══════════════════════════════════════════════════════════════
 const SpinWheel = memo(({ players, excludeId, onDone, label, theme }) => {
+  const { width: W } = useWindowDimensions();
+  const WHEEL_SIZE = Math.min(W * 0.78, 300);
+  const WHEEL_R    = WHEEL_SIZE / 2;
   const COLORS = theme.isLight ? SLICE_COLORS_LIGHT : SLICE_COLORS_DARK;
   const eligible = players.filter(p => p.id !== excludeId);
   const names = eligible;
@@ -660,28 +663,21 @@ function SetupScreen({ onStart, onBack, theme, t, rs }) {
 // ══════════════════════════════════════════════════════════════
 function ContentCards({ type, options, onSelect, theme, askerName, victimName }) {
   const isTruth = type === 'truth';
-  const color   = isTrue => isTrue ? '#3b82f6' : '#ef4444';
   return (
     <View style={styles.contentCardsWrap}>
       <Text style={[styles.contentCardsTitle, { color: theme.textSecondary }]}>
-        {isTrue => isTrue
-          ? `${askerName} — اختر سؤالاً لـ ${victimName}:`
-          : `${askerName} — اختر تحدياً لـ ${victimName}:`
-        }
-      </Text>
-      <Text style={[styles.contentCardsTitle, { color: theme.textSecondary }]}>
-        {askerName} — اختر {isTrue ? 'سؤالاً' : 'تحدياً'} لـ {victimName}:
+        {askerName} — اختر {isTruth ? 'سؤالاً' : 'تحدياً'} لـ {victimName}:
       </Text>
       {options.map((opt, i) => (
         <TouchableOpacity
           key={i}
           onPress={() => onSelect(opt)}
           style={[styles.contentCard, { backgroundColor: theme.bgCard,
-            borderColor: isTrue ? '#3b82f680' : '#ef444480' }]}
+            borderColor: isTruth ? '#3b82f680' : '#ef444480' }]}
           activeOpacity={0.75}
         >
-          <View style={[styles.contentCardNum, { backgroundColor: isTrue ? '#3b82f620' : '#ef444420' }]}>
-            <Text style={{ color: isTrue ? '#3b82f6' : '#ef4444', fontWeight: '900', fontSize: 13 }}>{i + 1}</Text>
+          <View style={[styles.contentCardNum, { backgroundColor: isTruth ? '#3b82f620' : '#ef444420' }]}>
+            <Text style={{ color: isTruth ? '#3b82f6' : '#ef4444', fontWeight: '900', fontSize: 13 }}>{i + 1}</Text>
           </View>
           <Text style={[styles.contentCardText, { color: theme.textPrimary }]}>{opt}</Text>
         </TouchableOpacity>

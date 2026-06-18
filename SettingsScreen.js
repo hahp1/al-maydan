@@ -7,7 +7,7 @@
  *  ✅ كل باقي الإعدادات محفوظة كما هي
  */
 
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, Pressable,
   StatusBar, ScrollView, Switch, Linking,
@@ -72,7 +72,11 @@ const Div = memo(({ theme }) => (
 ));
 
 const LangOption = memo(({ flag, name, sub, active, onPress, theme }) => (
-  <ThemedCard onPress={onPress} style={styles.langRow} variant={active ? 'accent' : 'default'}>
+  <TouchableOpacity
+    onPress={onPress}
+    activeOpacity={0.7}
+    style={[styles.langRow, active && { backgroundColor: (theme.accent || '#f5b301') + '14' }]}
+  >
     <View style={styles.langLeft}>
       <Text style={styles.langFlag}>{flag}</Text>
       <View>
@@ -83,7 +87,7 @@ const LangOption = memo(({ flag, name, sub, active, onPress, theme }) => (
     <View style={[styles.radio, { borderColor: active ? theme.accent : theme.borderCard }]}>
       {active && <View style={[styles.radioFill, { backgroundColor: theme.accent }]} />}
     </View>
-  </ThemedCard>
+  </TouchableOpacity>
 ));
 
 const ExperienceRow = memo(({ label, sub, current, onPress, theme }) => (
@@ -276,16 +280,16 @@ const ThemeRow = memo(({ item, isActive, unlocked = true, isPro = false, onSelec
 
       {/* الجانب الأيمن: اختيار / زر شراء / مفتوح */}
       {isLocked ? (
-        // زر الشراء
+        // زر الشراء — مثبّت في أقصى الطرف
         <ThemedButton
           onPress={() => onBuy(item)}
           label={`🪙 ${item.price}`}
           variant='secondary' size='small'
-          style={styles.buyBtn}
+          style={[styles.buyBtn, { marginStart: 'auto' }]}
         />
       ) : (
         // مؤشر الاختيار
-        <View style={[styles.themeRadio, { borderColor: isActive ? item.previewAccent : theme.border }]}>
+        <View style={[styles.themeRadio, { marginStart: 'auto', borderColor: isActive ? item.previewAccent : theme.border }]}>
           {isActive && <View style={[styles.themeRadioFill, { backgroundColor: item.previewAccent }]} />}
         </View>
       )}
@@ -526,6 +530,16 @@ export default function SettingsScreen({
   const [previewItem,    setPreviewItem]    = useState(null);
   const [previewVisible, setPreviewVisible] = useState(false);
 
+  // ── مشتريات محلية فورية: تُدمج مع الـ prop القادم من App.js ──
+  // تضمن أن الثيم المُشترى يُفتح في القائمة فوراً (حتى أوفلاين، قبل
+  // أن تعود قراءة usePurchasedThemes من AsyncStorage).
+  const [localPurchased, setLocalPurchased] = useState(() => new Set());
+  const effectivePurchased = useMemo(() => {
+    const base = purchased instanceof Set ? purchased : new Set();
+    if (localPurchased.size === 0) return base;
+    return new Set([...base, ...localPurchased]);
+  }, [purchased, localPurchased]);
+
   useEffect(() => {
     setMusicOn(getMusicEnabled());
     setSoundsOn(getSoundsEnabled());
@@ -535,12 +549,15 @@ export default function SettingsScreen({
   const handleToggleSounds = useCallback(async (v) => { setSoundsOn(v); await setSoundsEnabled(v); }, []);
   const handleSelectTheme = useCallback((id) => {
     const item = THEME_GROUPS.flatMap(g => g.themes).find(t => t.id === id);
-    if (!isThemeUnlocked(item, isPro, purchased)) return;
+    if (!isThemeUnlocked(item, isPro, effectivePurchased)) return;
     setThemeId(id);
-  }, [setThemeId, isPro, purchased]);
+  }, [setThemeId, isPro, effectivePurchased]);
 
   const handleBuyTheme = useCallback(async (item) => {
-    if (!user?.uid) return;
+    // الضيوف يستخدمون guestId، المسجّلون uid — كلاهما مدعوم
+    const buyerUid = user?.uid || user?.guestId;
+    if (!buyerUid) return;
+
     if (tokens < item.price) {
       showAlert(
         lang === 'ar' ? 'رصيد غير كافٍ' : 'Not enough tokens',
@@ -558,17 +575,22 @@ export default function SettingsScreen({
       [
         { text: lang === 'ar' ? 'إلغاء' : 'Cancel', style: 'cancel' },
         { text: lang === 'ar' ? 'شراء' : 'Buy', onPress: async () => {
-          const result = await purchaseTheme(user.uid, item.id, item.price, tokens);
+          const result = await purchaseTheme(buyerUid, item.id, item.price, tokens);
           if (result.success) {
+            // 1) افتح الثيم في الواجهة فوراً (محلياً)
+            setLocalPurchased(prev => new Set([...prev, item.id]));
+            // 2) اخصم التوكن (يُحفظ محلياً عبر useTokenSync، ويُرفع للمسجّلين)
             setTokens?.(result.newTokens);
+            // 3) طبّق الثيم مباشرة
             setThemeId(item.id);
           } else {
-            showAlert('❌', result.error || (lang === 'ar' ? 'حدث خطأ' : 'Error'), [{ text: lang === 'ar' ? 'حسناً' : 'OK' }]);
+            showAlert('❌', result.error || (lang === 'ar' ? 'حدث خطأ' : 'Error'),
+              [{ text: lang === 'ar' ? 'حسناً' : 'OK' }]);
           }
         }},
       ]
     );
-  }, [user?.uid, tokens, setTokens, setThemeId, lang]);
+  }, [user?.uid, user?.guestId, tokens, setTokens, setThemeId, lang, showAlert]);
 
   const handlePreview = useCallback((item) => {
     setPreviewItem(item);
@@ -753,7 +775,7 @@ Available at official launch.`,
             theme={theme}
             lang={lang}
             isPro={isPro}
-            purchased={purchased}
+            purchased={effectivePurchased}
           />
         ))}
 
@@ -773,9 +795,17 @@ Available at official launch.`,
 
       {/* ─── اللغة ─── */}
       <Section title={t('settings.langSection')} theme={theme}>
-        <LangOption flag="🇬🇧" name="English" sub="الإنجليزية" active={lang === 'en'} onPress={switchToEn} theme={theme} />
+        <LangOption
+          flag="🇬🇧"
+          name={lang === 'ar' ? 'الإنجليزية' : 'English'}
+          sub={lang === 'ar' ? 'English' : 'الإنجليزية'}
+          active={lang === 'en'} onPress={switchToEn} theme={theme} />
         <Div theme={theme} />
-        <LangOption flag="🇸🇦" name="العربية" sub="Arabic" active={lang === 'ar'} onPress={switchToAr} theme={theme} />
+        <LangOption
+          flag="🇸🇦"
+          name={lang === 'ar' ? 'العربية' : 'Arabic'}
+          sub={lang === 'ar' ? 'Arabic' : 'العربية'}
+          active={lang === 'ar'} onPress={switchToAr} theme={theme} />
       </Section>
 
       {/* ─── عن التطبيق ─── */}
@@ -804,8 +834,10 @@ Available at official launch.`,
         </ThemedCard>
       </Section>
 
-      {/* ─── تسجيل الخروج ─── */}
-      <ThemedButton onPress={handleLogout} label={t('settings.logout')} variant='danger' size='large' style={styles.logoutBtn} />
+      {/* ─── تسجيل الخروج — للحساب المسجّل فقط، لا الضيف ─── */}
+      {!isGuestUser && (
+        <ThemedButton onPress={handleLogout} label={t('settings.logout')} variant='danger' size='large' style={styles.logoutBtn} />
+      )}
 
       <Text style={[styles.version, { color: theme.textMuted }]}>
         {t('settings.copyright')}
@@ -829,7 +861,7 @@ Available at official launch.`,
         onSelect={handleSelectTheme}
         onBuy={handleBuyTheme}
         isActive={previewItem ? themeId === previewItem.id : false}
-        isLocked={previewItem ? !isThemeUnlocked(previewItem, isPro, purchased) : false}
+        isLocked={previewItem ? !isThemeUnlocked(previewItem, isPro, effectivePurchased) : false}
         isPro={isPro}
         lang={lang}
       />

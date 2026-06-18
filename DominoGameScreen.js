@@ -303,7 +303,7 @@ function ResultScreen({ scores, playerNames, visible, onNewGame, onExit }) {
         ))}
       </View>
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-        <TouchableOpacity onPress={onExit}    style={styles.resBtnSec}><Text style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '700' }}>🚪 خروج</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onExit}    style={styles.resBtnSec}><Text style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '700' }}>خروج</Text></TouchableOpacity>
         <TouchableOpacity onPress={onNewGame} style={styles.resBtnPri}><Text style={{ color: '#1a1a1a', fontWeight: '900' }}>▶ جولة جديدة</Text></TouchableOpacity>
       </View>
     </View>

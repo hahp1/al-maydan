@@ -14,7 +14,7 @@
 
 import { useRef, useEffect, useCallback, memo, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
+  View, Text, TouchableOpacity, StyleSheet, Pressable,
   Animated, StatusBar, Modal, ScrollView,
   TouchableWithoutFeedback, ActivityIndicator,
   BackHandler } from 'react-native';
@@ -346,6 +346,53 @@ const TournamentPopup = memo(({
 });
 
 // ══════════════════════════════════════════════
+//  GameIntroOverlay — شاشة تمهيدية موحّدة لكل نمط
+//  تعرض: أيقونة + عنوان + شرح مختصر + زر ابدأ.
+//  الخصم يحدث عند ضغط "ابدأ" (يُمرَّر عبر onStart).
+// ══════════════════════════════════════════════
+const GameIntroOverlay = memo(({ visible, emoji, title, desc, heartCost = 1, accent, onStart, onClose, theme, t }) => {
+  if (!visible) return null;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={introStyles.overlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={[introStyles.card, { backgroundColor: theme.bgCard, borderColor: accent || theme.accentBorder }]}>
+          <View style={introStyles.closeRow}>
+            <ExitButton onPress={onClose} size={32} />
+          </View>
+          <Text style={introStyles.emoji}>{emoji}</Text>
+          <Text style={[introStyles.title, { color: accent || theme.accent }]}>{title}</Text>
+          <Text style={[introStyles.desc, { color: theme.textSecondary || theme.textMuted }]}>{desc}</Text>
+          <View style={[introStyles.costPill, { backgroundColor: (accent || theme.accent) + '1a', borderColor: (accent || theme.accent) + '55' }]}>
+            <Text style={[introStyles.costText, { color: accent || theme.accent }]}>
+              {t('intro.heartCost', { n: heartCost })}
+            </Text>
+          </View>
+          <ThemedButton
+            onPress={onStart}
+            label={t('intro.startGame')}
+            variant="primary"
+            size="large"
+            style={{ width: '100%', marginTop: 18 }}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+});
+
+const introStyles = StyleSheet.create({
+  overlay:  { flex: 1, backgroundColor: '#000000d0', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  card:     { width: '100%', maxWidth: 460, borderRadius: 28, borderWidth: 1.5, padding: 26, alignItems: 'center' },
+  closeRow: { width: '100%', alignItems: 'flex-end', marginBottom: 4 },
+  emoji:    { fontSize: 54, marginBottom: 8 },
+  title:    { fontSize: 24, fontWeight: '800', textAlign: 'center', marginBottom: 12 },
+  desc:     { fontSize: 15, lineHeight: 23, textAlign: 'center', marginBottom: 18 },
+  costPill: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 14, borderWidth: 1 },
+  costText: { fontSize: 14, fontWeight: '700' },
+});
+
+// ══════════════════════════════════════════════
 //  ModeCard
 // ══════════════════════════════════════════════
 const ModeCard = memo(({ emoji, title, subtitle, heartCost = 1, costColor, costBg, borderColor,
@@ -527,6 +574,7 @@ export default function KnowledgeArenaScreen({
   tokens, setTokens, setScreen,
   showTokenModal, setShowTokenModal, highScore,
   hearts = 0, tryStartGame,
+  setOnlineRoomMode,
   currentUser,
   onOpenHeartsModal,
 }) {
@@ -544,6 +592,8 @@ export default function KnowledgeArenaScreen({
   const [showFriendlySheet, setShowFriendlySheet] = useState(false);
   const [tooltip,           setTooltip]           = useState(null);
   const [showPopup,         setShowPopup]         = useState(false);
+  // الشاشة التمهيدية: { emoji, title, desc, heartCost, accent, target, cost, extraAction }
+  const [introMode,         setIntroMode]         = useState(null);
 
   // ── حالة البطولة ──
   const [tournament,          setTournament]          = useState(null);
@@ -636,51 +686,88 @@ export default function KnowledgeArenaScreen({
     }
   }, [tournament, userId, userName]);
 
-  // ── كلاسيك — قلبان ──
+  // ── كلاسيك — قلبان — الخصم بعد إنشاء اللعبة (لا قبل) ──
   const handleTeams = useCallback(() => {
-    tryStartGame ? tryStartGame('setup', 2) : setScreen('setup');
+    if (tryStartGame) tryStartGame('setup', 2, null, true); // deferred: الخصم في setup
+    else setScreen('setup');
   }, [tryStartGame, setScreen]);
 
-  // ── تصنيف: عشوائي ──
+  // ── تصنيف: عشوائي → شاشة تمهيدية، الخصم عند بدء اللعبة فعلاً ──
   const handleRankedRandom = useCallback(async () => {
     setShowRankedSheet(false);
     const lang = await getLang();
-    if (tryStartGame) tryStartGame('online', 1);
-    else setScreen('online', { roomType: 'public', lang, ranked: true });
-  }, [tryStartGame, setScreen, getLang]);
+    setIntroMode({
+      emoji: '🎲',
+      title: t('intro.randomTitle'),
+      desc:  t('intro.randomDesc'),
+      heartCost: 1,
+      accent: '#34d399',
+      target: 'online',
+      cost: 1,
+      deferred: true, // online يخصم عبر onGameReady عند إيجاد خصم
+      onlineMode: 'random',
+      params: { roomType: 'public', lang, ranked: true },
+    });
+  }, [getLang, t]);
 
-  // ── تصنيف: مع صديق ──
+  // ── تصنيف: مع صديق ── (شاشة اختيار/كود، الخصم عند بدء اللعبة لكل لاعب)
   const handleRankedFriend = useCallback(async () => {
     setShowRankedSheet(false);
-    const lang = await getLang();
-    if (tryStartGame) tryStartGame('online', 1);
-    else setScreen('online', { roomType: 'friend', lang, ranked: true });
-  }, [tryStartGame, setScreen, getLang]);
+    if (setOnlineRoomMode) setOnlineRoomMode('select');
+    if (tryStartGame) tryStartGame('online', 1, null, true);
+    else setScreen('online');
+  }, [tryStartGame, setScreen, setOnlineRoomMode]);
 
-  // ── تصنيف: فردي مصنّف ──
+  // ── تصنيف: فردي مصنّف → شاشة تمهيدية ثم بدء ──
   const handleRankedSolo = useCallback(() => {
     setShowRankedSheet(false);
-    if (tryStartGame) tryStartGame('soloTournament', 1);
-    else setScreen('soloTournament');
-  }, [tryStartGame, setScreen]);
+    setIntroMode({
+      emoji: '⚡',
+      title: t('intro.soloRankedTitle'),
+      desc:  t('intro.soloRankedDesc'),
+      heartCost: 1,
+      accent: '#34d399',
+      target: 'soloTournament',
+      cost: 1,
+    });
+  }, [t]);
 
-  // ── ودية: مباراة ودية ──
+  // ── ودية: مباراة ودية ── (شاشة اختيار/كود، الخصم عند بدء اللعبة لكل لاعب)
   const handleFriendlyMatch = useCallback(async () => {
     setShowFriendlySheet(false);
-    const lang = await getLang();
-    if (tryStartGame) tryStartGame('online', 1);
-    else setScreen('online', { roomType: 'private', lang, ranked: false });
-  }, [tryStartGame, setScreen, getLang]);
+    if (setOnlineRoomMode) setOnlineRoomMode('select');
+    if (tryStartGame) tryStartGame('online', 1, null, true);
+    else setScreen('online');
+  }, [tryStartGame, setScreen, setOnlineRoomMode]);
 
-  // ── ودية: لعب حر ──
+  // ── ودية: لعب حر → شاشة تمهيدية ثم بدء ──
   const handleFriendlySolo = useCallback(() => {
     setShowFriendlySheet(false);
-    if (tryStartGame) tryStartGame('solo', 1);
-    else setScreen('solo');
-  }, [tryStartGame, setScreen]);
+    setIntroMode({
+      emoji: '🎮',
+      title: t('intro.freeTitle'),
+      desc:  t('intro.freeDesc'),
+      heartCost: 1,
+      accent: '#93c5fd',
+      target: 'solo',
+      cost: 1,
+    });
+  }, [t]);
 
   const showInfo = useCallback((key) => setTooltip(key), []);
   const hideInfo = useCallback(() => setTooltip(null), []);
+
+  // بدء اللعبة من الشاشة التمهيدية.
+  //  • deferred=false → الخصم هنا (الأنماط الفردية: solo/soloTournament).
+  //  • deferred=true  → بلا خصم الآن؛ online يخصم لكل لاعب عند بدء اللعبة فعلاً.
+  const handleIntroStart = useCallback(() => {
+    if (!introMode) return;
+    const { target, cost, deferred, onlineMode } = introMode;
+    setIntroMode(null);
+    if (onlineMode && setOnlineRoomMode) setOnlineRoomMode(onlineMode);
+    if (tryStartGame) tryStartGame(target, cost, null, !!deferred);
+    else setScreen(target);
+  }, [introMode, tryStartGame, setScreen, setOnlineRoomMode]);
 
   // انتهى وقت الحساب: التصنيف يستمر بدون نقاط (نُبقي الأزرار نشطة)
   const rankingDisabled = false; // دائماً مفعّل
@@ -726,14 +813,14 @@ export default function KnowledgeArenaScreen({
         <Animated.View style={{ transform: [{ translateY: slide1 }], opacity: fadeAnim }}>
           <ModeCard
             emoji="🎯"
-            title="تصنيف"
-            subtitle="عشوائي · مع صديق · فردي — فئات عشوائية"
+            title={t('knowledge.rankedTitle')}
+            subtitle={t('knowledge.rankedDesc')}
             heartCost={1}
             costColor="#34d399"
             costBg="#10b98122"
             borderColor="#10b98140"
             cardBg={theme.bgCard}
-            badge="🏆 بطولة"
+            badge={t('knowledge.rankedBadge')}
             onPress={() => setShowRankedSheet(true)}
             theme={theme}
           />
@@ -743,14 +830,14 @@ export default function KnowledgeArenaScreen({
         <Animated.View style={{ transform: [{ translateY: slide2 }], opacity: fadeAnim }}>
           <ModeCard
             emoji="🤝"
-            title="ودية"
-            subtitle="مباراة ودية · لعب حر"
+            title={t('knowledge.friendlyTitle')}
+            subtitle={t('knowledge.friendlyDesc')}
             heartCost={1}
             costColor="#93c5fd"
             costBg="#3b82f622"
             borderColor="#3b82f640"
             cardBg={theme.bgCard}
-            badge="خيارين"
+            badge={t('knowledge.friendlyBadge')}
             onPress={() => setShowFriendlySheet(true)}
             theme={theme}
           />
@@ -891,6 +978,20 @@ export default function KnowledgeArenaScreen({
         visible={leaveVisible}
         onCancel={() => setLeaveVisible(false)}
         onConfirm={() => { setLeaveVisible(false); setScreen('home'); }}
+      />
+
+      {/* الشاشة التمهيدية الموحّدة للأنماط الفردية */}
+      <GameIntroOverlay
+        visible={!!introMode}
+        emoji={introMode?.emoji}
+        title={introMode?.title}
+        desc={introMode?.desc}
+        heartCost={introMode?.heartCost ?? 1}
+        accent={introMode?.accent}
+        onStart={handleIntroStart}
+        onClose={() => setIntroMode(null)}
+        theme={theme}
+        t={t}
       />
     </View>
   );

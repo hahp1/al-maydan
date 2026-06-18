@@ -577,8 +577,6 @@ function PlayScreen({
               source={{ uri: currentImage.url }}
               style={styles.mainImage}
               resizeMode="cover"
-            
-              onError={() => setImageError(true)}
             />
           ) : null}
         </View>

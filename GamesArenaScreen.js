@@ -59,6 +59,7 @@ function buildGames(metaList, t) {
 const GameCard = memo(({ game, onPress, theme, t, lang }) => {
   const textColor = theme.textPrimary || theme.accent;
   const mutedColor = theme.textMuted;
+  const isRTL = lang === 'ar';
 
   return (
     <TouchableOpacity

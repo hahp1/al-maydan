@@ -39,7 +39,6 @@ export default function HeartsModal({
   const [buying,     setBuying]     = useState(false);
   const [watchingAd, setWatchingAd] = useState(false);
   const [isPro,      setIsPro]      = useState(false);
-  const [bonusCount, setBonusCount] = useState(0);
   const [infoMsg,    setInfoMsg]    = useState(null);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -71,7 +70,6 @@ export default function HeartsModal({
       if (result.success) {
         setHearts(result.hearts);
         if (!isPro) setAdsLeft(result.adsLeft);
-        setBonusCount(prev => prev + 1);
         bounceHeart();
         playSound('reward_heart_ad');
         if (onAdWatched) onAdWatched();
@@ -111,11 +109,11 @@ export default function HeartsModal({
   };
 
   const heartColor = hearts === 0 ? theme.textMuted : theme.accent;
-  const heartsDisplay = isPro ? '∞' : `${hearts + bonusCount}`;
+  const heartsDisplay = isPro ? '∞' : `${hearts}`;
 
   const renderHeartDots = () => {
     const displayCount = 3; // دائماً 3 قلوب بصرياً
-    const actualFilled = hearts + bonusCount;
+    const actualFilled = hearts;
     const filledDots   = Math.min(actualFilled, displayCount);
     const isCharging   = actualFilled < HEARTS_CONFIG.maxFreeDaily;
     const extraCount   = actualFilled > displayCount ? actualFilled - displayCount : 0;
@@ -141,9 +139,10 @@ export default function HeartsModal({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       {/* Overlay — يُغلق عند الضغط خارج الشيت */}
-      <Pressable style={styles.overlay} onPress={onClose}>
-        {/* Sheet — يمنع انتشار الضغط للـ overlay */}
-        <Pressable style={[styles.sheet, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]} onPress={e => e.stopPropagation()}>
+      <View style={styles.overlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        {/* Sheet — View عادي حتى يعمل ScrollView بحرية (Pressable كان يبتلع التمرير) */}
+        <View style={[styles.sheet, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
 
           {/* ── هيدر ثابت — دائماً ظاهر ── */}
           <View style={styles.headerRow}>
@@ -201,7 +200,13 @@ export default function HeartsModal({
           </View>
 
           {/* ── المحتوى القابل للتمرير ── */}
-          <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 14 }}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={{ marginTop: 14 }}
+            contentContainerStyle={{ paddingBottom: 24, flexGrow: 1 }}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+          >
 
             {/* إعلان → قلب */}
             <View style={[styles.section, { backgroundColor: theme.bgInput, borderColor: theme.success + '33' }]}>
@@ -284,8 +289,8 @@ export default function HeartsModal({
             <View style={{ height: 24 }} />
           </ScrollView>
 
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

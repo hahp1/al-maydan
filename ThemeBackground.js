@@ -267,6 +267,19 @@ const ThemeBackground = memo(({ theme }) => {
     return () => clearTimeout(timer);
   }, [theme.id, wvReady]);
 
+  // ── تصفير عدّاد الانهيار للثيمات التي لا تستخدم WebView ──
+  // (City / Dark / Light). WebView يُصفّره في handleLoad؛ لكن ثيمات
+  // City لا تمرّ عبر WebView فكان العدّاد يبقى مرتفعاً ويسبب حلقة انهيار
+  // (الثيم المجاني الوحيد city_paris كان يعلق هكذا). نصفّره بعد أن يثبت
+  // أن الرندر مرّ بسلام نصف ثانية دون انهيار.
+  useEffect(() => {
+    if (theme.isMist || theme.isCrystal) return; // هذه يتكفّل بها handleLoad
+    const t = setTimeout(() => {
+      AsyncStorage.setItem(CRASH_COUNT_KEY, '0').catch(() => {});
+    }, 500);
+    return () => clearTimeout(t);
+  }, [theme.id, theme.isMist, theme.isCrystal]);
+
   // ── Dark / Light ──
   if (!theme.isMist && !theme.isCrystal && !theme.isCityTheme) {
     return null;
@@ -291,8 +304,7 @@ const ThemeBackground = memo(({ theme }) => {
             domStorageEnabled={false}
             allowsInlineMediaPlayback={false}
             mediaPlaybackRequiresUserAction={true}
-            androidLayerType="hardware"
-            renderToHardwareTextureAndroid={true}
+            androidLayerType="software"
             onLoad={handleLoad}
             onError={() => {}}
             onHttpError={() => {}}

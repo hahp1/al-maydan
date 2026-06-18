@@ -32,7 +32,7 @@ import ErrorBoundary from './ErrorBoundary';
 import NetStatus     from './NetStatus';
 import { useTokenSync }    from './useTokenSync';
 import { XPNotification, useXPNotify } from './XPNotification';
-import { useProStatus, usePurchasedThemes, isThemeUnlocked } from './ProService';
+import { useProStatus, usePurchasedThemes, isThemeUnlocked, syncPendingThemes } from './ProService';
 
 // ── شاشات أساسية (تُحمَّل فوراً — تظهر عند البدء) ──
 import OnboardingScreen, { EXPERIENCE_KEY, EXPERIENCES } from './OnboardingScreen';
@@ -149,7 +149,6 @@ function ExitAppModal({ visible, onCancel, onConfirm }) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={exitStyles.overlay}>
         <View style={[exitStyles.box, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
-          <Text style={[exitStyles.emoji]}>🚪</Text>
           <Text style={[exitStyles.title, { color: theme.accent }]}>{tStatic('common.exit')}</Text>
           <Text style={[exitStyles.msg, { color: theme.textMuted }]}>
             {tStatic('common.exitConfirm') || 'هل تريد الخروج من التطبيق؟'}
@@ -225,18 +224,28 @@ function MainApp() {
   const { categories } = useCachedCategories();
 
   const { isPro }     = useProStatus(user);
-  const { purchased } = usePurchasedThemes(user);
+  const { purchased, loaded: purchasedLoaded } = usePurchasedThemes(user);
 
+  // لا نُسقط ثيماً مقفلاً إلى dark إلا بعد اكتمال تحميل قائمة المشتريات
+  // (وإلا فثيم مُشترى يُعاد قسراً لـ dark عند الإقلاع قبل وصول القراءة).
   useEffect(() => {
+    if (!purchasedLoaded) return;
     const current = ALL_THEMES.find(t => t.id === themeId);
     if (current && !isThemeUnlocked(current, isPro, purchased)) {
       setThemeId('dark');
     }
-  }, [isPro]);
+  }, [isPro, purchasedLoaded, purchased, themeId]);
+
+  // مزامنة المشتريات المعلّقة (أوفلاين سابقاً) عند دخول مستخدم مسجّل
+  useEffect(() => {
+    if (!user?.uid || user?.isGuest) return;
+    syncPendingThemes({ uid: user.uid, isGuest: user.isGuest, tokens }).catch(() => {});
+  }, [user?.uid]);
 
   const [showTokenModal,    setShowTokenModal]    = useState(false);
   const [highScore,         setHighScore]         = useState(0);
   const [gameMode,          setGameMode]          = useState('local');
+  const [onlineRoomMode,    setOnlineRoomMode]    = useState('random'); // 'random' | 'select'
   const [friendsInitialTab, setFriendsInitialTab] = useState('friends');
 
   const [hearts,          setHearts]          = useState(3);
@@ -253,6 +262,13 @@ function MainApp() {
   const authTimeoutRef      = useRef(null);
 
   useEffect(() => { userRef.current = user; }, [user]);
+
+  // أغلق المودالات المشتركة عند الانتقال بين الشاشات حتى لا تبقى عالقة
+  // (مثل مودل التوكنز الذي كان يظهر عالقاً في الكلاسيك بعد فتحه من شاشة سابقة)
+  useEffect(() => {
+    setShowTokenModal(false);
+    setShowHeartsModal(false);
+  }, [screen]);
 
   const commitSession = useCallback((sessionUser, sessionExp, targetScreen = 'home') => {
     setUser(sessionUser);
@@ -304,24 +320,15 @@ function MainApp() {
           return;
         }
 
-        // Firebase Auth check with 2s timeout
-        let settled = false;
-        authTimeoutRef.current = setTimeout(() => {
-          if (!settled) {
-            settled = true;
-            commitSession(session, savedExp);
-          }
-        }, 2000);
+        // ── مستخدم مسجّل: الجلسة المحلية هي المرجع ──
+        // نُثبّتها فوراً (بلا انتظار، بلا طرد). جلسة Firebase Auth صارت
+        // محفوظة عبر AsyncStorage (FirebaseConfig)، لكن حتى لو رجعت فارغة
+        // مؤقتاً (تأخّر تهيئة / شبكة) لا نطرد المستخدم — الطرد يكون فقط عند
+        // تسجيل خروج صريح. onAuthStateChanged هنا يُحدّث uid/email لا أكثر.
+        commitSession(session, savedExp);
 
         authUnsubRef.current = onAuthStateChanged(auth, async (firebaseUser) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(authTimeoutRef.current);
-
-          if (!firebaseUser) {
-            commitLogout();
-            return;
-          }
+          if (!firebaseUser) return; // لا تطرد — أبقِ الجلسة المحلية
 
           const merged = { ...session, uid: firebaseUser.uid, email: firebaseUser.email };
           await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(merged)).catch(() => {});
@@ -476,7 +483,7 @@ function MainApp() {
     const handler = BackHandler.addEventListener('hardwareBackPress', () => {
       if (authStatus !== AUTH_STATUS.AUTHENTICATED) return false;
       if (GAME_SCREENS.includes(screen)) {
-        Alert.alert(tStatic('common.leave') + ' 🚪', tStatic('leave.message'), [
+        Alert.alert(tStatic('common.leave'), tStatic('leave.message'), [
           { text: tStatic('common.cancel'), style: 'cancel' },
           { text: tStatic('common.leave'), style: 'destructive', onPress: () => setScreen('games') },
         ]);
@@ -510,8 +517,12 @@ function MainApp() {
 
   // ── AUTHENTICATED ──
   const isGlobal = experience === EXPERIENCES.GLOBAL;
+  // فلترة البنكين (مطابقة لمنطق AdminScreen):
+  //  • العالمي: حصراً lang === 'en'
+  //  • العربي : lang === 'ar' أو الفئات القديمة بلا حقل lang (افتراضها عربي)
+  // هكذا لا تتسرّب فئة بنك إلى التجربة الأخرى.
   const cats = isGlobal
-    ? categories.filter(c => !c.lang || c.lang === 'en')
+    ? categories.filter(c => c.lang === 'en')
     : categories.filter(c => !c.lang || c.lang === 'ar');
 
   const sharedProps = {
@@ -573,6 +584,7 @@ function MainApp() {
           <KnowledgeArenaScreen
             {...sharedProps}
             tryStartGame={tryStartGame}
+            setOnlineRoomMode={setOnlineRoomMode}
             currentUser={user}
             categories={cats}
           />
@@ -606,13 +618,16 @@ function MainApp() {
       case 'setup':
         return (
           <GameSetupScreen
-            onStart={({ team1, team2, categories: catCount, selected }) => {
-              const selectedCats = categories.filter(c => selected.includes(c.id));
+            onStart={async ({ team1, team2, categories: catCount, selected }) => {
+              // الخصم يحدث الآن — عند إنشاء اللعبة فعلاً (قلبان للكلاسيك)
+              const ok = await spendHeartNow(2);
+              if (!ok) return; // لا قلوب كافية — يظهر مودال القلوب، لا ننتقل
+              const selectedCats = cats.filter(c => selected.includes(c.id));
               setGameData({ team1, team2, categories: catCount, selectedCategories: selectedCats });
               setScreen('board');
             }}
             onBack={() => setScreen('knowledge')}
-            categories={categories}
+            categories={cats}
             experience={experience}
             tokens={tokens}
             setTokens={setTokens}
@@ -678,10 +693,12 @@ function MainApp() {
         return (
           <OnlineGameScreen
             categories={cats}
+            roomMode={onlineRoomMode}
             onBack={() => setScreen('knowledge')}
             currentUser={user}
             onTournamentScore={onTournamentScore}
             onGameEnd={(won) => onOnlineGameEnd('trivia', won)}
+            onGameReady={() => spendHeartNow(1)}
             tokens={tokens}
             setTokens={setTokens}
             onAdWatched={onAdWatched}
@@ -717,7 +734,7 @@ function MainApp() {
       case 'neverhaveiever':
         return <NeverHaveIEver onBack={() => setScreen('games')} experience={experience} />;
       case 'whoisspy':
-        return !isGlobal ? <WhoIsSpyScreen onBack={() => setScreen('games')} currentUser={user} /> : null;
+        return !isGlobal ? <WhoIsSpyScreen onBack={() => setScreen('games')} currentUser={user} onHeartSpent={() => loadHearts().then(h => setHearts(h.hearts)).catch(() => {})} /> : null;
       case 'guessimage':
         return !isGlobal ? (
           <GuessImageScreen

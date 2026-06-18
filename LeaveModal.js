@@ -12,7 +12,6 @@ const LeaveModal = memo(function LeaveModal({ visible, onCancel, onConfirm, mess
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onCancel} statusBarTranslucent>
       <View style={styles.overlay}>
         <ThemedCard radius={24} padding={28} style={{width:'100%',alignItems:'center',gap:12}}>
-          <Text style={styles.emoji}>🚪</Text>
           <Text style={[styles.title, { color: theme.textPrimary }]}>{t('leave.title')}</Text>
           <Text style={[styles.msg, { color: theme.textSecondary }]}>{message || t('leave.message')}</Text>
           <View style={styles.btns}>

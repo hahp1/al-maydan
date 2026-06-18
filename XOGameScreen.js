@@ -392,6 +392,8 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
   }
 
   // ── الشاشة الرئيسية ───────────────────────────────────────────
+  const isMyTurn = (isPlayer1 && gameStatus === 'player1_turn') ||
+                   (!isPlayer1 && gameStatus === 'player2_turn');
   return (
     <View style={[s.container, { backgroundColor: 'transparent' }]}>
       <XOEngraving theme={theme} />

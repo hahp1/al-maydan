@@ -564,7 +564,7 @@ function GameOverModal({ visible, teamA, teamB, onNewGame, onExit }) {
           ))}
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
             <TouchableOpacity style={styles.outlineBtn} onPress={onExit}>
-              <Text style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '700' }}>🚪 خروج</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '700' }}>خروج</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.bidConfirm} onPress={onNewGame}>
               <Text style={{ color: '#fff', fontWeight: '700' }}>▶ جولة جديدة</Text>

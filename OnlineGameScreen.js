@@ -51,11 +51,12 @@ import {
 import { useTheme } from './ThemeContext';
 import ExitButton from './ExitButton';
 import LeaveModal from './LeaveModal';
-import { useT } from './I18n';
+import { useT, useLanguage } from './I18n';
 import LifelinesBar from './LifelineBar';
 import { WebScreenButton } from './WebRoomService';
 import { playSound } from './SoundService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
+import OnlineRoomSetup, { OnlineWaitingLobby } from './OnlineRoomSetup';
 
 // ══════════════════════════════════════════════
 //  إعدادات اللعبة
@@ -161,21 +162,27 @@ export default function OnlineGameScreen({
   categories = [],
   onBack,
   currentUser,
+  roomMode = 'random',  // 'random' = مطابقة عشوائية مباشرة | 'select' = شاشة اختيار (عشوائي/إنشاء/كود)
   tokens = 0,
   setTokens,
   onTournamentScore,   // callback لتسجيل السكور في البطولة
   onGameEnd,           // callback لـ XP (won: boolean)
+  onGameReady,         // ← خصم القلب عند بدء اللعبة فعلاً (لكل لاعب)
   onAdWatched,         // ← جديد: callback لـ XP عند مشاهدة إعلان
 }) {
   const [leaveVisible, setLeaveVisible] = useState(false);
   const { theme, isDark, themeId } = useTheme();
   const t = useT();
+  const { lang } = useLanguage();
+  const isRTL = lang === 'ar';
 
   const myUid  = currentUser?.uid  || `guest_${Math.random().toString(36).slice(2, 10)}`;
   const myName = currentUser?.name || 'لاعب';
 
   // ── حالة الغرفة ──
-  const [phase,       setPhase]       = useState('connecting'); // connecting|lobby|picking|question|waiting|finished
+  // phase: select|connecting|waitingFriend|lobby|picking|question|waiting|finished
+  const [phase,       setPhase]       = useState(roomMode === 'select' ? 'select' : 'connecting');
+  const [friendCode,  setFriendCode]  = useState(null); // كود غرفة الصديق (للمضيف)
   const [roomId,      setRoomId]      = useState(null);
   const [isPlayer1,   setIsPlayer1]   = useState(false);
   const [roomData,    setRoomData]    = useState(null);
@@ -204,6 +211,7 @@ export default function OnlineGameScreen({
   const unsubRef        = useRef(null);
   const botTimeoutRef   = useRef(null);
   const roomIdRef       = useRef(null);
+  const gameReadyFired  = useRef(false); // يمنع تكرار خصم القلب
 
   // ── جولة الأونلاين الحالية ──
   const currentRoundData = rounds[currentRound] ?? null;
@@ -223,7 +231,7 @@ export default function OnlineGameScreen({
   }, []);
 
   useEffect(() => {
-    findOrJoinRoom();
+    if (roomMode !== 'select') findOrJoinRoom();
     return () => {
       unsubRef.current?.();
       clearTimeout(botTimeoutRef.current);
@@ -237,66 +245,65 @@ export default function OnlineGameScreen({
     if (answerTimeLeft > 0 && answerTimeLeft <= 5) playSound('countdown');
   }, [answerTimeLeft]);
 
+  // ── توليد كود غرفة من 6 أحرف ──
+  const genFriendCode = () =>
+    Math.random().toString(36).slice(2, 8).toUpperCase().replace(/[^A-Z0-9]/g, 'X');
+
+  // ── إنشاء جولات الغرفة من الفئات ──
+  const buildRounds = async () => {
+    const qMap     = await fetchQuestionsForCategories(categories.map(c => c.id));
+    const enriched = categories.map(c => ({ ...c, questions: qMap[c.id] ?? [] }));
+    return generateRounds(enriched);
+  };
+
+  // ════════════════════════════════════════════════
+  //  المطابقة العشوائية (تتجاهل غرف الأصدقاء)
+  // ════════════════════════════════════════════════
   const findOrJoinRoom = async () => {
     try {
       setPhase('connecting');
-
-      // ابحث عن غرفة waiting
       const { getDocs, collection, query, where, limit } = await import('firebase/firestore');
       const q = query(
         collection(db, 'trivia_rooms'),
         where('status', '==', 'waiting'),
-        limit(1)
+        limit(5)
       );
       const snap = await getDocs(q);
 
-      if (!snap.empty) {
-        // انضم كـ Player2
-        const roomDoc = snap.docs[0];
-        const rId     = roomDoc.id;
-        const data    = roomDoc.data();
+      // تجاهل غرف الأصدقاء — انضم فقط لغرفة عامة منتظِرة
+      const publicDoc = snap.docs.find(d => (d.data().roomType ?? 'public') !== 'friend');
 
+      if (publicDoc) {
+        const rId  = publicDoc.id;
+        const data = publicDoc.data();
         await updateDoc(doc(db, 'trivia_rooms', rId), {
           'player2.uid':  myUid,
           'player2.name': myName,
           status:         'ready',
         });
-
-        setRoomId(rId);
-        roomIdRef.current = rId;
+        setRoomId(rId); roomIdRef.current = rId;
         setIsPlayer1(false);
         setOpponentName(data.player1?.name ?? 'خصم');
         setRounds(data.rounds ?? []);
         listenToRoom(rId);
         setPhase('lobby');
-
       } else {
-        // أنشئ غرفة جديدة كـ Player1
-        const rId = `trivia_${Date.now()}_${myUid.slice(0, 6)}`;
-
-        // جلب أسئلة الفئات أولاً ثم توليد الجولات
-        const qMap      = await fetchQuestionsForCategories(categories.map(c => c.id));
-        const enriched  = categories.map(c => ({ ...c, questions: qMap[c.id] ?? [] }));
-        const genRounds = generateRounds(enriched);
-
-        const roomObj = {
+        // أنشئ غرفة عامة كـ Player1
+        const rId       = `trivia_${Date.now()}_${myUid.slice(0, 6)}`;
+        const genRounds = await buildRounds();
+        await setDoc(doc(db, 'trivia_rooms', rId), {
           status:  'waiting',
+          roomType: 'public',
           createdAt: Date.now(),
           player1: { uid: myUid, name: myName, score: 0, done: false, currentRound: 0 },
           player2: { uid: null,  name: null,   score: 0, done: false, currentRound: 0 },
           rounds:  genRounds,
-        };
-
-        await setDoc(doc(db, 'trivia_rooms', rId), roomObj);
-
-        setRoomId(rId);
-        roomIdRef.current = rId;
+        });
+        setRoomId(rId); roomIdRef.current = rId;
         setIsPlayer1(true);
         setRounds(genRounds);
         listenToRoom(rId);
         setPhase('lobby');
-
-        // Bot بعد 60 ثانية
         botTimeoutRef.current = setTimeout(() => addBot(rId), BOT_WAIT_MS);
       }
     } catch (e) {
@@ -304,6 +311,95 @@ export default function OnlineGameScreen({
       setError('تعذّر الاتصال بالخادم');
     }
   };
+
+  // ════════════════════════════════════════════════
+  //  إنشاء غرفة صديق بكود
+  // ════════════════════════════════════════════════
+  const createFriendRoom = async () => {
+    try {
+      setPhase('waitingFriend');
+      const code      = genFriendCode();
+      const rId       = `friend_${Date.now()}_${myUid.slice(0, 6)}`;
+      const genRounds = await buildRounds();
+      await setDoc(doc(db, 'trivia_rooms', rId), {
+        status:  'waiting',
+        roomType: 'friend',
+        friendCode: code,
+        createdAt: Date.now(),
+        player1: { uid: myUid, name: myName, score: 0, done: false, currentRound: 0 },
+        player2: { uid: null,  name: null,   score: 0, done: false, currentRound: 0 },
+        rounds:  genRounds,
+      });
+      setRoomId(rId); roomIdRef.current = rId;
+      setIsPlayer1(true);
+      setFriendCode(code);
+      setRounds(genRounds);
+      listenToRoom(rId);
+      // لا بوت تلقائي لغرف الأصدقاء — ننتظر الصديق
+    } catch (e) {
+      console.error('createFriendRoom:', e);
+      setError('تعذّر إنشاء الغرفة');
+    }
+  };
+
+  // ════════════════════════════════════════════════
+  //  الانضمام بكود
+  // ════════════════════════════════════════════════
+  const joinByCode = async (code) => {
+    try {
+      setPhase('connecting');
+      const { getDocs, collection, query, where, limit } = await import('firebase/firestore');
+      const q = query(
+        collection(db, 'trivia_rooms'),
+        where('friendCode', '==', code),
+        where('status', '==', 'waiting'),
+        limit(1)
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        setError('لم يُعثر على الغرفة — تأكّد من الكود');
+        setPhase('select');
+        return;
+      }
+      const roomDoc = snap.docs[0];
+      const rId     = roomDoc.id;
+      const data    = roomDoc.data();
+      await updateDoc(doc(db, 'trivia_rooms', rId), {
+        'player2.uid':  myUid,
+        'player2.name': myName,
+        status:         'ready',
+      });
+      setRoomId(rId); roomIdRef.current = rId;
+      setIsPlayer1(false);
+      setOpponentName(data.player1?.name ?? 'صديق');
+      setRounds(data.rounds ?? []);
+      listenToRoom(rId);
+      setPhase('lobby');
+    } catch (e) {
+      console.error('joinByCode:', e);
+      setError('تعذّر الانضمام — تأكّد من الكود');
+      setPhase('select');
+    }
+  };
+
+  // ── معالج اختيار الوضع من شاشة OnlineRoomSetup ──
+  const handleSelectMode = useCallback((selected, code) => {
+    if (selected === 'random')      findOrJoinRoom();
+    else if (selected === 'create') createFriendRoom();
+    else if (selected === 'join' && code) joinByCode(code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── إلغاء غرفة الانتظار بأمان (تعليمها abandoned) ──
+  const leaveRoomSafely = useCallback(async () => {
+    const rId = roomIdRef.current;
+    unsubRef.current?.();
+    clearTimeout(botTimeoutRef.current);
+    if (rId) {
+      try { await updateDoc(doc(db, 'trivia_rooms', rId), { status: 'abandoned', abandonedAt: Date.now() }); } catch (_) {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const addBot = async (rId) => {
     try {
@@ -334,6 +430,11 @@ export default function OnlineGameScreen({
 
       // بدء اللعب عند ready
       if (data.status === 'ready' && phase !== 'picking' && phase !== 'question') {
+        // خصم القلب عند بدء اللعبة فعلاً — مرة واحدة لكل لاعب على جهازه
+        if (!gameReadyFired.current) {
+          gameReadyFired.current = true;
+          onGameReady?.();
+        }
         setPhase('picking');
         startPickTimer();
       }
@@ -578,6 +679,35 @@ export default function OnlineGameScreen({
   // ══════════════════════════════════════════════
   //  الـ UI
   // ══════════════════════════════════════════════
+
+  // ── شاشة اختيار الوضع (عشوائي / إنشاء / كود) ──
+  if (phase === 'select') {
+    return (
+      <OnlineRoomSetup
+        gameEmoji="🧠"
+        gameTitleAr="مباراة مع صديق"
+        gameTitleEn="Play with a Friend"
+        descAr="العب عشوائياً أو أنشئ غرفة وشارك الكود"
+        descEn="Play randomly or create a room and share the code"
+        onBack={onBack}
+        onSelect={handleSelectMode}
+      />
+    );
+  }
+
+  // ── شاشة انتظار الصديق (عرض الكود) ──
+  if (phase === 'waitingFriend') {
+    return (
+      <OnlineWaitingLobby
+        friendCode={friendCode}
+        isFriend
+        isRTL={isRTL}
+        theme={theme}
+        gameEmoji="🧠"
+        onCancel={() => { leaveRoomSafely(); onBack(); }}
+      />
+    );
+  }
 
   // ── شاشة الاتصال ──
   if (phase === 'connecting' || phase === 'lobby') {

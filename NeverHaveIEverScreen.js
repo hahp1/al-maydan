@@ -190,7 +190,7 @@ function ModeScreen({ onPickMode, theme, tx }) {
 // ══════════════════════════════════════════════════════════════
 // شاشة 2أ — إعداد اللاعبين (لعبة جاهزة)
 // ══════════════════════════════════════════════════════════════
-function DefaultSetupScreen({ onStart, theme, tx, lang }) {
+function DefaultSetupScreen({ onStart, theme, tx, lang, isGlobal }) {
   const [playerName, setPlayerName] = useState('');
   const [players, setPlayers]       = useState([]);
 
@@ -217,7 +217,7 @@ function DefaultSetupScreen({ onStart, theme, tx, lang }) {
     }
     const pool = isGlobal ? STATEMENTS_EN : STATEMENTS_AR;
     onStart({ players, statements: pool });
-  }, [players, lang, onStart, tx]);
+  }, [players, lang, onStart, tx, isGlobal]);
 
   const canStart = players.length >= 3;
 
@@ -455,6 +455,8 @@ const PlayerFingersCard = memo(({ player, isActive, theme }) => (
 // شاشة اللعب الفعلي
 // ══════════════════════════════════════════════════════════════
 function GameScreen({ initialPlayers, statements, onBack, theme, tx }) {
+  const { themeId } = useTheme();
+  const { lang } = useLanguage();
   // رتّب الجمل عشوائياً مرة واحدة
   const orderedStmts = useRef(shuffle(statements)).current;
   const totalStmts   = orderedStmts.length;
@@ -715,7 +717,7 @@ export default function NeverHaveIEver({ onBack, experience }) {
         <ModeScreen onPickMode={handlePickMode} theme={theme} tx={tx} />
       )}
       {stage === 'default-setup' && (
-        <DefaultSetupScreen onStart={handleStart} theme={theme} tx={tx} lang={lang} />
+        <DefaultSetupScreen onStart={handleStart} theme={theme} tx={tx} lang={lang} isGlobal={isGlobal} />
       )}
       {stage === 'custom-setup' && (
         <CustomSetupScreen onStart={handleStart} theme={theme} tx={tx} lang={lang} isGlobal={isGlobal} maxStatements={maxStatements} />

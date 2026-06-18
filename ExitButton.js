@@ -9,15 +9,15 @@
 
 import { memo } from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
-import Svg, { Line } from 'react-native-svg';
+import Svg, { Line, Polyline } from 'react-native-svg';
 import { useTheme } from './ThemeContext';
 
 const HIT_SLOP = { top: 10, bottom: 10, left: 10, right: 10 };
 
-function ExitButton({ onPress, size = 36, style }) {
+function ExitButton({ onPress, size = 36, style, icon = 'close' }) {
   const { theme } = useTheme();
 
-  // لون الـ X حسب الثيم
+  // لون الأيقونة حسب الثيم
   const lineColor = theme.textMuted || 'rgba(160,160,200,0.7)';
   // خلفية الزر
   const bgColor   = theme.bgElevated || theme.bgCard;
@@ -47,20 +47,34 @@ function ExitButton({ onPress, size = 36, style }) {
         height={size * 0.55}
         viewBox={`0 0 ${size} ${size}`}
       >
-        <Line
-          x1={pad}      y1={pad}
-          x2={size-pad} y2={size-pad}
-          stroke={lineColor}
-          strokeWidth={2.2}
-          strokeLinecap="round"
-        />
-        <Line
-          x1={size-pad} y1={pad}
-          x2={pad}      y2={size-pad}
-          stroke={lineColor}
-          strokeWidth={2.2}
-          strokeLinecap="round"
-        />
+        {icon === 'back' ? (
+          // سهم رجوع (chevron يسار)
+          <Polyline
+            points={`${size*0.60},${pad} ${pad+size*0.06},${size*0.5} ${size*0.60},${size-pad}`}
+            fill="none"
+            stroke={lineColor}
+            strokeWidth={2.2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : (
+          <>
+            <Line
+              x1={pad}      y1={pad}
+              x2={size-pad} y2={size-pad}
+              stroke={lineColor}
+              strokeWidth={2.2}
+              strokeLinecap="round"
+            />
+            <Line
+              x1={size-pad} y1={pad}
+              x2={pad}      y2={size-pad}
+              stroke={lineColor}
+              strokeWidth={2.2}
+              strokeLinecap="round"
+            />
+          </>
+        )}
       </Svg>
     </TouchableOpacity>
   );

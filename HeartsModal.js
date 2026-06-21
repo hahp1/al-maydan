@@ -147,7 +147,10 @@ export default function HeartsModal({
           {/* ── هيدر ثابت — دائماً ظاهر ── */}
           <View style={styles.headerRow}>
             <Text style={[styles.sheetTitle, { color: theme.accent }]}>❤️ القلوب</Text>
-            <ExitButton onPress={onClose} size={32} />
+          </View>
+          {/* زر الإغلاق — مثبّت يسار دائماً (متّسق مع كل الشاشات) */}
+          <View style={styles.closeAbsolute}>
+            <ExitButton onPress={onClose} icon='close' size={32} />
           </View>
 
           {/* ── عداد القلوب ── */}
@@ -298,7 +301,8 @@ export default function HeartsModal({
 const styles = StyleSheet.create({
   overlay:         { flex: 1, backgroundColor: '#000000eb', justifyContent: 'flex-end' },
   sheet:           { borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, padding: 24, paddingBottom: 0, maxHeight: '90%' },
-  headerRow:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  headerRow:       { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 14, minHeight: 36 },
+  closeAbsolute:   { position: 'absolute', left: 24, top: 24, zIndex: 10 },
   sheetTitle:      { fontSize: 20, fontWeight: '900' },
   closeBtnWrap:    { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   closeBtn:        { fontSize: 20, fontWeight: '700' },

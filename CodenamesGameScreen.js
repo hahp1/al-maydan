@@ -623,7 +623,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
       {/* ══ اللوحة ══ */}
       <View style={s.board}>
         {board.map((card, index) => (
-          <CodeCard cc={cc}            key={index}
+          <CodeCard cc={cc}             key={index}
             index={index}
             card={card}
             isRevealed={revealedSet.has(index)}

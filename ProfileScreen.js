@@ -238,6 +238,11 @@ const AchievementCard = memo(({ ach, achData, stats, theme, lang }) => {
           <Text style={[achStyles.name, { color: theme.textPrimary }]}>
             {lang === 'ar' ? ach.ar : ach.en}
           </Text>
+          {!!(ach.descAr || ach.descEn) && (
+            <Text style={[achStyles.desc, { color: theme.textSecondary }]}>
+              {lang === 'ar' ? ach.descAr : ach.descEn}
+            </Text>
+          )}
           <Text style={[achStyles.sub, { color: theme.textMuted }]}>
             {isMaxed
               ? (lang === 'ar' ? '✅ مكتمل' : '✅ Completed')
@@ -267,6 +272,7 @@ const achStyles = StyleSheet.create({
   header:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
   icon:      { fontSize: 24 },
   name:      { fontSize: 14, fontWeight: '700' },
+  desc:      { fontSize: 11.5, marginTop: 2, lineHeight: 15 },
   sub:       { fontSize: 11, marginTop: 2 },
   track:     { height: 6, borderRadius: 4, overflow: 'hidden' },
   fill:      { height: '100%', borderRadius: 4 },
@@ -366,7 +372,7 @@ export default function ProfileScreen({ user, setScreen, onLogin, onLogout }) {
 
       {/* ── Header ── */}
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
-        <ThemedButton onPress={() => setScreen('home')} label={lang === 'ar' ? '→' : '←'} variant='ghost' size='small' style={styles.backBtn} />
+        <ThemedButton onPress={() => setScreen('home')} label={lang === 'ar' ? '→' : '←'} variant='ghost' size='small' fullWidth={false} style={styles.backBtn} />
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
           {lang === 'ar' ? 'الملف الشخصي' : 'Profile'}
         </Text>

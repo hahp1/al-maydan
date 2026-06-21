@@ -307,16 +307,22 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
         gameEmoji="✕○"
         gameTitleAr="XO"
         gameTitleEn="XO"
-        descAr="العب XO ضد منافس حقيقي"
-        descEn="Play XO against a real opponent"
+        descAr="العب XO ضد منافس حقيقي أو على نفس الجهاز"
+        descEn="Play XO against a real opponent or on the same device"
+        localOption
         onBack={onBack}
         onSelect={handleModeSelect}
       />
     );
   }
 
-  // ── شاشة انتظار الصديق ──
-  if (selectedMode === 'create' && loading) {
+  // ── وضع اللعب على جهاز واحد (محلي، بلا إنترنت) ──
+  if (selectedMode === 'local') {
+    return <XOLocalGame theme={theme} isRTL={isRTL} onBack={() => setSelectedMode(null)} />;
+  }
+
+  // ── شاشة انتظار الصديق — تبقى ظاهرة بالكود والدعوة حتى ينضم الخصم ──
+  if (selectedMode === 'create' && (loading || isWaiting) && !error) {
     return (
       <OnlineWaitingLobby
         friendCode={friendCode}
@@ -324,7 +330,9 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
         isRTL={isRTL}
         theme={theme}
         gameEmoji="✕○"
-        onCancel={onBack}
+        gameLabel="XO"
+        currentUser={currentUser}
+        onCancel={() => { leaveRoom?.(); onBack(); }}
       />
     );
   }
@@ -522,6 +530,131 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
   );
 }
 
+// ══════════════════════════════════════════════════════════
+//  XOLocalGame — اللعب على جهاز واحد (تبادل الجهاز كل دور)
+// ══════════════════════════════════════════════════════════
+function XOLocalGame({ theme, isRTL, onBack }) {
+  const [board, setBoard]       = useState(Array(9).fill(null));
+  const [turn, setTurn]         = useState('X');          // X يبدأ
+  const [scores, setScores]     = useState({ X: 0, O: 0 });
+  const [result, setResult]     = useState(null);          // { winner:'X'|'O', line } | 'draw' | null
+  const [round, setRound]       = useState(1);
+
+  const winLine = result && result !== 'draw' ? result.line : [];
+
+  const handlePress = (index) => {
+    if (board[index] !== null || result) return;
+    const next = board.slice();
+    next[index] = turn;
+    setBoard(next);
+
+    const win = calculateWinner(next);
+    if (win) {
+      setResult({ winner: win.winner, line: win.line });
+      setScores(s => ({ ...s, [win.winner]: s[win.winner] + 1 }));
+    } else if (next.every(c => c !== null)) {
+      setResult('draw');
+    } else {
+      setTurn(t => (t === 'X' ? 'O' : 'X'));
+    }
+  };
+
+  const nextRound = () => {
+    setBoard(Array(9).fill(null));
+    setResult(null);
+    // الخاسر يبدأ الجولة التالية (أو X عند التعادل)
+    setTurn(result && result !== 'draw' ? (result.winner === 'X' ? 'O' : 'X') : 'X');
+    setRound(r => r + 1);
+  };
+
+  const resetAll = () => {
+    setBoard(Array(9).fill(null));
+    setResult(null);
+    setTurn('X');
+    setScores({ X: 0, O: 0 });
+    setRound(1);
+  };
+
+  const turnColor = turn === 'X' ? theme.accent : (theme.purple || '#a855f7');
+
+  return (
+    <View style={[s.container, { backgroundColor: 'transparent' }]}>
+      <StatusBar barStyle={theme.statusBar} />
+
+      {/* شريط علوي */}
+      <View style={s.topBar}>
+        <ThemedButton onPress={onBack} label={isRTL ? '✕ خروج' : '✕ Exit'} variant='ghost' size='small' />
+        <View style={{ flex: 1 }} />
+        <View style={[s.localScorePill, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
+          <Text style={[s.localScoreText, { color: theme.accent }]}>❌ {scores.X}</Text>
+          <Text style={[s.localScoreText, { color: theme.textMuted }]}>·</Text>
+          <Text style={[s.localScoreText, { color: theme.purple || '#a855f7' }]}>⭕ {scores.O}</Text>
+        </View>
+      </View>
+
+      {/* مؤشر الدور */}
+      <View style={s.localTurnWrap}>
+        {result ? (
+          <Text style={[s.localTurnText, { color: result === 'draw' ? theme.textMuted : turnColorForWinner(result, theme) }]}>
+            {result === 'draw'
+              ? (isRTL ? '🤝 تعادل!' : '🤝 Draw!')
+              : (isRTL ? `🎉 فاز ${result.winner === 'X' ? '❌' : '⭕'}` : `🎉 ${result.winner} wins!`)}
+          </Text>
+        ) : (
+          <Text style={[s.localTurnText, { color: turnColor }]}>
+            {isRTL ? `دور ${turn === 'X' ? '❌' : '⭕'}` : `${turn}'s turn`}
+          </Text>
+        )}
+        <Text style={[s.localRoundText, { color: theme.textMuted }]}>
+          {isRTL ? `جولة ${round}` : `Round ${round}`}
+        </Text>
+      </View>
+
+      {/* اللوح */}
+      <View style={s.localBoardWrap}>
+        <View style={s.board}>
+          {board.map((cell, i) => {
+            const isWin = winLine.includes(i);
+            return (
+              <TouchableOpacity
+                key={i}
+                onPress={() => handlePress(i)}
+                activeOpacity={cell || result ? 1 : 0.6}
+                disabled={!!cell || !!result}
+                style={[
+                  s.cell,
+                  {
+                    backgroundColor: isWin ? (theme.accentSoft || theme.accent + '22') : theme.bgCard,
+                    borderColor: isWin ? theme.accent : theme.border,
+                  },
+                ]}
+              >
+                <Text style={[s.cellText, { opacity: cell ? 1 : 0.05 }]}>
+                  {cell === 'X' ? '❌' : cell === 'O' ? '⭕' : '❌'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* أزرار النتيجة */}
+      {result && (
+        <View style={s.localBtnsRow}>
+          <ThemedButton onPress={nextRound} label={isRTL ? '▶ الجولة التالية' : '▶ Next Round'} variant='primary' size='medium' style={{ flex: 1 }} />
+          <ThemedButton onPress={resetAll} label={isRTL ? '↻ تصفير' : '↻ Reset'} variant='ghost' size='medium' style={{ flex: 1 }} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+// لون الفائز في الوضع المحلي
+function turnColorForWinner(result, theme) {
+  if (!result || result === 'draw') return theme.textMuted;
+  return result.winner === 'X' ? theme.accent : (theme.purple || '#a855f7');
+}
+
 const s = StyleSheet.create({
   container:  { flex: 1, paddingTop: 52, paddingHorizontal: 16 },
   center:     { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -559,6 +692,13 @@ const s = StyleSheet.create({
   vsText:     { fontSize: 14, fontWeight: '700', marginBottom: 6 },
 
   // Board
+  localBoardWrap:  { width: '100%', maxWidth: 380, alignSelf: 'center', marginTop: 8 },
+  localScorePill:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, borderWidth: 1 },
+  localScoreText:  { fontSize: 15, fontWeight: '800' },
+  localTurnWrap:   { alignItems: 'center', marginTop: 18, marginBottom: 6, gap: 4 },
+  localTurnText:   { fontSize: 22, fontWeight: '900' },
+  localRoundText:  { fontSize: 13, fontWeight: '600' },
+  localBtnsRow:    { flexDirection: 'row', gap: 12, width: '100%', maxWidth: 380, alignSelf: 'center', marginTop: 8 },
   board:      { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 12 },
   cell:       { width: '31%', aspectRatio: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 1 },
   cellWin:    { borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.15)' },

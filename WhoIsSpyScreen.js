@@ -634,6 +634,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
   // خيارات تخمين الكاذب للكلمة (4 اختيارات)
   const [guessOptions, setGuessOptions] = useState([]);
   const [lyingGuess,   setLyingGuess]   = useState(null);
+  const [qStep,        setQStep]        = useState(0); // خطوة النقاش (كانت بداخل شرط — سبب crash hooks)
 
   const lyingName = players[lyingIdx];
 
@@ -793,7 +794,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
                 </Text>
 
                 <ThemedButton
-                  onPress={() => { setRevealed(false); if (revealIdx + 1 >= players.length) { setLocalPhase('discuss'); } else { setRevealIdx(r => r + 1); } }}
+                  onPress={() => { setRevealed(false); if (revealIdx + 1 >= players.length) { setQStep(0); setLocalPhase('discuss'); } else { setRevealIdx(r => r + 1); } }}
                   label={revealIdx + 1 >= players.length ? 'الجميع رأى — ابدأ النقاش ←' : 'التالي ←'}
                   variant='secondary' size='large'
                   style={{ marginTop: 16 }}
@@ -820,7 +821,6 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
     // نظام السؤال المنظم: كل لاعب يُسأل مرتين من شخصين مختلفين
     // questioner = (targetIdx + 1 + questionIdx) % players.length
     const totalQuestions  = players.length * 2; // مرتين لكل لاعب
-    const [qStep, setQStep] = React.useState(0); // 0 .. totalQuestions-1
     const targetIdx    = Math.floor(qStep / 2);           // اللاعب المستهدف
     const questionerIdx = (targetIdx + 1 + (qStep % 2)) % players.length; // السائل
     const targetName    = players[targetIdx];

@@ -1036,7 +1036,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
                 <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>حكم</Text>
               </View>
             )}
-            <PlayerLabel styles={styles}              name={topP.name}
+            <PlayerLabel styles={styles}               name={topP.name}
               isActive={currentLeader === topP.uid || currentBidder === topP.uid}
               showTimer={currentLeader === topP.uid || currentBidder === topP.uid}
               timerPct={timerPct}
@@ -1068,7 +1068,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
                 <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>حكم</Text>
               </View>
             )}
-            <PlayerLabel styles={styles}              name={leftP.name}
+            <PlayerLabel styles={styles}               name={leftP.name}
               isActive={currentLeader === leftP.uid || currentBidder === leftP.uid}
               showTimer={currentLeader === leftP.uid || currentBidder === leftP.uid}
               timerPct={timerPct}
@@ -1100,7 +1100,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
                 <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>حكم</Text>
               </View>
             )}
-            <PlayerLabel styles={styles}              name={rightP.name}
+            <PlayerLabel styles={styles}               name={rightP.name}
               isActive={currentLeader === rightP.uid || currentBidder === rightP.uid}
               showTimer={currentLeader === rightP.uid || currentBidder === rightP.uid}
               timerPct={timerPct}
@@ -1271,7 +1271,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
       </View>
 
       {/* ══ BID MODAL ══ */}
-      <BidModal styles={styles}        visible={isMyBidTurn && phase === 'bidding'}
+      <BidModal styles={styles}         visible={isMyBidTurn && phase === 'bidding'}
         currentHighBid={highBid}
         isMalzoom={isMalzoom}
         timerPct={timerPct}
@@ -1280,14 +1280,14 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
       />
 
       {/* ══ HOKM MODAL ══ */}
-      <HokmModal styles={styles}        visible={isMyHokmTurn && phase === 'hokmChoice'}
+      <HokmModal styles={styles}         visible={isMyHokmTurn && phase === 'hokmChoice'}
         hand={myHand}
         timerPct={timerPct}
         onChoose={handleChooseHokm}
       />
 
       {/* ══ ROUND RESULT ══ */}
-      <RoundResultModal styles={styles}        visible={showRoundResult}
+      <RoundResultModal styles={styles}         visible={showRoundResult}
         teamA={{ name: teamAName, tricks: teamTricks.a, total: teamScores.a }}
         teamB={{ name: teamBName, tricks: teamTricks.b, total: teamScores.b }}
         bid={highBid}
@@ -1297,7 +1297,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
       />
 
       {/* ══ GAME OVER ══ */}
-      <GameOverModal styles={styles}        visible={showGameOver}
+      <GameOverModal styles={styles}         visible={showGameOver}
         teamA={{ name: teamAName, total: teamScores.a }}
         teamB={{ name: teamBName, total: teamScores.b }}
         onNewGame={() => { setShowGameOver(false); updateRoom({ phase: 'lobby', teamScores: { a: 0, b: 0 }, round: 1 }); }}

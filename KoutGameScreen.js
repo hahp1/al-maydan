@@ -181,7 +181,7 @@ function FaceDownStack({ count, direction = 'horizontal' }) {
    (avatar + online dot + name tag, timer below)
    side: 'top' | 'left' | 'right' | 'bottom'
 ═══════════════════════════════════════════════ */
-function PlayerLabel({ name, isActive, timerPct, showTimer, isBot, side = 'top' }) {
+function PlayerLabel({ styles, name, isActive, timerPct, showTimer, isBot, side = 'top' }) {
   const isLeft  = side === 'left';
   const isRight = side === 'right';
 
@@ -360,7 +360,7 @@ function LamasDots({ bid, teamATricks, teamBTricks, maxTricks = 9 }) {
 /* ═══════════════════════════════════════════════
    BID MODAL
 ═══════════════════════════════════════════════ */
-function BidModal({ visible, currentHighBid, isMalzoom, timerPct, onBid, onPass }) {
+function BidModal({ styles, visible, currentHighBid, isMalzoom, timerPct, onBid, onPass }) {
   const options = [null, 5, 6, 7, 8, 9]; // null = pass/hand
 
   return (
@@ -417,7 +417,7 @@ function BidModal({ visible, currentHighBid, isMalzoom, timerPct, onBid, onPass 
 /* ═══════════════════════════════════════════════
    HOKM CHOOSE MODAL
 ═══════════════════════════════════════════════ */
-function HokmModal({ visible, hand, timerPct, onChoose }) {
+function HokmModal({ styles, visible, hand, timerPct, onChoose }) {
   const [sel, setSel] = useState(null);
   const suitsList = ['spades', 'hearts', 'diamonds', 'clubs'];
 
@@ -463,7 +463,7 @@ function HokmModal({ visible, hand, timerPct, onChoose }) {
 /* ═══════════════════════════════════════════════
    ROUND RESULT MODAL
 ═══════════════════════════════════════════════ */
-function RoundResultModal({ visible, teamA, teamB, bid, hokmSuit, isMalzoom, onNext }) {
+function RoundResultModal({ styles, visible, teamA, teamB, bid, hokmSuit, isMalzoom, onNext }) {
   if (!visible) return null;
   const teamAWon = teamA.tricks >= bid;
   const pts = teamAWon ? bid : isMalzoom ? bid : bid * 2;
@@ -542,7 +542,7 @@ function RoundResultModal({ visible, teamA, teamB, bid, hokmSuit, isMalzoom, onN
 /* ═══════════════════════════════════════════════
    GAME OVER MODAL
 ═══════════════════════════════════════════════ */
-function GameOverModal({ visible, teamA, teamB, onNewGame, onExit }) {
+function GameOverModal({ styles, visible, teamA, teamB, onNewGame, onExit }) {
   if (!visible) return null;
   const aWon = teamA.total >= teamB.total;
   return (
@@ -936,7 +936,9 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
         isRTL={isRTL}
         theme={theme}
         gameEmoji="🂡"
-        onCancel={onBack}
+        gameLabel="كوت بو ٦"
+        currentUser={currentUser}
+        onCancel={() => { leaveRoom?.(); onBack(); }}
       />
     );
   }
@@ -1034,8 +1036,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
                 <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>حكم</Text>
               </View>
             )}
-            <PlayerLabel
-              name={topP.name}
+            <PlayerLabel styles={styles}              name={topP.name}
               isActive={currentLeader === topP.uid || currentBidder === topP.uid}
               showTimer={currentLeader === topP.uid || currentBidder === topP.uid}
               timerPct={timerPct}
@@ -1067,8 +1068,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
                 <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>حكم</Text>
               </View>
             )}
-            <PlayerLabel
-              name={leftP.name}
+            <PlayerLabel styles={styles}              name={leftP.name}
               isActive={currentLeader === leftP.uid || currentBidder === leftP.uid}
               showTimer={currentLeader === leftP.uid || currentBidder === leftP.uid}
               timerPct={timerPct}
@@ -1100,8 +1100,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
                 <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', fontWeight: '600' }}>حكم</Text>
               </View>
             )}
-            <PlayerLabel
-              name={rightP.name}
+            <PlayerLabel styles={styles}              name={rightP.name}
               isActive={currentLeader === rightP.uid || currentBidder === rightP.uid}
               showTimer={currentLeader === rightP.uid || currentBidder === rightP.uid}
               timerPct={timerPct}
@@ -1272,8 +1271,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
       </View>
 
       {/* ══ BID MODAL ══ */}
-      <BidModal
-        visible={isMyBidTurn && phase === 'bidding'}
+      <BidModal styles={styles}        visible={isMyBidTurn && phase === 'bidding'}
         currentHighBid={highBid}
         isMalzoom={isMalzoom}
         timerPct={timerPct}
@@ -1282,16 +1280,14 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
       />
 
       {/* ══ HOKM MODAL ══ */}
-      <HokmModal
-        visible={isMyHokmTurn && phase === 'hokmChoice'}
+      <HokmModal styles={styles}        visible={isMyHokmTurn && phase === 'hokmChoice'}
         hand={myHand}
         timerPct={timerPct}
         onChoose={handleChooseHokm}
       />
 
       {/* ══ ROUND RESULT ══ */}
-      <RoundResultModal
-        visible={showRoundResult}
+      <RoundResultModal styles={styles}        visible={showRoundResult}
         teamA={{ name: teamAName, tricks: teamTricks.a, total: teamScores.a }}
         teamB={{ name: teamBName, tricks: teamTricks.b, total: teamScores.b }}
         bid={highBid}
@@ -1301,8 +1297,7 @@ export default function KoutGameScreen({ onBack, currentUser, onGameEnd, onGameR
       />
 
       {/* ══ GAME OVER ══ */}
-      <GameOverModal
-        visible={showGameOver}
+      <GameOverModal styles={styles}        visible={showGameOver}
         teamA={{ name: teamAName, total: teamScores.a }}
         teamB={{ name: teamBName, total: teamScores.b }}
         onNewGame={() => { setShowGameOver(false); updateRoom({ phase: 'lobby', teamScores: { a: 0, b: 0 }, round: 1 }); }}

@@ -16,6 +16,7 @@ import { db } from './firebaseConfig';
 import { collection, doc, setDoc, writeBatch } from 'firebase/firestore';
 import { useTheme } from './ThemeContext';
 import { ThemedButton, ThemedCard } from './ThemedComponents';
+import ExitButton from './ExitButton';
 import { useT } from './I18n';
 
 export default function ImportScreen({ onBack, defaultLang = 'ar' }) {
@@ -123,7 +124,7 @@ export default function ImportScreen({ onBack, defaultLang = 'ar' }) {
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <View style={styles.header}>
-        <ThemedButton onPress={onBack} label={t('common.back')} variant='ghost' size='small' />
+        <ExitButton onPress={onBack} icon='back' size={38} />
         <Text style={[styles.title, { color: theme.accent }]}>📥 استيراد أسئلة</Text>
       </View>
 

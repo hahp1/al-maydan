@@ -26,6 +26,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from './ThemeContext';
+import CrystalSurface from './CrystalSurface';
 
 // ── مساعدات ──────────────────────────────────────────────────
 function hexToRgba(hex, alpha) {
@@ -206,10 +207,12 @@ export const ThemedButton = memo(function ThemedButton({
   variant  = 'primary',
   size     = 'medium',
   disabled = false,
-  fullWidth= true,
+  fullWidth,
   style, textStyle,
 }) {
   const { theme } = useTheme();
+  // الأزرار الصغيرة (خروج/رجوع/أيقونات) لا تتمدد افتراضياً ما لم يُطلب صراحةً
+  const isFullWidth = fullWidth === undefined ? size !== 'small' : fullWidth;
   const scale = useRef(new Animated.Value(1)).current;
   const onIn  = () => Animated.spring(scale, { toValue:0.96, useNativeDriver:true, speed:50 }).start();
   const onOut = () => Animated.spring(scale, { toValue:1.00, useNativeDriver:true, speed:30 }).start();
@@ -218,16 +221,17 @@ export const ThemedButton = memo(function ThemedButton({
   const sz = { small:{pv:9,ph:16,r:12,fs:13,gap:5}, medium:{pv:13,ph:20,r:14,fs:15,gap:6}, large:{pv:16,ph:24,r:16,fs:17,gap:7} }[size]||{pv:13,ph:20,r:14,fs:15,gap:6};
 
   return (
-    <Animated.View style={[fullWidth&&{width:'100%'}, {transform:[{scale}], opacity:disabled?0.42:1}, style]}>
+    <Animated.View style={[isFullWidth?{width:'100%'}:{alignSelf:'flex-start'}, {transform:[{scale}], opacity:disabled?0.42:1}, style]}>
       <TouchableOpacity onPress={disabled?undefined:onPress} onPressIn={onIn} onPressOut={onOut}
         activeOpacity={0.88} disabled={disabled}>
-        <LinearGradient colors={tk.gradColors} start={tk.gradStart} end={tk.gradEnd}
+        <LinearGradient colors={theme.isCrystal ? ['transparent','transparent'] : tk.gradColors} start={tk.gradStart} end={tk.gradEnd}
           style={[cs.btn, { paddingVertical:sz.pv, paddingHorizontal:sz.ph, borderRadius:sz.r,
-            borderWidth:tk.borderWidth, borderColor:tk.border }, tk.shadow]}>
-          {tk.showSheen && <View pointerEvents="none" style={[cs.sheen,{borderRadius:sz.r,backgroundColor:tk.sheenColor}]}/>}
-          {tk.showShimmer && <Shimmer color={tk.shimmerColor} borderRadius={sz.r}/>}
-          {tk.showGlow    && <GlowPulse color={tk.glowColor||tk.border} borderRadius={sz.r}/>}
-          <View style={[cs.row,{gap:sz.gap}]}>
+            borderWidth:theme.isCrystal?0:tk.borderWidth, borderColor:tk.border }, theme.isCrystal?null:tk.shadow]}>
+          {theme.isCrystal && <View pointerEvents="none" style={cs.themeLayer}><CrystalSurface theme={theme} radius={sz.r} tier="full" /></View>}
+          {!theme.isCrystal && tk.showSheen && <View pointerEvents="none" style={[cs.sheen,{zIndex:0,borderRadius:sz.r,backgroundColor:tk.sheenColor}]}/>}
+          {!theme.isCrystal && tk.showShimmer && <View pointerEvents="none" style={cs.themeLayer}><Shimmer color={tk.shimmerColor} borderRadius={sz.r}/></View>}
+          {!theme.isCrystal && tk.showGlow    && <View pointerEvents="none" style={cs.themeLayer}><GlowPulse color={tk.glowColor||tk.border} borderRadius={sz.r}/></View>}
+          <View style={[cs.row,{gap:sz.gap, zIndex:5}]}>
             {(emoji||icon) && <Text style={{fontSize:sz.fs+1,lineHeight:sz.fs+5}}>{emoji||icon}</Text>}
             <Text style={[cs.btnTxt,{fontSize:sz.fs,color:tk.textColor,...tk.textShadow},textStyle]}>
               {label}
@@ -246,6 +250,8 @@ export const ThemedCard = memo(function ThemedCard({
   children, style,
   variant  = 'default',   // 'default' | 'accent' | 'elevated'
   onPress,
+  disabled = false,
+  activeOpacity = 0.82,
   padding  = 16,
   radius   = 16,
 }) {
@@ -266,43 +272,60 @@ export const ThemedCard = memo(function ThemedCard({
     justifyContent:   flatStyle.justifyContent,
     flexWrap:         flatStyle.flexWrap,
     gap:              flatStyle.gap,
-    flex:             flatStyle.flex,
-    alignSelf:        flatStyle.alignSelf,
   };
   // احذف القيم undefined لتجنب تأثيرات غير مقصودة
   Object.keys(layoutProps).forEach(k => layoutProps[k] === undefined && delete layoutProps[k]);
 
+  // خصائص الأبعاد/الموضع يجب أن تنطبق على الغلاف (TouchableOpacity)
+  // وليس على الـ LinearGradient الداخلي — وإلا ينكمش الغلاف ويُقصّ المحتوى
+  // (سبب اختفاء أسماء الفئات في البطاقات ذات flex/aspectRatio/maxWidth)
+  const SIZING_KEYS = [
+    'flex','flexGrow','flexShrink','flexBasis','alignSelf',
+    'width','height','minWidth','minHeight','maxWidth','maxHeight','aspectRatio',
+    'margin','marginTop','marginBottom','marginLeft','marginRight',
+    'marginHorizontal','marginVertical','position','top','bottom','left','right',
+  ];
+  const wrapperSizing = {};
+  SIZING_KEYS.forEach(k => { if (flatStyle[k] !== undefined) wrapperSizing[k] = flatStyle[k]; });
+
+  const hasWrapperSizing = onPress && Object.keys(wrapperSizing).length > 0;
+
+  // عند نقل الأبعاد للغلاف، ننظّف الـ style الداخلي منها لتجنّب التعارض
+  const innerStyle = hasWrapperSizing
+    ? (() => { const cp = { ...flatStyle }; SIZING_KEYS.forEach(k => delete cp[k]); return cp; })()
+    : style;
+
   const inner = (
     <LinearGradient
-      colors={variant === 'accent' ? tk.gradColors :
-              theme.isCrystal ? [hexToRgba(theme.crystalLight||theme.accent,0.10), hexToRgba(theme.crystalColor||theme.accent,0.04), 'rgba(0,0,0,0.18)'] :
+      colors={theme.isCrystal ? ['transparent','transparent'] :
+              variant === 'accent' ? tk.gradColors :
               theme.isMist    ? [theme.bgElevated, theme.bgCard] :
               [cardBg, cardBg]}
       start={{x:0.2,y:0}} end={{x:0.8,y:1}}
-      style={[cs.card, { padding, borderRadius:radius, borderWidth:theme.isCrystal?1.2:1, borderColor:cardBorder }, cardShadow, style]}
+      style={[cs.card, { padding, borderRadius:radius, borderWidth:theme.isCrystal?0:1, borderColor:theme.isCrystal?'transparent':cardBorder }, theme.isCrystal?null:cardShadow, innerStyle, hasWrapperSizing && cs.fillInner]}
     >
+      {theme.isCrystal && <View pointerEvents="none" style={cs.themeLayer}><CrystalSurface theme={theme} radius={radius} tier="full" /></View>}
       {theme.isMist && (
-        <View pointerEvents="none" style={[cs.sheen,{borderRadius:radius,backgroundColor:theme.isLight?'rgba(255,255,255,0.55)':hexToRgba(theme.accent,0.10)}]}/>
-      )}
-      {theme.isCrystal && (
-        <>
-          <View pointerEvents="none" style={[cs.sheen,{borderRadius:radius,backgroundColor:hexToRgba(theme.crystalLight||theme.accent,0.18)}]}/>
-          <Shimmer color="rgba(255,255,255,0.45)" borderRadius={radius} duration={3200}/>
-        </>
+        <View pointerEvents="none" style={[cs.sheen,{zIndex:0,borderRadius:radius,backgroundColor:theme.isLight?'rgba(255,255,255,0.55)':hexToRgba(theme.accent,0.10)}]}/>
       )}
       {(theme.isNeon || (!theme.isLight&&!theme.isMist&&!theme.isCrystal&&!theme.isCityTheme)) && variant==='accent' && (
-        <GlowPulse color={theme.accent} borderRadius={radius}/>
+        <View pointerEvents="none" style={cs.themeLayer}><GlowPulse color={theme.accent} borderRadius={radius}/></View>
       )}
       {theme.isLight && variant==='accent' && (
-        <GlowPulse color={theme.lightGlow||hexToRgba(theme.accent,0.10)} borderRadius={radius}/>
+        <View pointerEvents="none" style={cs.themeLayer}><GlowPulse color={theme.lightGlow||hexToRgba(theme.accent,0.10)} borderRadius={radius}/></View>
       )}
-      <View style={{position:'relative', zIndex:2, ...layoutProps}}>{children}</View>
+      <View style={[{position:'relative', zIndex:5}, layoutProps, hasWrapperSizing && cs.fillChild]}>{children}</View>
     </LinearGradient>
   );
 
   if (onPress) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.82}>
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={disabled}
+        activeOpacity={activeOpacity}
+        style={[wrapperSizing, disabled && { opacity: 0.5 }]}
+      >
         {inner}
       </TouchableOpacity>
     );
@@ -335,24 +358,24 @@ export const ThemedPill = memo(function ThemedPill({
 
   const inner = (
     <LinearGradient
-      colors={theme.isCrystal ?
-        [hexToRgba(theme.crystalLight||theme.accent,0.15), hexToRgba(theme.crystalColor||theme.accent,0.06)] :
+      colors={theme.isCrystal ? ['transparent','transparent'] :
         theme.isMist ? [theme.bgElevated, theme.bgCard] :
         [bg, bg]}
       start={{x:0,y:0}} end={{x:0.5,y:1}}
       style={[cs.pill, {paddingVertical:pv, paddingHorizontal:ph, borderRadius:r,
-        borderWidth:1, borderColor:border,
+        borderWidth:1, borderColor:theme.isCrystal?'transparent':border,
         shadowColor:variant!=='default'?tk.border:theme.accent,
-        shadowOffset:{width:0,height:0}, shadowOpacity:theme.isNeon?0.25:0.08, shadowRadius:6,
+        shadowOffset:{width:0,height:0}, shadowOpacity:theme.isCrystal?0:(theme.isNeon?0.25:0.08), shadowRadius:6,
       }, style]}
     >
-      {(theme.isMist||theme.isCrystal) && (
-        <View pointerEvents="none" style={[cs.sheen,{borderRadius:r,
-          backgroundColor:theme.isMist?(theme.isLight?'rgba(255,255,255,0.55)':hexToRgba(theme.accent,0.10)):hexToRgba(theme.crystalLight||theme.accent,0.18)}]}/>
+      {theme.isCrystal && <View pointerEvents="none" style={cs.themeLayer}><CrystalSurface theme={theme} radius={r} tier="mini" /></View>}
+      {theme.isMist && (
+        <View pointerEvents="none" style={[cs.sheen,{zIndex:0,borderRadius:r,
+          backgroundColor:theme.isLight?'rgba(255,255,255,0.55)':hexToRgba(theme.accent,0.10)}]}/>
       )}
       {typeof children === 'string'
-        ? <Text style={[{fontSize:fs,fontWeight:'700',color,...tk.textShadow},textStyle]}>{children}</Text>
-        : children}
+        ? <Text style={[{fontSize:fs,fontWeight:'700',color,zIndex:5,...tk.textShadow},textStyle]}>{children}</Text>
+        : <View style={{zIndex:5,flexDirection:'row',alignItems:'center'}}>{children}</View>}
     </LinearGradient>
   );
 
@@ -378,33 +401,31 @@ export const ThemedModal = memo(function ThemedModal({
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose} statusBarTranslucent>
       <View style={[cs.overlay, {backgroundColor:overlayColor}]}>
         <LinearGradient
-          colors={theme.isCrystal ?
-            [hexToRgba(theme.crystalLight||theme.accent,0.16), hexToRgba(theme.crystalColor||theme.accent,0.07), 'rgba(0,0,0,0.30)'] :
+          colors={theme.isCrystal ? ['transparent','transparent'] :
             theme.isMist ? [theme.bgElevated, theme.bgCard] :
             theme.isLight ? ['#ffffff','#faf6ff'] :
             [theme.bgElevated, theme.bgCard]}
           start={{x:0.2,y:0}} end={{x:0.8,y:1}}
           style={[cs.modalCard, {
             maxWidth, borderRadius:cardRadius,
-            borderWidth: theme.isCrystal ? 1.2 : 1,
-            borderColor: theme.isCrystal ? hexToRgba(theme.crystalLight||theme.accent,0.35) :
+            borderWidth: theme.isCrystal ? 0 : 1,
+            borderColor: theme.isCrystal ? 'transparent' :
                          theme.isMist    ? theme.borderCard :
                          theme.isLight   ? theme.borderCard :
                          tk.border,
-            ...tk.shadow,
+            ...(theme.isCrystal ? {} : tk.shadow),
           }]}
         >
-          {(theme.isMist||theme.isCrystal||theme.isLight) && (
-            <View pointerEvents="none" style={[cs.sheen,{borderRadius:cardRadius,
-              backgroundColor: theme.isCrystal ? hexToRgba(theme.crystalLight||theme.accent,0.18) :
-                               theme.isMist    ? (theme.isLight?'rgba(255,255,255,0.55)':hexToRgba(theme.accent,0.10)) :
+          {theme.isCrystal && <View pointerEvents="none" style={cs.themeLayer}><CrystalSurface theme={theme} radius={cardRadius} tier="full" /></View>}
+          {(theme.isMist||theme.isLight) && (
+            <View pointerEvents="none" style={[cs.sheen,{zIndex:0,borderRadius:cardRadius,
+              backgroundColor: theme.isMist    ? (theme.isLight?'rgba(255,255,255,0.55)':hexToRgba(theme.accent,0.10)) :
                                'rgba(255,255,255,0.38)'}]}/>
           )}
-          {theme.isCrystal && <Shimmer color="rgba(255,255,255,0.45)" borderRadius={cardRadius} duration={3000}/>}
           {(theme.isNeon||(!theme.isLight&&!theme.isMist&&!theme.isCrystal&&!theme.isCityTheme)) && (
-            <GlowPulse color={theme.accent} borderRadius={cardRadius}/>
+            <View pointerEvents="none" style={cs.themeLayer}><GlowPulse color={theme.accent} borderRadius={cardRadius}/></View>
           )}
-          <View style={{position:'relative',zIndex:2,width:'100%',alignItems:'center',gap:10,padding:24}}>
+          <View style={{position:'relative',zIndex:5,width:'100%',alignItems:'center',gap:10,padding:24}}>
             {emoji && <Text style={{fontSize:40}}>{emoji}</Text>}
             {title && <Text style={[cs.modalTitle,{color:theme.textPrimary}]}>{title}</Text>}
             {children}
@@ -431,25 +452,25 @@ export const ThemedRow = memo(function ThemedRow({
 
   const inner = (
     <LinearGradient
-      colors={theme.isCrystal ?
-        [hexToRgba(theme.crystalLight||theme.accent,0.10), hexToRgba(theme.crystalColor||theme.accent,0.04), 'rgba(0,0,0,0.15)'] :
+      colors={theme.isCrystal ? ['transparent','transparent'] :
         theme.isMist ? [theme.bgElevated, theme.bgCard] :
         [bg, bg]}
       start={{x:0,y:0}} end={{x:0.8,y:1}}
       style={[cs.row2, {
-        borderWidth:1, borderColor:border,
+        borderWidth:1, borderColor:theme.isCrystal?'transparent':border,
         borderRadius:14,
         shadowColor:theme.accent, shadowOffset:{width:0,height:1},
-        shadowOpacity: theme.isNeon ? 0.14 : theme.isLight ? 0.06 : 0.06,
+        shadowOpacity: theme.isCrystal ? 0 : (theme.isNeon ? 0.14 : theme.isLight ? 0.06 : 0.06),
         shadowRadius:4, elevation:1,
       }, style]}
     >
-      {(theme.isMist||theme.isCrystal) && (
-        <View pointerEvents="none" style={[cs.sheen,{borderRadius:14,
-          backgroundColor:theme.isCrystal?hexToRgba(theme.crystalLight||theme.accent,0.14):(theme.isLight?'rgba(255,255,255,0.55)':hexToRgba(theme.accent,0.08))}]}/>
+      {theme.isCrystal && <View pointerEvents="none" style={cs.themeLayer}><CrystalSurface theme={theme} radius={14} tier="full" /></View>}
+      {theme.isMist && (
+        <View pointerEvents="none" style={[cs.sheen,{zIndex:0,borderRadius:14,
+          backgroundColor:theme.isLight?'rgba(255,255,255,0.55)':hexToRgba(theme.accent,0.08)}]}/>
       )}
-      <View style={[cs.rowContent,{zIndex:2}]}>{children}</View>
-      {showArrow && <Text style={[cs.arrow,{color:theme.textMuted}]}>‹</Text>}
+      <View style={[cs.rowContent,{zIndex:5}]}>{children}</View>
+      {showArrow && <Text style={[cs.arrow,{color:theme.textMuted,zIndex:5}]}>‹</Text>}
     </LinearGradient>
   );
 
@@ -466,22 +487,22 @@ export const ThemedInput = memo(function ThemedInput({ style, inputStyle, label,
     <View style={[{width:'100%'},style]}>
       {label && <Text style={{color:theme.textMuted,fontSize:12,marginBottom:5,marginRight:4}}>{label}</Text>}
       <LinearGradient
-        colors={theme.isCrystal ?
-          [hexToRgba(theme.crystalLight||theme.accent,0.08),'rgba(0,0,0,0.20)'] :
+        colors={theme.isCrystal ? ['transparent','transparent'] :
           theme.isMist ? [theme.bgElevated, theme.bgCard] :
           [theme.bgInput, theme.bgInput]}
         start={{x:0,y:0}} end={{x:0.5,y:1}}
         style={{borderRadius:12, borderWidth:1,
-          borderColor: theme.isCrystal ? hexToRgba(theme.crystalLight||theme.accent,0.28) :
+          borderColor: theme.isCrystal ? 'transparent' :
                        theme.isLight   ? theme.borderCard : theme.accentBorder,
-          overflow:'hidden'}}
+          overflow:'hidden', position:'relative'}}
       >
+        {theme.isCrystal && <View pointerEvents="none" style={cs.themeLayer}><CrystalSurface theme={theme} radius={12} tier="mini" /></View>}
         <TextInput
           placeholderTextColor={theme.textMuted}
           style={[{
             paddingHorizontal:16, paddingVertical:13,
             fontSize:15, color:theme.textPrimary,
-            backgroundColor:'transparent',
+            backgroundColor:'transparent', zIndex:5,
           }, inputStyle]}
           {...props}
         />
@@ -499,12 +520,15 @@ const cs = StyleSheet.create({
   row:       { flexDirection:'row', alignItems:'center', justifyContent:'center', position:'relative', zIndex:2 },
   btnTxt:    { fontWeight:'800', textAlign:'center', letterSpacing:0.3 },
   card:      { overflow:'hidden', position:'relative' },
+  themeLayer:{ ...StyleSheet.absoluteFillObject, zIndex:0 },
+  fillInner: { flex:1, width:'100%', height:'100%', alignSelf:'stretch' },
+  fillChild: { flex:1, width:'100%' },
   pill:      { overflow:'hidden', position:'relative', flexDirection:'row', alignItems:'center' },
   overlay:   { flex:1, alignItems:'center', justifyContent:'center', padding:24 },
   modalCard: { width:'100%', overflow:'hidden', position:'relative' },
   modalTitle:{ fontSize:20, fontWeight:'900', textAlign:'center' },
   row2:      { overflow:'hidden', position:'relative', paddingHorizontal:16, paddingVertical:14 },
-  rowContent:{ flexDirection:'row', alignItems:'center', flex:1 },
+  rowContent:{ flexDirection:'row', alignItems:'center', flex:1, position:'relative' },
   arrow:     { fontSize:20, position:'absolute', left:14, top:'50%', marginTop:-12, zIndex:3 },
 });
 

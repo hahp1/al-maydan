@@ -145,7 +145,7 @@ export async function getActiveTournament() {
 export function subscribeToActiveTournament(callback) {
   const q = query(
     collection(db, 'tournaments'),
-    where('status', 'in', ['active', 'scoring_closed']),
+    where('status', 'in', ['active', 'scoring_closed', 'upcoming']),
     orderBy('startsAt', 'desc'),
     limit(1),
   );
@@ -160,12 +160,16 @@ export function subscribeToActiveTournament(callback) {
     const startsAt     = data.startsAt?.toMillis      ? data.startsAt.toMillis()     : (data.startsAt ?? 0);
     const scoringEndsAt= data.scoringEndsAt?.toMillis ? data.scoringEndsAt.toMillis(): (data.scoringEndsAt ?? 0);
 
+    // إذا حان وقت بدء بطولة upcoming، عاملها كنشطة حتى لو لم تُحدَّث الحالة في الخادم بعد
+    const isUpcoming   = data.status === 'upcoming' && now < startsAt;
+
     callback({
       ...data,
       endsAt,
       startsAt,
       scoringEndsAt,
-      isActive:        data.status === 'active' && now < scoringEndsAt,
+      isUpcoming,
+      isActive:        (data.status === 'active' || (data.status === 'upcoming' && now >= startsAt)) && now < scoringEndsAt,
       isScoringClosed: data.status === 'scoring_closed' || (data.status === 'active' && now >= scoringEndsAt),
     });
   }, (err) => {

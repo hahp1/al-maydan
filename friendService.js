@@ -233,8 +233,88 @@ export async function sendMessage(convId, uid, name, text) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  المجموعات
+//  قائمة الأصدقاء + دعوات اللعب
 // ════════════════════════════════════════════════════════════
+
+/**
+ * يجلب قائمة أصدقاء المستخدم (لمرة واحدة) من محادثات الـ DM.
+ * كل صديق = الطرف الآخر في محادثة type='dm'.
+ * @param {string} uid
+ * @returns {Promise<Array<{uid, name, convId}>>}
+ */
+export async function getFriendsList(uid) {
+  if (!uid) return [];
+  try {
+    const snap = await getDocs(query(
+      collection(db, 'conversations'),
+      where('members', 'array-contains', uid),
+    ));
+    const dms = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(c => c.type === 'dm');
+
+    const friends = await Promise.all(dms.map(async (c) => {
+      const otherUid = (c.members || []).find(m => m !== uid);
+      if (!otherUid) return null;
+      let name = 'صديق';
+      try {
+        const uSnap = await getDoc(doc(db, 'users', otherUid));
+        if (uSnap.exists()) name = uSnap.data().name || name;
+      } catch (_) {}
+      return { uid: otherUid, name, convId: c.id };
+    }));
+
+    return friends.filter(Boolean);
+  } catch (e) {
+    console.warn('[friendService] getFriendsList:', e);
+    return [];
+  }
+}
+
+/**
+ * يرسل دعوة لعب لصديق كرسالة في محادثة الـ DM المشتركة.
+ * تظهر للصديق في محادثته مع كود الغرفة.
+ * @param {string} fromUid
+ * @param {string} fromName
+ * @param {string} toUid
+ * @param {string} code — كود الغرفة
+ * @param {string} gameLabel — اسم اللعبة (للعرض)
+ * @returns {Promise<{success?: boolean, error?: string}>}
+ */
+export async function sendGameInvite(fromUid, fromName, toUid, code, gameLabel = 'مباراة') {
+  if (!fromUid || !toUid || !code) return { error: 'بيانات ناقصة' };
+  try {
+    const convId  = dmId(fromUid, toUid);
+    const convRef = doc(db, 'conversations', convId);
+    const existing = await getDoc(convRef);
+    if (!existing.exists()) {
+      await setDoc(convRef, {
+        type:        'dm',
+        members:     [fromUid, toUid],
+        lastMessage: '',
+        lastAt:      serverTimestamp(),
+        createdAt:   serverTimestamp(),
+      });
+    }
+    const text = `🎮 دعوة لـ${gameLabel}! انضم بالكود: ${code}`;
+    await addDoc(collection(db, 'conversations', convId, 'messages'), {
+      uid:       fromUid,
+      name:      fromName || 'صديق',
+      text,
+      inviteCode: code,
+      type:      'game_invite',
+      createdAt: serverTimestamp(),
+    });
+    await updateDoc(convRef, {
+      lastMessage: text.slice(0, 60),
+      lastAt:      serverTimestamp(),
+    });
+    return { success: true };
+  } catch (e) {
+    console.warn('[friendService] sendGameInvite:', e);
+    return { error: e.message };
+  }
+}
 
 /**
  * إنشاء محادثة جماعية

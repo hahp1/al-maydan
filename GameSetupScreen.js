@@ -7,6 +7,7 @@ import { useTheme } from './ThemeContext';
 import { useT, useRTLStyles } from './I18n';
 import CachedCategoryImage from './CachedCategoryImage';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
+import ExitButton from './ExitButton';
 
 const CategoryCard = memo(({ cat, isSelected, isFull, itemSize, onPress, theme }) => (
   <ThemedCard
@@ -96,9 +97,7 @@ export default function GameSetupScreen({ onStart, onBack, tokens = 0, categorie
 
       {/* ── الهيدر ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={HIT_SLOP}>
-          <Text style={[styles.backText, { color: theme.accent }]}>{t('common.back')}</Text>
-        </TouchableOpacity>
+        <ExitButton onPress={onBack} icon='back' size={38} />
         <Text style={[styles.title, { color: theme.accent }]}>{t('setup.title')}</Text>
         {/* رصيد التوكنز — قابل للنقر لفتح شاشة الشحن */}
         <ThemedCard

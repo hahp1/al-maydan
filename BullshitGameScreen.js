@@ -539,7 +539,9 @@ export default function BullshitGameScreen({ onBack, currentUser, onGameEnd, onG
         isRTL={isRTL}
         theme={theme}
         gameEmoji="🃏"
-        onCancel={onBack}
+        gameLabel="مكشوف"
+        currentUser={currentUser}
+        onCancel={() => { leaveRoom?.(); onBack(); }}
       />
     );
   }

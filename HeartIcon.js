@@ -459,7 +459,7 @@ const CrystalHeart = memo(({ colors, shimmerAnim }) => {
 
       {/* shimmer متحرك */}
       <G clipPath="url(#crysClip)">
-        <AnimatedG style={{ transform: [{ translateX }] }}>
+        <AnimatedG x={translateX}>
           <Rect x="0" y="0" width="40" height="100" fill="url(#crysShimmer)" />
         </AnimatedG>
       </G>
@@ -543,7 +543,7 @@ const CityHeart = memo(({ colors, shimmerAnim }) => {
 
       {/* shimmer متحرك */}
       <G clipPath="url(#cityClip)">
-        <AnimatedG style={{ transform: [{ translateX }] }}>
+        <AnimatedG x={translateX}>
           <Rect x="0" y="0" width="35" height="100" fill="url(#cityShimmer)" />
         </AnimatedG>
       </G>

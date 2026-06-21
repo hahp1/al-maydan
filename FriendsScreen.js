@@ -14,6 +14,7 @@ import {
 import { useTheme } from './ThemeContext';
 import { useT, useRTLStyles } from './I18n';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
+import ExitButton from './ExitButton';
 
 const TABS = { CHATS: 'chats', FRIENDS: 'friends', REQUESTS: 'requests' };
 
@@ -250,7 +251,7 @@ function ChatScreen({ conv, user, onBack, setScreen, t, rs }) {
     >
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
       <View style={[styles.chatHeader, { borderBottomColor: theme.divider }]}>
-        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' fullWidth={false} style={styles.backBtn} />
+        <ExitButton onPress={onBack} icon='back' size={38} />
         <View style={styles.chatHeaderCenter}>
           <Text style={styles.chatHeaderEmoji}>{conv.type === 'group' ? '👥' : '👤'}</Text>
           <Text style={[styles.chatHeaderName, { color: theme.accent }]} numberOfLines={1}>{convName}</Text>
@@ -345,7 +346,7 @@ function CreateGroupScreen({ user, conversations, onBack, onCreated, theme, t, r
   return (
     <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <View style={styles.header}>
-        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' fullWidth={false} style={styles.backBtn} />
+        <ExitButton onPress={onBack} icon='back' size={38} />
         <Text style={[styles.headerTitle, { color: theme.accent }]}>➕ مجموعة جديدة</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -439,7 +440,7 @@ export default function FriendsScreen({ user, setScreen, initialTab = TABS.CHATS
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-        <ThemedButton onPress={goHome} label={t('common.backArrow')} variant='ghost' size='small' fullWidth={false} style={styles.backBtn} />
+        <ExitButton onPress={goHome} icon='back' size={38} />
         <Text style={[styles.headerTitle, { color: theme.accent }]}>👥 الأصدقاء</Text>
         <ThemedButton onPress={openGroup} label='＋ مجموعة' variant='secondary' size='small' fullWidth={false} style={styles.addGroupBtn} />
       </Animated.View>

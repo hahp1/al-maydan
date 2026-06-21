@@ -24,10 +24,11 @@ import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
 import { fetchQuestionsForCategories } from './firebaseConfig';
 import CachedCategoryImage from './CachedCategoryImage';
+import QuestionImage from './QuestionImage';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
 
 const HIGHSCORE_KEY    = 'almaydan_highscore';
-const TIMER_SECONDS    = 15;
+const TIMER_SECONDS    = 25;
 const ROUNDS_PER_LEVEL = 3;
 const LEVELS           = [1, 2, 3, 4, 5];
 const LEVEL_POINTS     = { 1: 100, 2: 200, 3: 300, 4: 400, 5: 500 };
@@ -524,6 +525,9 @@ export default function SoloGameScreen({
             {currentQuestion?.question ?? currentQuestion?.text}
           </Text>
         </View>
+
+        {/* صورة السؤال إن وُجدت */}
+        <QuestionImage imageUrl={currentQuestion?.imageUrl} theme={theme} />
 
         {/* ── وسائل المساعدة — Solo يدعم: eliminate, swapSame, swapRandom, extend ── */}
         {!isAnswered && (

@@ -121,9 +121,9 @@ export const DAILY_MISSIONS_POOL = [
   // ── الصديق ──
   { id: 'dm_friend',       type: 'play_friend',   target: 1,  xp: 35,  ar: 'العب مع صديق',                      en: 'Play with a friend'            },
   // ── Solo ──
-  { id: 'dm_solo_play',    type: 'solo_play',     target: 1,  xp: 30,  ar: 'العب لعبة ثلاثية',                  en: 'Play a trivia game'            },
-  { id: 'dm_solo_win',     type: 'solo_win',      target: 1,  xp: 40,  ar: 'فز بلعبة ثلاثية',                   en: 'Win a trivia game'             },
-  { id: 'dm_solo3',        type: 'solo_play',     target: 3,  xp: 55,  ar: 'أجب على 10 أسئلة صح في الثلاثية',  en: 'Answer 10 correct trivia Qs'   },
+  { id: 'dm_solo_play',    type: 'solo_play',     target: 1,  xp: 30,  ar: 'العب في ميدان المعلومات',                  en: 'Play a trivia game'            },
+  { id: 'dm_solo_win',     type: 'solo_win',      target: 1,  xp: 40,  ar: 'فز في ميدان المعلومات',                   en: 'Win a trivia game'             },
+  { id: 'dm_solo3',        type: 'solo_play',     target: 3,  xp: 55,  ar: 'أجب على 10 أسئلة صح في ميدان المعلومات',  en: 'Answer 10 correct trivia Qs'   },
   // ── الإعلانات ──
   { id: 'dm_ad1',          type: 'watch_ad',      target: 1,  xp: 20,  ar: 'شاهد إعلاناً واحداً',               en: 'Watch 1 ad'                    },
   { id: 'dm_ad3',          type: 'watch_ad',      target: 3,  xp: 45,  ar: 'شاهد 3 إعلانات',                    en: 'Watch 3 ads'                   },
@@ -150,6 +150,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'total_wins',
     ar: 'المنتصر', en: 'The Victor',
+    descAr: 'اربح مباريات أونلاين', descEn: 'Win online matches',
     icon: '⚔️',
     stat: 'onlineWins',
     milestones: [3, 10, 25, 50, 100, 200, 500],
@@ -159,6 +160,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'total_games',
     ar: 'مدمن الألعاب', en: 'Game Addict',
+    descAr: 'العب ألعاباً بكل أنواعها', descEn: 'Play games of all kinds',
     icon: '🎮',
     stat: 'totalGamesPlayed',
     milestones: [5, 15, 30, 75, 150, 300, 500, 1000],
@@ -168,6 +170,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'streak',
     ar: 'الملتزم', en: 'Committed',
+    descAr: 'افتح التطبيق أياماً متتالية', descEn: 'Open the app on consecutive days',
     icon: '📅',
     stat: 'streakDays',
     milestones: [3, 7, 14, 30, 60, 100],
@@ -177,6 +180,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'wins_xo',
     ar: 'بطل XO', en: 'XO Champion',
+    descAr: 'اربح مباريات XO', descEn: 'Win XO matches',
     icon: '❌',
     stat: 'gameWins.xo',
     milestones: [5, 20, 50, 100, 300, 500],
@@ -186,6 +190,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'wins_bullshit',
     ar: 'ملك الكذابين', en: 'Bluff King',
+    descAr: 'اربح مباريات مكشوف', descEn: 'Win Bullshit matches',
     icon: '🃏',
     stat: 'gameWins.bullshit',
     milestones: [5, 20, 50, 100, 300, 500],
@@ -195,6 +200,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'wins_kout',
     ar: 'سيد الكوت', en: 'Kout Master',
+    descAr: 'اربح مباريات كوت بو ٦', descEn: 'Win Kout Bo 6 matches',
     icon: '🂡',
     stat: 'gameWins.kout',
     milestones: [5, 20, 50, 100, 300, 500],
@@ -204,6 +210,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'wins_domino',
     ar: 'حارس الدومينو', en: 'Domino Guard',
+    descAr: 'اربح مباريات دومينو', descEn: 'Win Domino matches',
     icon: '🁣',
     stat: 'gameWins.domino',
     milestones: [5, 20, 50, 100, 300, 500],
@@ -213,6 +220,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'wins_drawguess',
     ar: 'الفنان الماهر', en: 'Master Artist',
+    descAr: 'اربح في رسم وتخمين', descEn: 'Win Draw & Guess rounds',
     icon: '🎨',
     stat: 'gameWins.drawguess',
     milestones: [5, 20, 50, 100, 300, 500],
@@ -222,6 +230,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'wins_wordle',
     ar: 'ساحر الكلمات', en: 'Word Wizard',
+    descAr: 'أكمل كلمات في حرّف', descEn: 'Complete words in Harrif',
     icon: '🔤',
     stat: 'gameWins.wordle',
     milestones: [5, 20, 50, 100, 300, 500],
@@ -230,7 +239,8 @@ export const ACHIEVEMENTS = [
   // ── Solo Trivia ──
   {
     id: 'solo_wins',
-    ar: 'بطل الثلاثية', en: 'Trivia Champion',
+    ar: 'بطل ميدان المعلومات', en: 'Trivia Champion',
+    descAr: 'اربح في ميدان المعلومات', descEn: 'Win Knowledge Arena games',
     icon: '🧠',
     stat: 'soloWins',
     milestones: [3, 10, 25, 50, 100],
@@ -240,6 +250,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'explorer',
     ar: 'مستكشف الميدان', en: 'Arena Explorer',
+    descAr: 'جرّب أنماط لعب مختلفة', descEn: 'Try different game modes',
     icon: '🗺️',
     stat: 'gameTypesPlayed',
     isCounted: true,   // نحسب length المصفوفة

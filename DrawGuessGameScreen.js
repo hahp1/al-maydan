@@ -960,7 +960,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
         <View style={[s.flex1, { backgroundColor: 'transparent' }]}>
           <StatusBar barStyle={theme.statusBar} />
           {renderHeader(rl, roleText, ops2[0]?.name, roomData.scores?.[ops2[0]?.uid] || 0, ops2[1]?.name, roomData.scores?.[ops2[1]?.uid] || 0)}
-          <TimerBar s={s}timeLeft={onlineTime} total={ROUND_TIME} />
+          <TimerBar s={s} timeLeft={onlineTime} total={ROUND_TIME} />
           <ScrollView style={s.flex1} contentContainerStyle={s.gameContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={[s.section, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
               {amIDrawer ? (
@@ -1040,7 +1040,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
       <StatusBar barStyle={theme.statusBar} />
       {renderHeader(rl2, roleLocal, localPlayers[0], localScores[0], localPlayers[1], localScores[1])}
 
-      {localPhase === 'drawing' && <TimerBar s={s}timeLeft={localTime} total={ROUND_TIME} />}
+      {localPhase === 'drawing' && <TimerBar s={s} timeLeft={localTime} total={ROUND_TIME} />}
 
       <WordChoiceModal
         visible={localPhase === 'wordchoice'}

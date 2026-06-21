@@ -240,15 +240,21 @@ const ThemeRow = memo(({ item, isActive, unlocked = true, isPro = false, onSelec
   const isLocked = item.price > 0 && !unlocked;
 
   return (
-    <ThemedCard
+    <TouchableOpacity
       onPress={() => unlocked ? onSelect(item.id) : onBuy(item)}
-      radius={14} padding={12}
-      variant={isActive?'accent':'default'}
-      style={[styles.themeRow, isActive && {borderColor:item.previewAccent}]}
+      activeOpacity={0.75}
+      style={[
+        styles.themeRow,
+        {
+          backgroundColor: isActive ? (item.previewAccent + '14') : 'transparent',
+          borderColor:     isActive ? item.previewAccent : 'transparent',
+        },
+      ]}
     >
       {/* صورة الثيم */}
-      <ThemedCard
+      <TouchableOpacity
         onPress={() => onPreview(item)}
+        activeOpacity={0.7}
         style={[styles.themeThumb, { backgroundColor: item.previewBg }]}
       >
         <View style={styles.thumbDots}>
@@ -259,11 +265,11 @@ const ThemeRow = memo(({ item, isActive, unlocked = true, isPro = false, onSelec
         <View style={styles.thumbPreviewHint}>
           <Text style={styles.thumbPreviewIcon}>{isLocked ? '🔒' : '👁'}</Text>
         </View>
-      </ThemedCard>
+      </TouchableOpacity>
 
       {/* اسم الثيم */}
       <View style={{ flex: 1, marginHorizontal: 12 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <Text style={[styles.themeRowName, { color: isActive ? item.previewAccent : theme.textPrimary }]}>
             {isRtl ? item.labelAr : item.label}
           </Text>
@@ -274,26 +280,22 @@ const ThemeRow = memo(({ item, isActive, unlocked = true, isPro = false, onSelec
             </View>
           )}
         </View>
-
-
       </View>
 
-      {/* الجانب الأيمن: اختيار / زر شراء / مفتوح */}
+      {/* الجانب الأيمن: زر شراء / مؤشر اختيار — مثبّت في أقصى الطرف */}
       {isLocked ? (
-        // زر الشراء — مثبّت في أقصى الطرف
         <ThemedButton
           onPress={() => onBuy(item)}
           label={`🪙 ${item.price}`}
           variant='secondary' size='small'
-          style={[styles.buyBtn, { marginStart: 'auto' }]}
+          style={styles.buyBtn}
         />
       ) : (
-        // مؤشر الاختيار
-        <View style={[styles.themeRadio, { marginStart: 'auto', borderColor: isActive ? item.previewAccent : theme.border }]}>
+        <View style={[styles.themeRadio, { borderColor: isActive ? item.previewAccent : theme.border }]}>
           {isActive && <View style={[styles.themeRadioFill, { backgroundColor: item.previewAccent }]} />}
         </View>
       )}
-    </ThemedCard>
+    </TouchableOpacity>
   );
 });
 
@@ -648,7 +650,7 @@ export default function SettingsScreen({
 
       {/* ─── هيدر ─── */}
       <View style={styles.header}>
-        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
+        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' fullWidth={false} style={styles.backBtn} />
         <Text style={[styles.title, { color: theme.accent }]}>{t('settings.title')}</Text>
         <View style={{ width: 60 }} />
       </View>
@@ -751,6 +753,21 @@ Available at official launch.`,
         lang={lang}
       />
 
+      {/* ─── اللغة — مباشرة تحت التجربة ─── */}
+      <Section title={t('settings.langSection')} theme={theme}>
+        <LangOption
+          flag="🇬🇧"
+          name={lang === 'ar' ? 'الإنجليزية' : 'English'}
+          sub={lang === 'ar' ? 'English' : 'الإنجليزية'}
+          active={lang === 'en'} onPress={switchToEn} theme={theme} />
+        <Div theme={theme} />
+        <LangOption
+          flag="🇸🇦"
+          name={lang === 'ar' ? 'العربية' : 'Arabic'}
+          sub={lang === 'ar' ? 'Arabic' : 'العربية'}
+          active={lang === 'ar'} onPress={switchToAr} theme={theme} />
+      </Section>
+
       {/* ─── الصوت ─── */}
       <Section title={t('settings.soundSection')} theme={theme}>
         <SettingRow label={t('settings.music')}  sub={t('settings.musicSub')}  value={musicOn}  onChange={handleToggleMusic}  theme={theme} />
@@ -791,21 +808,6 @@ Available at official launch.`,
           onChange={setNotifications}
           theme={theme}
         />
-      </Section>
-
-      {/* ─── اللغة ─── */}
-      <Section title={t('settings.langSection')} theme={theme}>
-        <LangOption
-          flag="🇬🇧"
-          name={lang === 'ar' ? 'الإنجليزية' : 'English'}
-          sub={lang === 'ar' ? 'English' : 'الإنجليزية'}
-          active={lang === 'en'} onPress={switchToEn} theme={theme} />
-        <Div theme={theme} />
-        <LangOption
-          flag="🇸🇦"
-          name={lang === 'ar' ? 'العربية' : 'Arabic'}
-          sub={lang === 'ar' ? 'Arabic' : 'العربية'}
-          active={lang === 'ar'} onPress={switchToAr} theme={theme} />
       </Section>
 
       {/* ─── عن التطبيق ─── */}
@@ -937,7 +939,9 @@ const styles = StyleSheet.create({
   themeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 72,
     gap: 0,
     borderWidth: 1,
     borderRadius: 0,        // داخل groupCard المحيطة

@@ -19,7 +19,6 @@ import {
   TouchableWithoutFeedback, ActivityIndicator,
   BackHandler } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import TokenModal from './TokenModal';
 import { useTheme } from './ThemeContext';
 import ExitButton from './ExitButton';
 import LeaveModal from './LeaveModal';
@@ -65,12 +64,15 @@ const TournamentBanner = memo(({
   if (!tournament) return null;
 
   const isScoringClosed = tournament.isScoringClosed;
+  const isUpcoming      = tournament.isUpcoming;
+
+  const titleColor = isScoringClosed ? '#f87171' : isUpcoming ? '#8b5cf6' : '#f59e0b';
 
   return (
     <ThemedCard
       onPress={onOpenPopup}
       style={styles.banner}
-      borderColor={isScoringClosed ? '#f8717155' : '#f59e0b55'}
+      borderColor={isScoringClosed ? '#f8717155' : isUpcoming ? '#8b5cf655' : '#f59e0b55'}
     >
       {/* صف الأعلى: أيقونة + معلومات + عداد */}
       <View style={styles.bannerTop}>
@@ -78,15 +80,19 @@ const TournamentBanner = memo(({
           <Text style={styles.bannerTrophyEmoji}>🏆</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.bannerTitle, { color: isScoringClosed ? '#f87171' : '#f59e0b' }]}>
-            {isScoringClosed ? '🔴 البطولة على وشك الانتهاء' : `بطولة الأسبوع ${tournament.weekNumber ?? ''}`}
+          <Text style={[styles.bannerTitle, { color: titleColor }]}>
+            {isScoringClosed ? '🔴 البطولة على وشك الانتهاء'
+              : isUpcoming   ? `⏳ بطولة الأسبوع ${tournament.weekNumber ?? ''} — قريباً`
+              : `بطولة الأسبوع ${tournament.weekNumber ?? ''}`}
           </Text>
           <Text style={[styles.bannerTimerLabel, { color: theme.textSecondary }]}>
-            {isScoringClosed ? '⏰ تنتهي بعد:' : '⏰ تنتهي البطولة الحالية بعد:'}
+            {isScoringClosed ? '⏰ تنتهي بعد:'
+              : isUpcoming   ? '🚀 تبدأ بعد:'
+              : '⏰ تنتهي البطولة الحالية بعد:'}
           </Text>
           <CountdownTimer
-            targetMs={tournament.endsAt}
-            style={[styles.bannerTimerVal, { color: isScoringClosed ? '#f87171' : '#f59e0b' }]}
+            targetMs={isUpcoming ? tournament.startsAt : tournament.endsAt}
+            style={[styles.bannerTimerVal, { color: titleColor }]}
           />
         </View>
         <View style={[styles.bannerTapHint, { backgroundColor: theme.bgElevated }]}>
@@ -94,8 +100,8 @@ const TournamentBanner = memo(({
         </View>
       </View>
 
-      {/* أعمدة top3 */}
-      {top3.length > 0 && (
+      {/* أعمدة top3 — تظهر فقط عند وجود لاعبين (لا في upcoming) */}
+      {!isUpcoming && top3.length > 0 && (
         <View style={styles.bannerTop3Row}>
           {/* المركز الثاني */}
           {top3[1] && (
@@ -137,7 +143,13 @@ const TournamentBanner = memo(({
 
       {/* صف الاشتراك */}
       <View style={styles.bannerJoinRow}>
-        {isJoined ? (
+        {isUpcoming ? (
+          <View style={[styles.bannerJoinedBtn, { backgroundColor: theme.bgElevated, borderColor: '#8b5cf633' }]}>
+            <Text style={[styles.bannerJoinedText, { color: '#8b5cf6' }]}>
+              🚀 استعدّ — البطولة لم تبدأ بعد
+            </Text>
+          </View>
+        ) : isJoined ? (
           <View style={[styles.bannerJoinedBtn, { backgroundColor: theme.bgElevated, borderColor: '#f59e0b33' }]}>
             <Text style={[styles.bannerJoinedText, { color: '#a06a20' }]}>
               ✅ أنت في البطولة {userRank ? `— مركزك: ${userRank}` : ''}
@@ -165,6 +177,7 @@ const TournamentPopup = memo(({
   if (!visible) return null;
 
   const isScoringClosed = tournament?.isScoringClosed;
+  const isUpcoming      = tournament?.isUpcoming;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -180,11 +193,11 @@ const TournamentPopup = memo(({
             {tournament && (
               <View style={styles.popupTimerBox}>
                 <Text style={[styles.popupTimerLabel, { color: theme.textMuted }]}>
-                  {isScoringClosed ? '⏰ تنتهي بعد:' : '⏰ ينتهي الحساب بعد:'}
+                  {isUpcoming ? '🚀 تبدأ بعد:' : isScoringClosed ? '⏰ تنتهي بعد:' : '⏰ ينتهي الحساب بعد:'}
                 </Text>
                 <CountdownTimer
-                  targetMs={isScoringClosed ? tournament.endsAt : tournament.scoringEndsAt}
-                  style={[styles.popupTimerVal, { color: isScoringClosed ? '#f87171' : '#f59e0b' }]}
+                  targetMs={isUpcoming ? tournament.startsAt : isScoringClosed ? tournament.endsAt : tournament.scoringEndsAt}
+                  style={[styles.popupTimerVal, { color: isUpcoming ? '#8b5cf6' : isScoringClosed ? '#f87171' : '#f59e0b' }]}
                 />
               </View>
             )}
@@ -284,7 +297,13 @@ const TournamentPopup = memo(({
 
           {/* زر الاشتراك داخل الـ popup */}
           <View style={[styles.popupFooter, { borderTopColor: theme.divider }]}>
-            {isJoined ? (
+            {isUpcoming ? (
+              <View style={[styles.popupJoinedBtn, { backgroundColor: theme.bgCard, borderColor: '#8b5cf633' }]}>
+                <Text style={{ color: '#8b5cf6', fontWeight: '700', fontSize: 13 }}>
+                  🚀 البطولة لم تبدأ بعد — استعدّ!
+                </Text>
+              </View>
+            ) : isJoined ? (
               <View style={[styles.popupJoinedBtn, { backgroundColor: theme.bgCard, borderColor: '#f59e0b33' }]}>
                 <Text style={{ color: '#a06a20', fontWeight: '700', fontSize: 13 }}>
                   ✅ أنت في البطولة {userRank ? `— مركزك: ${userRank}` : ''}
@@ -710,10 +729,10 @@ export default function KnowledgeArenaScreen({
     });
   }, [getLang, t]);
 
-  // ── تصنيف: مع صديق ── (شاشة اختيار/كود، الخصم عند بدء اللعبة لكل لاعب)
+  // ── تصنيف: مع صديق ── (شاشة إنشاء/انضمام بكود فقط — بلا عشوائي)
   const handleRankedFriend = useCallback(async () => {
     setShowRankedSheet(false);
-    if (setOnlineRoomMode) setOnlineRoomMode('select');
+    if (setOnlineRoomMode) setOnlineRoomMode('friend_select');
     if (tryStartGame) tryStartGame('online', 1, null, true);
     else setScreen('online');
   }, [tryStartGame, setScreen, setOnlineRoomMode]);
@@ -732,10 +751,10 @@ export default function KnowledgeArenaScreen({
     });
   }, [t]);
 
-  // ── ودية: مباراة ودية ── (شاشة اختيار/كود، الخصم عند بدء اللعبة لكل لاعب)
+  // ── ودية: مباراة ودية ── (شاشة إنشاء/انضمام بكود فقط — بلا عشوائي)
   const handleFriendlyMatch = useCallback(async () => {
     setShowFriendlySheet(false);
-    if (setOnlineRoomMode) setOnlineRoomMode('select');
+    if (setOnlineRoomMode) setOnlineRoomMode('friend_select');
     if (tryStartGame) tryStartGame('online', 1, null, true);
     else setScreen('online');
   }, [tryStartGame, setScreen, setOnlineRoomMode]);
@@ -778,7 +797,7 @@ export default function KnowledgeArenaScreen({
 
       {/* هيدر */}
       <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-        <ThemedButton onPress={() => setScreen('home')} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
+        <ThemedButton onPress={() => setScreen('home')} label={t('common.backArrow')} variant='ghost' size='small' fullWidth={false} style={styles.backBtn} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>🧠</Text>
           <Text style={[styles.headerTitle, { color: theme.accent }]}>{t('knowledge.title')}</Text>
@@ -967,13 +986,6 @@ export default function KnowledgeArenaScreen({
         theme={theme}
       />
 
-      {/* TokenModal */}
-      <TokenModal
-        visible={showTokenModal}
-        onClose={() => setShowTokenModal(false)}
-        tokens={tokens}
-        onAddTokens={(amount) => setTokens(prev => prev + amount)}
-      />
       <LeaveModal
         visible={leaveVisible}
         onCancel={() => setLeaveVisible(false)}

@@ -9,6 +9,8 @@ import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { useT, useLanguage } from './I18n';
 import { playSound } from './SoundService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
+import ExitButton from './ExitButton';
+import LeaveModal from './LeaveModal';
 
 // ══════════════════════════════════════════════════════════════
 //  قوائم الكلمات — التجربة العربية
@@ -160,6 +162,7 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
   // phases: 'between' | 'countdown' | 'playing' | 'result' | 'finished'
   const [phase,        setPhase]        = useState('between');
   const [revealCount,  setRevealCount]  = useState(0); // عداد 3 ثواني قبل الكلمة
+  const [leaveVisible, setLeaveVisible] = useState(false);
 
   const tiltAnim = useRef(new Animated.Value(0)).current;
   const tiltLoop = useRef(null);
@@ -244,7 +247,11 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
   const TopBar = ({ showProgress = true }) => (
     <View style={styles.topBar}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-        <ThemedButton onPress={onBack} label={isGlobal ? '✕ Exit' : '✕ خروج'} variant='ghost' size='small' style={styles.exitBtn} />
+        <ExitButton
+          onPress={() => { if (phase === 'finished') { onBack(); } else { setLeaveVisible(true); } }}
+          icon='close'
+          size={38}
+        />
         <GameInfoButton gameType="man_ana" lang={lang} />
         <WebScreenButton
           playerUid={`mana_${playerNames?.[0] || 'p0'}`}
@@ -264,6 +271,12 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
           </View>
         </View>
       )}
+
+      <LeaveModal
+        visible={leaveVisible}
+        onCancel={() => setLeaveVisible(false)}
+        onConfirm={() => { setLeaveVisible(false); onBack(); }}
+      />
     </View>
   );
 
@@ -460,7 +473,7 @@ export default function ManAnaScreen({ onBack, isGlobal = false }) {
         ? (
           <>
             <SetupScreen onStart={handleStart} theme={theme} t={t} isGlobal={isGlobal} />
-            <ThemedButton onPress={onBack} label={t('common.back')} variant='ghost' size='small' style={styles.backBtn} />
+            <ExitButton onPress={onBack} icon='back' size={38} />
           </>
         )
         : (

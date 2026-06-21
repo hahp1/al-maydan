@@ -28,7 +28,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
   StatusBar, ScrollView, TextInput, Animated, Modal, ImageBackground, Image,
-  useWindowDimensions} from 'react-native';
+  useWindowDimensions, Dimensions } from 'react-native';
 import { db } from './firebaseConfig';
 import {
   doc, setDoc, updateDoc, onSnapshot, getDoc,
@@ -174,7 +174,7 @@ const REV_BG = {
 const COLS     = 5;
 const H_PAD    = 16;
 const GAP      = 5;
-const CARD_W   = (W - H_PAD * 2 - GAP * (COLS - 1)) / COLS;
+const CARD_W   = (Dimensions.get('window').width - H_PAD * 2 - GAP * (COLS - 1)) / COLS;
 const CARD_H   = CARD_W * 0.65; // نسبة أبعاد 16:9 تقريباً على شبكة صغيرة
 
 // ════════════════════════════════════════════════════════════════
@@ -329,6 +329,8 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
         isRTL={isRTL}
         theme={theme}
         gameEmoji="🔐"
+        gameLabel="كلمات السر"
+        currentUser={currentUser}
         onCancel={onBack}
       />
     );
@@ -621,8 +623,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
       {/* ══ اللوحة ══ */}
       <View style={s.board}>
         {board.map((card, index) => (
-          <CodeCard
-            key={index}
+          <CodeCard cc={cc}            key={index}
             index={index}
             card={card}
             isRevealed={revealedSet.has(index)}
@@ -708,7 +709,7 @@ export default function CodenamesGameScreen({ onBack, currentUser, onGameEnd, on
 //  CodeCard — بطاقة واحدة
 // ════════════════════════════════════════════════════════════════
 function CodeCard({
-  index, card, isRevealed, isPending, isCollapsed,
+  cc, index, card, isRevealed, isPending, isCollapsed,
   iAmSpymaster, canPress, onPress, onPressRevealed,
 }) {
   const { word, owner, imgIdx } = card;

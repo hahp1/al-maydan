@@ -183,7 +183,7 @@ export default function GamesArenaScreen({ setScreen, user, setGameMode, tryStar
 
       {/* هيدر */}
       <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-        <ThemedButton onPress={() => setScreen('home')} label='←' variant='ghost' size='small' style={styles.backBtn} />
+        <ThemedButton onPress={() => setScreen('home')} label='←' variant='ghost' size='small' fullWidth={false} style={styles.backBtn} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>🎲</Text>
           <Text style={[styles.headerTitle, { color: theme.purple }]}>{t('games.title')}</Text>

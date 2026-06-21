@@ -13,13 +13,13 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated } from 'react-native';
 import { ThemedCard } from './ThemedComponents';
-import TokenModal from './TokenModal';
 import DailyRewardModal from './DailyRewardModal';
 import { checkDailyReward, claimDailyReward } from './DailyRewardService';
 import { useLanguage } from './I18n';
 import { useTheme } from './ThemeContext';
 import HeartIcon     from './HeartIcon';
 import ChargingHeart from './ChargingHeart';
+import CrystalSurface from './CrystalSurface';
 import { getRefillCountdown } from './HeartsService';
 
 const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
@@ -274,20 +274,6 @@ export default function HomeScreen({
         </View>
       </Animated.View>
 
-      {/* ─── أعلى نتيجة ─── */}
-      {highScore > 0 && (
-        <Animated.View style={[
-          styles.highScoreBar,
-          { opacity: fadeAnim,
-            backgroundColor: isCityTheme ? theme.accent + '0c' : theme.bgCard,
-            borderColor: theme.accentBorder },
-        ]}>
-          <Text style={[styles.highScoreText, { color: theme.accent }]}>
-            {t('home.highScore', { n: highScore })}
-          </Text>
-        </Animated.View>
-      )}
-
       {/* ─── بطاقتا الميدانين ─── */}
       <View style={styles.arenaRow}>
         {/* ميدان المعلومات */}
@@ -296,10 +282,11 @@ export default function HomeScreen({
             onPress={() => setScreen('knowledge')}
             activeOpacity={0.8}
             style={[styles.arenaCard, {
-              backgroundColor: theme.accent + (theme.isLight ? '14' : '10'),
-              borderColor: theme.accent + (theme.isLight ? '50' : '38'),
+              backgroundColor: theme.isCrystal ? 'transparent' : theme.bgCard,
+              borderColor: theme.isCrystal ? 'transparent' : theme.accent + (theme.isLight ? '50' : '38'),
             }]}
           >
+            <CrystalSurface theme={theme} radius={24} />
             <View style={[styles.arenaIconWrap, { backgroundColor: theme.accentSoft, borderColor: theme.accentBorder }]}>
               <Text style={styles.arenaEmoji}>🧠</Text>
             </View>
@@ -318,10 +305,11 @@ export default function HomeScreen({
             onPress={() => setScreen('games')}
             activeOpacity={0.8}
             style={[styles.arenaCard, {
-              backgroundColor: ( theme.purple || theme.accent ) + (theme.isLight ? '14' : '10'),
-              borderColor: ( theme.purple || theme.accent ) + (theme.isLight ? '50' : '38'),
+              backgroundColor: theme.isCrystal ? 'transparent' : theme.bgCard,
+              borderColor: theme.isCrystal ? 'transparent' : ( theme.purple || theme.accent ) + (theme.isLight ? '50' : '38'),
             }]}
           >
+            <CrystalSurface theme={theme} radius={24} />
             <View style={[styles.arenaIconWrap, { backgroundColor: theme.purpleSoft, borderColor: theme.purpleBorder }]}>
               <Text style={styles.arenaEmoji}>🎲</Text>
             </View>
@@ -352,10 +340,11 @@ export default function HomeScreen({
               onPress={() => setScreen(item.screen)}
               activeOpacity={0.75}
               style={[styles.quickItem, {
-                backgroundColor: theme.accent + (theme.isLight ? '18' : '14'),
-                borderColor: theme.accent + (theme.isLight ? '55' : '40'),
+                backgroundColor: theme.isCrystal ? 'transparent' : theme.bgCard,
+                borderColor: theme.isCrystal ? 'transparent' : theme.accent + (theme.isLight ? '55' : '40'),
               }]}
             >
+              <CrystalSurface theme={theme} radius={16} />
               <Text style={styles.quickEmoji}>{item.emoji}</Text>
               <Text style={[styles.quickName, { color: theme.textPrimary }]} numberOfLines={1}>
                 {lang === 'en' ? item.nameEn : item.nameAr}
@@ -384,9 +373,10 @@ export default function HomeScreen({
 
         {/* ── BottomNav — مربعات بدون دائرة داخلية ── */}
         <View style={[styles.bottomNav, {
-          backgroundColor: isCityTheme ? theme.accent + '08' : theme.bgCard,
-          borderColor: theme.borderCard,
+          backgroundColor: theme.isCrystal ? 'transparent' : (isCityTheme ? theme.accent + '08' : theme.bgCard),
+          borderColor: theme.isCrystal ? 'transparent' : theme.borderCard,
         }]}>
+          <CrystalSurface theme={theme} radius={20} />
           {(lang === 'en' ? [
             { emoji: '⚙️', label: 'Settings', active: false, onPress: () => setScreen('settings') },
             { emoji: '👥', label: 'Friends',  active: false, onPress: () => setScreen('friends') },
@@ -421,7 +411,6 @@ export default function HomeScreen({
         </View>
       </Animated.View>
 
-      <TokenModal visible={showTokenModal} onClose={closeTokenModal} tokens={tokens} onAddTokens={addTokens} />
       <DailyRewardModal visible={dailyVisible} streak={dailyStreak} reward={dailyReward} onClaim={handleClaimDaily} />
     </>
   );
@@ -502,6 +491,7 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
     gap: 10,
+    overflow: 'hidden',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.14,
     shadowRadius: 12,
@@ -542,6 +532,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     minWidth: 0,
+    overflow: 'hidden',
   },
   quickEmoji:     { fontSize: 24 },
   quickName:      { fontSize: 12, fontWeight: '700', textAlign: 'center', flexShrink: 1 },

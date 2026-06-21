@@ -2,7 +2,7 @@
  * MafiaGameScreen.js
  * لعبة المافيا — أونلاين بكود دعوة
  *
- * الأدوار: مافيا 🔴 | محقق 🔵 | طبيب 💚 | مواطن ⚪ 
+ * الأدوار: مافيا 🔴 | محقق 🔵 | طبيب 💚 | مواطن ⚪
  *
  * مراحل اللعبة:
  * lobby      → انتظار اللاعبين (المنشئ يرى كود الغرفة ويبدأ)
@@ -617,7 +617,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
   // ═══════════════════════════════════════════
 
   if (screen === 'setup') return (
-    <SetupScreen
+    <SetupScreen gs={gs}
       theme={theme}
       joinCode={joinCode}
       setJoinCode={setJoinCode}
@@ -630,7 +630,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
   );
 
   if (screen === 'lobby') return (
-    <LobbyScreen
+    <LobbyScreen gs={gs}
       theme={theme}
       roomCode={roomCode}
       roomData={roomData}
@@ -683,7 +683,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
 
       {/* ── role_reveal ── */}
       {phase === 'role_reveal' && (
-        <RoleRevealPhase
+        <RoleRevealPhase gs={gs}
           theme={theme}
           myRole={myRole}
           timerVal={timerVal}
@@ -694,7 +694,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
 
       {/* ── day ── */}
       {phase === 'day' && (
-        <DayPhase
+        <DayPhase gs={gs}
           theme={theme}
           roomData={roomData}
           myUid={myUid}
@@ -712,12 +712,12 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
 
       {/* ── voting ── */}
       {phase === 'voting' && (
-        <VotingResultPhase theme={theme} roomData={roomData} myUid={myUid} />
+        <VotingResultPhase gs={gs} theme={theme} roomData={roomData} myUid={myUid} />
       )}
 
       {/* ── night ── */}
       {phase === 'night' && (
-        <NightPhase
+        <NightPhase gs={gs}
           theme={theme}
           roomData={roomData}
           myUid={myUid}
@@ -735,14 +735,14 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
 
       {/* ── night_result ── */}
       {phase === 'night_result' && (
-        <NightResultPhase theme={theme} roomData={roomData} myUid={myUid} />
+        <NightResultPhase gs={gs} theme={theme} roomData={roomData} myUid={myUid} />
       )}
 
       {/* ── finished ── */}
       {phase === 'finished' && (() => {
         const myRole = roomData.roles?.[myUid];
         return (
-          <FinishedPhase
+          <FinishedPhase gs={gs}
             theme={theme}
             roomData={roomData}
             myUid={myUid}
@@ -765,7 +765,7 @@ export default function MafiaGameScreen({ onBack, currentUser, onGameEnd, onGame
 // ═══════════════════════════════════════════
 //  شاشة الإعداد (إنشاء / انضمام)
 // ═══════════════════════════════════════════
-function SetupScreen({ theme, joinCode, setJoinCode, loading, error, onBack, onCreate, onJoin }) {
+function SetupScreen({ gs, theme, joinCode, setJoinCode, loading, error, onBack, onCreate, onJoin }) {
   return (
     <View style={[gs.container, { backgroundColor: 'transparent' }]}>
       <StatusBar barStyle={theme.statusBar} />
@@ -825,7 +825,7 @@ function SetupScreen({ theme, joinCode, setJoinCode, loading, error, onBack, onC
 // ═══════════════════════════════════════════
 //  شاشة اللوبي
 // ═══════════════════════════════════════════
-function LobbyScreen({ theme, roomCode, roomData, isCreator, myUid, myName, minPlayers, maxPlayers,
+function LobbyScreen({ gs, theme, roomCode, roomData, isCreator, myUid, myName, minPlayers, maxPlayers,
   onStart, onLeave, showLeave, onCancelLeave, onConfirmLeave,
   onBack, lang, roomId, themeId }) {
   const players = roomData?.players || [];
@@ -923,7 +923,7 @@ function LobbyScreen({ theme, roomCode, roomData, isCreator, myUid, myName, minP
 // ═══════════════════════════════════════════
 //  الكشف عن الدور
 // ═══════════════════════════════════════════
-function RoleRevealPhase({ theme, myRole, timerVal, total }) {
+function RoleRevealPhase({ gs, theme, myRole, timerVal, total }) {
   const info = myRole ? ROLE_INFO[myRole] : ROLE_INFO.citizen;
   const scaleAnim = useRef(new Animated.Value(0)).current;
 
@@ -960,7 +960,7 @@ function RoleRevealPhase({ theme, myRole, timerVal, total }) {
 // ═══════════════════════════════════════════
 //  مرحلة النهار
 // ═══════════════════════════════════════════
-function DayPhase({ theme, roomData, myUid, myRole, myPlayer, myVote, voteSubmitted,
+function DayPhase({ gs, theme, roomData, myUid, myRole, myPlayer, myVote, voteSubmitted,
   timerVal, total, onVote, isCreator, onForceAdvance }) {
   const info = myRole ? ROLE_INFO[myRole] : ROLE_INFO.citizen;
   const alivePlayers = (roomData.players || []).filter(p => p.alive);
@@ -1087,7 +1087,7 @@ function DayPhase({ theme, roomData, myUid, myRole, myPlayer, myVote, voteSubmit
 // ═══════════════════════════════════════════
 //  نتيجة التصويت
 // ═══════════════════════════════════════════
-function VotingResultPhase({ theme, roomData, myUid }) {
+function VotingResultPhase({ gs, theme, roomData, myUid }) {
   const tally = {};
   Object.values(roomData.votes || {}).forEach(uid => {
     tally[uid] = (tally[uid] || 0) + 1;
@@ -1122,7 +1122,7 @@ function VotingResultPhase({ theme, roomData, myUid }) {
 // ═══════════════════════════════════════════
 //  مرحلة الليل
 // ═══════════════════════════════════════════
-function NightPhase({ theme, roomData, myUid, myRole, myPlayer, myAction, actionSubmitted,
+function NightPhase({ gs, theme, roomData, myUid, myRole, myPlayer, myAction, actionSubmitted,
   timerVal, total, onAction, isCreator, onForceResolve }) {
   const info = myRole ? ROLE_INFO[myRole] : ROLE_INFO.citizen;
   const isCitizen = myRole === 'citizen' || !myRole;
@@ -1263,7 +1263,7 @@ function NightPhase({ theme, roomData, myUid, myRole, myPlayer, myAction, action
 // ═══════════════════════════════════════════
 //  نتيجة الليل
 // ═══════════════════════════════════════════
-function NightResultPhase({ theme, roomData, myUid }) {
+function NightResultPhase({ gs, theme, roomData, myUid }) {
   const msg = roomData.nightResult || 'مرّت الليلة بسلام';
   const wasKilled = msg.includes('اغتيال');
   const myRole = roomData.roles?.[myUid];
@@ -1310,7 +1310,7 @@ function NightResultPhase({ theme, roomData, myUid }) {
 // ═══════════════════════════════════════════
 //  شاشة انتهاء اللعبة
 // ═══════════════════════════════════════════
-function FinishedPhase({ theme, roomData, myUid, myRole, onLeave }) {
+function FinishedPhase({ gs, theme, roomData, myUid, myRole, onLeave }) {
   const winner = roomData.winner;
   const isMafiaWin = winner === 'mafia';
   const myRoleInfo = myRole ? ROLE_INFO[myRole] : ROLE_INFO.citizen;

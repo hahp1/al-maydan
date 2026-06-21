@@ -102,9 +102,12 @@ export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
         <View style={[styles.sheet, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
 
           <View style={[styles.header, { borderBottomColor: theme.divider }]}>
-            <ExitButton onPress={onClose} size={34} />
             <Text style={[styles.title, { color: theme.textSecondary }]}>{t('tokens.title')}</Text>
             <Text style={[styles.balance, { color: theme.accent }]}>{tokens} 🪙</Text>
+          </View>
+          {/* زر الإغلاق — مثبّت يسار دائماً (متّسق مع كل الشاشات) */}
+          <View style={styles.closeAbsolute}>
+            <ExitButton onPress={onClose} icon='close' size={34} />
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
@@ -123,6 +126,7 @@ export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
                   label={watchingAd ? t('tokens.watching') : adsLeft <= 0 ? t('tokens.tomorrow') : t('tokens.watch')}
                   variant={adsLeft <= 0 || watchingAd ? 'secondary' : 'primary'}
                   size='medium'
+                  fullWidth={false}
                   style={styles.adBtn}
                 />
               </View>
@@ -195,6 +199,7 @@ const styles = StyleSheet.create({
   overlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'flex-end' },
   sheet:        { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%', borderWidth: 1 },
   header:       { alignItems: 'center', padding: 20, borderBottomWidth: 1, gap: 4 },
+  closeAbsolute:{ position: 'absolute', left: 20, top: 20, zIndex: 10 },
   closeBtn:     { position: 'absolute', left: 20, top: 20, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   closeText:    { fontSize: 14, fontWeight: '700' },
   title:        { fontSize: 14, fontWeight: '600' },
@@ -202,11 +207,11 @@ const styles = StyleSheet.create({
   content:      { padding: 20, gap: 24 },
   section:      { gap: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '800' },
-  adCard:       { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1 },
-  adInfo:       { gap: 4 },
+  adCard:       { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, gap: 12 },
+  adInfo:       { gap: 4, flex: 1 },
   adReward:     { fontSize: 16, fontWeight: '700' },
   adCounter:    { fontSize: 13 },
-  adBtn:        { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12 },
+  adBtn:        { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, flexShrink: 0 },
   adBtnText:    { fontSize: 14, fontWeight: '800' },
   plansCol:     { gap: 10 },
   planCard:     { borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1 },

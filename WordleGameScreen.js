@@ -10,6 +10,8 @@ import { WordleEngraving } from './GameEngraving';
 import { WebScreenButton, GameInfoButton } from './WebRoomService';
 import { playSound } from './SoundService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
+import ExitButton from './ExitButton';
+import LeaveModal from './LeaveModal';
 import OnlineRoomSetup, { OnlineWaitingLobby } from './OnlineRoomSetup';
 
 // ── ثوابت ────────────────────────────────────────────────────
@@ -66,6 +68,7 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
 
   // المراحل: 'setting' | 'waiting' | 'playing' | 'finished'
   const [phase,        setPhase]        = useState('setting');
+  const [leaveVisible, setLeaveVisible] = useState(false);
   const [wordInput,    setWordInput]    = useState('');
   const [wordLang,     setWordLang]     = useState('ar');
   const [wordError,    setWordError]    = useState('');
@@ -212,15 +215,13 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
     await updateRoom({ phase:'setting', round:nr, p1Ready:false, p2Ready:false, wordForP1:null, wordForP2:null, langForP1:null, langForP2:null, guesses:[], feedbackAll:[], gameResult:null });
   };
 
-  const handleQuit = () => Alert.alert('خروج','هل تريد مغادرة اللعبة؟',[
-    { text:'إلغاء', style:'cancel' },
-    { text:'خروج', style:'destructive', onPress: async()=>{ await leaveRoom(); onBack(); }},
-  ]);
+  const handleQuit = () => setLeaveVisible(true);
+  const confirmQuit = async () => { setLeaveVisible(false); await leaveRoom(); onBack(); };
 
   // ── TopBar مشترك ───────────────────────────────────────────
   const TopBar = () => (
     <View style={s.topBar}>
-      <ThemedButton onPress={handleQuit} label='✕' variant='ghost' size='small' style={s.quitBtn} />
+      <ExitButton onPress={handleQuit} icon='close' size={38} style={s.quitBtn} />
       <GameInfoButton gameType="wordle" lang="ar" />
       <WebScreenButton
         playerUid={currentUser?.uid}
@@ -251,6 +252,11 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
           <Text style={{color:theme.accent,fontSize:11,fontWeight:'700'}}>ج {round}</Text>
         </View>
       </View>
+      <LeaveModal
+        visible={leaveVisible}
+        onCancel={() => setLeaveVisible(false)}
+        onConfirm={confirmQuit}
+      />
     </View>
   );
 

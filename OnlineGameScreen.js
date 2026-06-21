@@ -57,6 +57,7 @@ import { WebScreenButton } from './WebRoomService';
 import { playSound } from './SoundService';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedComponents';
 import OnlineRoomSetup, { OnlineWaitingLobby } from './OnlineRoomSetup';
+import QuestionImage from './QuestionImage';
 
 // ══════════════════════════════════════════════
 //  إعدادات اللعبة
@@ -106,6 +107,7 @@ function generateRounds(allCategories) {
         question:      q?.question ?? q?.text ?? '',
         correct:       q?.correct  ?? q?.answer ?? '',
         wrong:         q?.wrong    ?? [],
+        imageUrl:      q?.imageUrl ?? null,
       };
     });
 
@@ -181,7 +183,9 @@ export default function OnlineGameScreen({
 
   // ── حالة الغرفة ──
   // phase: select|connecting|waitingFriend|lobby|picking|question|waiting|finished
-  const [phase,       setPhase]       = useState(roomMode === 'select' ? 'select' : 'connecting');
+  const isSelectMode = roomMode === 'select' || roomMode === 'friend_select';
+  const setupMode    = roomMode === 'friend_select' ? 'friend' : 'all';
+  const [phase,       setPhase]       = useState(isSelectMode ? 'select' : 'connecting');
   const [friendCode,  setFriendCode]  = useState(null); // كود غرفة الصديق (للمضيف)
   const [roomId,      setRoomId]      = useState(null);
   const [isPlayer1,   setIsPlayer1]   = useState(false);
@@ -231,7 +235,7 @@ export default function OnlineGameScreen({
   }, []);
 
   useEffect(() => {
-    if (roomMode !== 'select') findOrJoinRoom();
+    if (!isSelectMode) findOrJoinRoom();
     return () => {
       unsubRef.current?.();
       clearTimeout(botTimeoutRef.current);
@@ -684,11 +688,12 @@ export default function OnlineGameScreen({
   if (phase === 'select') {
     return (
       <OnlineRoomSetup
+        mode={setupMode}
         gameEmoji="🧠"
-        gameTitleAr="مباراة مع صديق"
-        gameTitleEn="Play with a Friend"
-        descAr="العب عشوائياً أو أنشئ غرفة وشارك الكود"
-        descEn="Play randomly or create a room and share the code"
+        gameTitleAr={setupMode === 'friend' ? 'مباراة مع صديق' : 'لعب أونلاين'}
+        gameTitleEn={setupMode === 'friend' ? 'Play with a Friend' : 'Play Online'}
+        descAr={setupMode === 'friend' ? 'أنشئ غرفة وشارك الكود أو انضم بكود صديقك' : 'العب عشوائياً أو أنشئ غرفة وشارك الكود'}
+        descEn={setupMode === 'friend' ? 'Create a room and share the code, or join with a code' : 'Play randomly or create a room and share the code'}
         onBack={onBack}
         onSelect={handleSelectMode}
       />
@@ -704,6 +709,7 @@ export default function OnlineGameScreen({
         isRTL={isRTL}
         theme={theme}
         gameEmoji="🧠"
+        currentUser={currentUser}
         onCancel={() => { leaveRoomSafely(); onBack(); }}
       />
     );
@@ -712,11 +718,12 @@ export default function OnlineGameScreen({
   // ── شاشة الاتصال ──
   if (phase === 'connecting' || phase === 'lobby') {
     const isWaiting = !opponentName;
+    const handleCancelSearch = () => { leaveRoomSafely(); onBack(); };
     return (
       <View style={[styles.container, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <ExitButton onPress={onBack} />
+          <ExitButton onPress={handleCancelSearch} />
           <WebScreenButton
             playerUid={myUid}
             playerName={myName}
@@ -763,6 +770,17 @@ export default function OnlineGameScreen({
 
           {phase === 'connecting' && <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 20 }} />}
           {error && <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>}
+
+          {/* زر إلغاء البحث — يحذف الغرفة المعلّقة ويعود */}
+          {isWaiting && (
+            <ThemedButton
+              onPress={handleCancelSearch}
+              label="إلغاء البحث"
+              variant="ghost"
+              size="medium"
+              style={{ marginTop: 24, minWidth: 200 }}
+            />
+          )}
         </View>
       </View>
     );
@@ -967,6 +985,9 @@ export default function OnlineGameScreen({
             {selectedCat?.question}
           </Text>
         </View>
+
+        {/* صورة السؤال إن وُجدت */}
+        <QuestionImage imageUrl={selectedCat?.imageUrl} theme={theme} />
 
         {/* وسائل المساعدة */}
         {!isAnswered && (

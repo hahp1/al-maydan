@@ -16,6 +16,7 @@ import { useTheme } from './ThemeContext';
 import { useT } from './I18n';
 import LifelinesBar from './LifelineBar';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
+import ExitButton from './ExitButton';
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -331,7 +332,7 @@ export default function QuestionScreen({
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <View style={styles.header}>
-        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
+        <ExitButton onPress={onBack} icon='back' size={38} />
         <View style={styles.headerCenter}>
           <Text style={[styles.categoryText, { color: theme.textSecondary }]}>{category}</Text>
           <View style={[styles.pointsBadge, { backgroundColor: theme.accent }]}>

@@ -269,15 +269,17 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
     );
   }
 
-  if (selectedMode === 'create' && loading) {
+  if (selectedMode === 'create' && (loading || isWaiting) && !error) {
     return (
       <OnlineWaitingLobby
         friendCode={friendCode}
         isFriend={true}
         isRTL={isRTL}
         theme={theme}
-        gameEmoji="🔤"
-        onCancel={onBack}
+        gameEmoji="🟩"
+        gameLabel="وردل"
+        currentUser={currentUser}
+        onCancel={() => { leaveRoom?.(); onBack(); }}
       />
     );
   }
@@ -366,16 +368,21 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
           {kbRows.map((row,ri)=>(
             <View key={ri} style={s.kbRow}>
               {row.map(letter=>(
-                <ThemedCard key={letter} onPress={()=>{ if(wordInput.length<12) setWordInput(p=>p+letter); }} style={s.key}>
+                <TouchableOpacity
+                  key={letter}
+                  onPress={()=>{ if(wordInput.length<12) setWordInput(p=>p+letter); }}
+                  activeOpacity={0.6}
+                  style={[s.key,{backgroundColor:theme.bgCard,borderColor:theme.border}]}
+                >
                   <Text style={[s.keyText,{color:theme.textPrimary}]}>{letter}</Text>
-                </ThemedCard>
+                </TouchableOpacity>
               ))}
             </View>
           ))}
           <View style={s.kbRow}>
-            <ThemedCard onPress={()=>setWordInput(p=>p.slice(0,-1))} style={s.actionKey} variant='danger'>
+            <TouchableOpacity onPress={()=>setWordInput(p=>p.slice(0,-1))} activeOpacity={0.6} style={[s.actionKey,{backgroundColor:theme.bgCard,borderColor:'#ef444455'}]}>
               <Text style={{color:'#ef4444',fontSize:17}}>⌫</Text>
-            </ThemedCard>
+            </TouchableOpacity>
             <ThemedButton onPress={handleSubmitWord} disabled={WLEN<3} label='تأكيد الكلمة 🔒' variant='primary' size='medium' style={[s.submitKey,{opacity:WLEN<3?0.45:1}]} />
           </View>
         </View>
@@ -497,17 +504,22 @@ export default function WordleGameScreen({ onBack, currentUser, onGameEnd, onGam
               {row.map(letter=>{
                 const kc=getKeyColor(letter);
                 return(
-                  <ThemedCard key={letter} onPress={()=>handleKey(letter)} style={[s.key,{backgroundColor:kc||undefined}]}>
+                  <TouchableOpacity
+                    key={letter}
+                    onPress={()=>handleKey(letter)}
+                    activeOpacity={0.6}
+                    style={[s.key,{backgroundColor:kc||theme.bgCard,borderColor:kc||theme.border}]}
+                  >
                     <Text style={[s.keyText,{color:kc?'#fff':theme.textPrimary}]}>{letter}</Text>
-                  </ThemedCard>
+                  </TouchableOpacity>
                 );
               })}
             </View>
           ))}
           <View style={s.kbRow}>
-            <ThemedCard onPress={()=>handleKey('⌫')} style={s.actionKey} variant='danger'>
+            <TouchableOpacity onPress={()=>handleKey('⌫')} activeOpacity={0.6} style={[s.actionKey,{backgroundColor:theme.bgCard,borderColor:'#ef444455'}]}>
               <Text style={{color:'#ef4444',fontSize:17}}>⌫</Text>
-            </ThemedCard>
+            </TouchableOpacity>
             <ThemedButton onPress={handleGuess} label='تأكيد ✓' variant='primary' size='medium' style={s.submitKey} />
           </View>
         </View>

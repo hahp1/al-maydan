@@ -18,6 +18,7 @@ import {
 import { useTheme } from './ThemeContext';
 import { useLanguage } from './I18n';
 import { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow } from './ThemedComponents';
+import ExitButton from './ExitButton';
 import {
   getProfileSummary,
   getDailyMissions,
@@ -372,7 +373,7 @@ export default function ProfileScreen({ user, setScreen, onLogin, onLogout }) {
 
       {/* ── Header ── */}
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
-        <ThemedButton onPress={() => setScreen('home')} label={lang === 'ar' ? '→' : '←'} variant='ghost' size='small' fullWidth={false} style={styles.backBtn} />
+        <ExitButton onPress={() => setScreen('home')} icon='back' size={38} />
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
           {lang === 'ar' ? 'الملف الشخصي' : 'Profile'}
         </Text>

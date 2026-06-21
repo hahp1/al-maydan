@@ -32,7 +32,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, StatusBar,
   PanResponder, Alert, Animated, TextInput, ScrollView,
   Platform, Modal, ActivityIndicator,
-  useWindowDimensions} from 'react-native';
+  useWindowDimensions, Dimensions } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { db } from './firebaseConfig';
 import {
@@ -48,7 +48,7 @@ import { ThemedButton, ThemedCard, ThemedPill, ThemedRow } from './ThemedCompone
 // ══════════════════════════════════════════════════════════
 //  Constants
 // ══════════════════════════════════════════════════════════
-const CANVAS_W      = W - 32;
+const CANVAS_W      = Dimensions.get('window').width - 32;
 const CANVAS_H      = 260;
 const ROUND_TIME    = 60;
 const TOTAL_ROUNDS  = 6;
@@ -130,7 +130,7 @@ function DrawingCanvas({ strokes, currentStroke }) {
 // ══════════════════════════════════════════════════════════
 //  TimerBar
 // ══════════════════════════════════════════════════════════
-function TimerBar({ timeLeft, total }) {
+function TimerBar({ s, timeLeft, total }) {
   const pct   = timeLeft / total;
   const color = pct > 0.5 ? '#22c55e' : pct > 0.25 ? '#f59e0b' : '#ef4444';
   const anim  = useRef(new Animated.Value(pct)).current;
@@ -960,7 +960,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
         <View style={[s.flex1, { backgroundColor: 'transparent' }]}>
           <StatusBar barStyle={theme.statusBar} />
           {renderHeader(rl, roleText, ops2[0]?.name, roomData.scores?.[ops2[0]?.uid] || 0, ops2[1]?.name, roomData.scores?.[ops2[1]?.uid] || 0)}
-          <TimerBar timeLeft={onlineTime} total={ROUND_TIME} />
+          <TimerBar s={s}timeLeft={onlineTime} total={ROUND_TIME} />
           <ScrollView style={s.flex1} contentContainerStyle={s.gameContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={[s.section, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
               {amIDrawer ? (
@@ -1040,7 +1040,7 @@ export default function DrawGuessGameScreen({ onBack, currentUser, onGameEnd, on
       <StatusBar barStyle={theme.statusBar} />
       {renderHeader(rl2, roleLocal, localPlayers[0], localScores[0], localPlayers[1], localScores[1])}
 
-      {localPhase === 'drawing' && <TimerBar timeLeft={localTime} total={ROUND_TIME} />}
+      {localPhase === 'drawing' && <TimerBar s={s}timeLeft={localTime} total={ROUND_TIME} />}
 
       <WordChoiceModal
         visible={localPhase === 'wordchoice'}

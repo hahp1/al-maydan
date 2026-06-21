@@ -250,12 +250,12 @@ function ChatScreen({ conv, user, onBack, setScreen, t, rs }) {
     >
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
       <View style={[styles.chatHeader, { borderBottomColor: theme.divider }]}>
-        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
+        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' fullWidth={false} style={styles.backBtn} />
         <View style={styles.chatHeaderCenter}>
           <Text style={styles.chatHeaderEmoji}>{conv.type === 'group' ? '👥' : '👤'}</Text>
           <Text style={[styles.chatHeaderName, { color: theme.accent }]} numberOfLines={1}>{convName}</Text>
         </View>
-        <ThemedButton onPress={goGames} label='🎮 لعبة' variant='secondary' size='small' style={styles.startGameBtn} />
+        <ThemedButton onPress={goGames} label='🎮 لعبة' variant='secondary' size='small' fullWidth={false} style={styles.startGameBtn} />
       </View>
 
       <FlatList
@@ -345,7 +345,7 @@ function CreateGroupScreen({ user, conversations, onBack, onCreated, theme, t, r
   return (
     <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <View style={styles.header}>
-        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
+        <ThemedButton onPress={onBack} label={t('common.backArrow')} variant='ghost' size='small' fullWidth={false} style={styles.backBtn} />
         <Text style={[styles.headerTitle, { color: theme.accent }]}>➕ مجموعة جديدة</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -439,9 +439,9 @@ export default function FriendsScreen({ user, setScreen, initialTab = TABS.CHATS
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-        <ThemedButton onPress={goHome} label={t('common.backArrow')} variant='ghost' size='small' style={styles.backBtn} />
+        <ThemedButton onPress={goHome} label={t('common.backArrow')} variant='ghost' size='small' fullWidth={false} style={styles.backBtn} />
         <Text style={[styles.headerTitle, { color: theme.accent }]}>👥 الأصدقاء</Text>
-        <ThemedButton onPress={openGroup} label='＋ مجموعة' variant='secondary' size='small' style={styles.addGroupBtn} />
+        <ThemedButton onPress={openGroup} label='＋ مجموعة' variant='secondary' size='small' fullWidth={false} style={styles.addGroupBtn} />
       </Animated.View>
 
       <Animated.View style={[styles.tabs, { opacity: fadeAnim }]}>

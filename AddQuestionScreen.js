@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, TextInput, StatusBar, ScrollView, Alert } from 'react-native';
 import { useTheme } from './ThemeContext';
 import { ThemedButton, ThemedCard, ThemedInput } from './ThemedComponents';
+import ExitButton from './ExitButton';
 
 export default function AddQuestionScreen({ category, onBack, onSave, onRename }) {
   const { theme } = useTheme();
@@ -70,7 +71,7 @@ export default function AddQuestionScreen({ category, onBack, onSave, onRename }
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <View style={styles.header}>
-        <ThemedButton onPress={onBack} label='→ رجوع' variant='ghost' size='small' />
+        <ExitButton onPress={onBack} icon='back' size={38} />
         <Text style={[styles.title, { color: theme.accent }]}>{catEmoji} {catName}</Text>
         <View style={[styles.countBadge, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
           <Text style={[styles.countText, { color: theme.accent }]}>{questions.length} سؤال</Text>

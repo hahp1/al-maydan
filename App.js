@@ -318,8 +318,6 @@ function MainApp() {
 
         if (session?.isGuest) {
           commitSession(session, savedExp);
-          // تأكّد من وجود بطولة (نشطة أو قادمة) ليظهر البانر للضيوف أيضاً
-          autoCreateNextTournament().catch(() => {});
           return;
         }
 
@@ -394,7 +392,6 @@ function MainApp() {
       ? expRaw : EXPERIENCES.ARABIC;
     await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(guestData)).catch(() => {});
     commitSession(guestData, exp);
-    autoCreateNextTournament().catch(() => {});
   }, [commitSession]);
 
   const handleLogout = useCallback(async () => {
@@ -568,7 +565,7 @@ function MainApp() {
         visible={showTokenModal}
         onClose={() => setShowTokenModal(false)}
         tokens={tokens}
-        onAddTokens={(amount) => setTokens(prev => prev + amount)}
+        onAddTokens={(n) => setTokens(t => t + n)}
       />
     </>
   );

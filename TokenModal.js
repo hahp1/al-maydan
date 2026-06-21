@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from './ThemeContext';
 import ExitButton from './ExitButton';
@@ -36,6 +36,8 @@ export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
   const t = useT();
   const [adsLeft,    setAdsLeft]    = useState(MAX_ADS);
   const [watchingAd, setWatchingAd] = useState(false);
+  // مودال رسائل متأثر بالثيم (بدل Alert.alert الأبيض)
+  const [msg, setMsg] = useState(null); // { emoji, title, body, btn }
 
   useEffect(() => { if (visible) loadAdsData(); }, [visible]);
 
@@ -65,28 +67,36 @@ export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
         setAdsLeft(adsLeft - 1);
         onAddTokens(AD_REWARD);
         setWatchingAd(false);
-        Alert.alert(t('tokens.congrats'), t('tokens.earned', { n: AD_REWARD }), [{ text: t('tokens.great') }]);
+        setMsg({
+          emoji: '🎉',
+          title: t('tokens.congrats'),
+          body:  t('tokens.earned', { n: AD_REWARD }),
+          btn:   t('tokens.great'),
+        });
       } catch (e) { console.error(e); setWatchingAd(false); }
     }, 3000);
   };
 
   const handlePlan = (plan) => {
-    Alert.alert(
-      `${plan.icon} ${t(plan.nameKey)} ${t(plan.durationKey)}`,
-      t('tokens.planMsg', { p: plan.price }),
-      [{ text: t('common.ok') }]
-    );
+    setMsg({
+      emoji: plan.icon,
+      title: `${t(plan.nameKey)} ${t(plan.durationKey)}`,
+      body:  t('tokens.planMsg', { p: plan.price }),
+      btn:   t('common.ok'),
+    });
   };
 
   const handlePackage = (pkg) => {
-    Alert.alert(
-      `🪙 ${pkg.amount}`,
-      t('tokens.pkgMsg', { p: pkg.price }),
-      [{ text: t('common.ok') }]
-    );
+    setMsg({
+      emoji: '🪙',
+      title: `${pkg.amount} 🪙`,
+      body:  t('tokens.pkgMsg', { p: pkg.price }),
+      btn:   t('common.ok'),
+    });
   };
 
   return (
+    <>
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={[styles.sheet, { backgroundColor: theme.bgCard, borderColor: theme.accentBorder }]}>
@@ -156,6 +166,28 @@ export default function TokenModal({ visible, onClose, tokens, onAddTokens }) {
         </View>
       </View>
     </Modal>
+
+    {/* مودال الرسائل — متأثر بالثيم مثل مودال الخروج */}
+    <ThemedModal
+      visible={!!msg}
+      onClose={() => setMsg(null)}
+      emoji={msg?.emoji}
+      title={msg?.title}
+    >
+      {!!msg?.body && (
+        <Text style={{ color: theme.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
+          {msg.body}
+        </Text>
+      )}
+      <ThemedButton
+        onPress={() => setMsg(null)}
+        label={msg?.btn || t('common.ok')}
+        variant="primary"
+        size="medium"
+        style={{ marginTop: 8, minWidth: 160 }}
+      />
+    </ThemedModal>
+    </>
   );
 }
 

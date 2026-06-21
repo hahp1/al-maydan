@@ -26,6 +26,7 @@ import ImportScreen from './ImportScreen';
 import { useTheme } from './ThemeContext';
 import { useT, useRTLStyles } from './I18n';
 import { ThemedButton, ThemedCard } from './ThemedComponents';
+import ExitButton from './ExitButton';
 import {
   grantPro, revokePro, getAllProUsers, findUserByEmailOrUsername,
 } from './ProService';
@@ -216,7 +217,7 @@ export default function AdminScreen({ onBack }) {
           />
           {error ? <Text style={[styles.error, { color: theme.error }]}>{error}</Text> : null}
           <ThemedButton onPress={handleLogin} label={t('common.start')} variant='primary' size='large' style={styles.loginBtn} />
-          <ThemedButton onPress={onBack} label={t('common.back')} variant='ghost' size='small' style={styles.backBtn} />
+          <ExitButton onPress={onBack} icon='back' size={38} />
         </View>
       </View>
     );
@@ -242,7 +243,7 @@ export default function AdminScreen({ onBack }) {
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       <View style={styles.header}>
-        <ThemedButton onPress={onBack} label={t('common.back')} variant='ghost' size='small' style={styles.backBtn} />
+        <ExitButton onPress={onBack} icon='back' size={38} />
         <Text style={[styles.title, { color: theme.accent }]}>لوحة الإدارة</Text>
         <ThemedButton onPress={() => setAuthenticated(false)} label={`${t('common.exit')} 🔒`} variant='danger' size='small' style={styles.logoutBtn} />
       </View>

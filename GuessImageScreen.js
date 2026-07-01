@@ -18,15 +18,13 @@ import React, {
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
   Image, Animated, StatusBar, Alert,
-  ActivityIndicator, Platform, Share,
+  ActivityIndicator, Platform,
 } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import { useTheme } from './ThemeContext';
 import { useT } from './I18n';
 import { playSound } from './SoundService';
 import { ThemedButton, ThemedCard, ThemedModal } from './ThemedComponents';
-import { getFriendsList, sendGameInvite } from './friendService';
-import ExitButton from './ExitButton';
+import InviteFriendModal from './InviteFriendModal';
 import {
   collection, doc,
   setDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp,
@@ -214,20 +212,17 @@ function SetupScreen({ onCreateRoom, theme, t }) {
           { id: 'random', label: '🎲 عشوائي' },
           { id: 'custom', label: '🎯 اختار بنفسي' },
         ].map(m => (
-          <TouchableOpacity
+          <ThemedCard
             key={m.id}
-            activeOpacity={0.8}
             onPress={() => { playSound('tap'); setMode(m.id); }}
-            style={[styles.modeBtn, {
-              backgroundColor: theme.bgCard,
-              borderColor: mode === m.id ? theme.accent : theme.border,
-              borderWidth: mode === m.id ? 2 : 1,
-            }]}
+            radius={14} padding={14}
+            variant={mode === m.id ? 'accent' : 'default'}
+            style={{ flex: 1, alignItems: 'center' }}
           >
             <Text style={[styles.modeBtnText, { color: mode === m.id ? theme.accent : theme.textMuted }]}>
               {m.label}
             </Text>
-          </TouchableOpacity>
+          </ThemedCard>
         ))}
       </View>
 
@@ -243,17 +238,12 @@ function SetupScreen({ onCreateRoom, theme, t }) {
               const isSelected = selected.includes(cat.id);
               const isDisabled = !isSelected && selected.length >= 5;
               return (
-                <TouchableOpacity
+                <ThemedCard
                   key={cat.id}
-                  activeOpacity={0.8}
                   onPress={() => { if (!isDisabled) { playSound('tap'); toggleCat(cat.id); } }}
+                  style={[styles.catCard, { opacity: isDisabled ? 0.4 : 1 }]}
+                  variant={isSelected ? 'accent' : 'default'}
                   disabled={isDisabled}
-                  style={[styles.catCard, {
-                    backgroundColor: theme.bgCard,
-                    borderColor: isSelected ? theme.accent : theme.border,
-                    borderWidth: isSelected ? 2 : 1.5,
-                    opacity: isDisabled ? 0.4 : 1,
-                  }]}
                 >
                   {isSelected && (
                     <View style={[styles.catCheck, { backgroundColor: theme.accent }]}>
@@ -264,7 +254,7 @@ function SetupScreen({ onCreateRoom, theme, t }) {
                   <Text style={[styles.catName, { color: theme.textPrimary }]} numberOfLines={2}>
                     {cat.nameAr}
                   </Text>
-                </TouchableOpacity>
+                </ThemedCard>
               );
             })}
           </View>
@@ -329,32 +319,19 @@ function JoinScreen({ onJoin, onBack, theme, t }) {
         }, []).map((row, ri) => (
           <View key={ri} style={styles.keyRow}>
             {row.map(char => (
-              <TouchableOpacity
-                key={char}
-                activeOpacity={0.7}
-                onPress={() => { playSound('tap'); setCode(prev => prev.length < 5 ? prev + char : prev); }}
-                style={[styles.key, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-              >
-                <Text style={[styles.keyText, { color: theme.textPrimary }]}>{char}</Text>
-              </TouchableOpacity>
+              <ThemedCard key={char} onPress={() => setCode(prev => prev.length < 5 ? prev + char : prev)} style={styles.key}>
+              <Text style={[styles.keyText, { color: theme.textPrimary }]}>{char}</Text>
+            </ThemedCard>
             ))}
           </View>
         ))}
         <View style={styles.keyRow}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => { playSound('tap'); setCode(prev => prev.slice(0, -1)); }}
-            style={[styles.key, { flex: 2, backgroundColor: theme.bgCard, borderColor: theme.error }]}
-          >
+          <ThemedCard onPress={() => setCode(prev => prev.slice(0, -1))} style={[styles.key, { flex: 2 }]}>
             <Text style={[styles.keyText, { color: theme.error }]}>⌫</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => { playSound('tap'); setCode(''); }}
-            style={[styles.key, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-          >
+          </ThemedCard>
+          <ThemedCard onPress={() => setCode('')} style={styles.key}>
             <Text style={[styles.keyText, { color: theme.textMuted }]}>✕</Text>
-          </TouchableOpacity>
+          </ThemedCard>
         </View>
       </View>
 
@@ -380,13 +357,9 @@ function JoinScreen({ onJoin, onBack, theme, t }) {
 // ══════════════════════════════════════════════════════════════
 //  SCREEN: الانتظار (منشئ الغرفة)
 // ══════════════════════════════════════════════════════════════
-function WaitScreen({ roomCode, playerName, playerUid, theme }) {
+function WaitScreen({ roomCode, playerName, theme, currentUser, isRTL = true }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const [copied, setCopied]   = useState(false);
-  const [friendsModal, setFriendsModal] = useState(false);
-  const [friends, setFriends] = useState([]);
-  const [loadingFriends, setLoadingFriends] = useState(false);
-  const [invitedUids, setInvitedUids] = useState([]);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   useEffect(() => {
     Animated.loop(
@@ -397,52 +370,8 @@ function WaitScreen({ roomCode, playerName, playerUid, theme }) {
     ).start();
   }, []);
 
-  // نسخ الكود
-  const handleCopy = useCallback(async () => {
-    try {
-      await Clipboard.setStringAsync(roomCode);
-      playSound('tap');
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch (_) {
-      Alert.alert('تعذّر النسخ', 'حاول مرة أخرى');
-    }
-  }, [roomCode]);
-
-  // مشاركة خارجية
-  const handleShare = useCallback(async () => {
-    try {
-      playSound('tap');
-      await Share.share({
-        message: `🎮 تعال نلعب "تحدي تخمين الصورة" في ميدان!\nكود الغرفة: ${roomCode}`,
-      });
-    } catch (_) {}
-  }, [roomCode]);
-
-  // فتح قائمة الأصدقاء + جلبهم
-  const openFriends = useCallback(async () => {
-    playSound('tap');
-    setFriendsModal(true);
-    setLoadingFriends(true);
-    const list = await getFriendsList(playerUid);
-    setFriends(list);
-    setLoadingFriends(false);
-  }, [playerUid]);
-
-  // دعوة صديق داخلية
-  const inviteFriend = useCallback(async (friend) => {
-    if (invitedUids.includes(friend.uid)) return;
-    playSound('tap');
-    setInvitedUids(prev => [...prev, friend.uid]);
-    const res = await sendGameInvite(playerUid, playerName, friend.uid, roomCode, 'تخمين الصورة');
-    if (res?.error) {
-      setInvitedUids(prev => prev.filter(u => u !== friend.uid));
-      Alert.alert('تعذّر إرسال الدعوة', 'حاول مرة أخرى');
-    }
-  }, [playerUid, playerName, roomCode, invitedUids]);
-
   return (
-    <View style={[styles.flex, styles.center, { backgroundColor: 'transparent', gap: 22, padding: 24 }]}>
+    <View style={[styles.flex, styles.center, { backgroundColor: 'transparent', gap: 24, padding: 24 }]}>
       <Animated.View style={[
         styles.waitIcon,
         { backgroundColor: theme.bgCard, borderColor: theme.border, transform: [{ scale: pulseAnim }] },
@@ -452,38 +381,23 @@ function WaitScreen({ roomCode, playerName, playerUid, theme }) {
 
       <Text style={[styles.heroName, { color: theme.textPrimary }]}>انتظار الخصم...</Text>
 
-      {/* كود الغرفة — قابل للنسخ بالضغط */}
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={handleCopy}
-        style={[styles.codeBox, { backgroundColor: theme.bgCard, borderColor: theme.accent }]}
-      >
-        <Text style={[styles.codeLabel, { color: theme.textMuted }]}>كود الغرفة — اضغط للنسخ</Text>
+      <View style={[styles.codeBox, { backgroundColor: theme.bgCard, borderColor: theme.accent }]}>
+        <Text style={[styles.codeLabel, { color: theme.textMuted }]}>كود الغرفة</Text>
         <Text style={[styles.codeValue, { color: theme.accent }]}>{roomCode}</Text>
-        <Text style={[styles.copyHint, { color: copied ? theme.success : theme.textMuted }]}>
-          {copied ? '✓ تم النسخ' : '📋 نسخ'}
-        </Text>
-      </TouchableOpacity>
-
-      {/* أزرار المشاركة والدعوة */}
-      <View style={styles.shareRow}>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={openFriends}
-          style={[styles.shareBtn, { backgroundColor: theme.accentSoft || theme.bgCard, borderColor: theme.accent }]}
-        >
-          <Text style={{ fontSize: 18 }}>👥</Text>
-          <Text style={[styles.shareBtnText, { color: theme.accent }]}>دعوة صديق</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={handleShare}
-          style={[styles.shareBtn, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
-        >
-          <Text style={{ fontSize: 18 }}>📤</Text>
-          <Text style={[styles.shareBtnText, { color: theme.textPrimary }]}>مشاركة</Text>
-        </TouchableOpacity>
       </View>
+
+      {/* دعوة موحّدة — كود + رابط + إرسال + أصدقاء */}
+      <ThemedButton
+        onPress={() => setInviteOpen(true)}
+        label="👥 دعوة صديق"
+        variant="primary"
+        size="large"
+        style={{ minWidth: 220 }}
+      />
+
+      <Text style={[styles.heroTag, { color: theme.textMuted, textAlign: 'center' }]}>
+        شارك الكود أو الرابط مع خصمك حتى ينضم
+      </Text>
 
       <View style={[styles.playersRow]}>
         <View style={[styles.playerSlot, { backgroundColor: theme.bgCard, borderColor: theme.success }]}>
@@ -499,55 +413,14 @@ function WaitScreen({ roomCode, playerName, playerUid, theme }) {
         </View>
       </View>
 
-      {/* مودال اختيار صديق */}
-      <ThemedModal visible={friendsModal} onClose={() => setFriendsModal(false)}>
-        <Text style={[styles.heroName, { color: theme.accent, marginBottom: 4 }]}>ادعُ صديقاً</Text>
-        <Text style={[styles.heroTag, { color: theme.textMuted, textAlign: 'center', marginBottom: 12 }]}>
-          ستصله الدعوة مع كود الغرفة في محادثتكما
-        </Text>
-
-        {loadingFriends ? (
-          <ActivityIndicator color={theme.accent} style={{ marginVertical: 24 }} />
-        ) : friends.length === 0 ? (
-          <Text style={[styles.heroTag, { color: theme.textMuted, textAlign: 'center', marginVertical: 20 }]}>
-            لا يوجد أصدقاء بعد — أضف أصدقاء من شاشة الأصدقاء أولاً
-          </Text>
-        ) : (
-          <ScrollView style={{ maxHeight: 280, width: '100%' }} showsVerticalScrollIndicator={false}>
-            {friends.map(f => {
-              const invited = invitedUids.includes(f.uid);
-              return (
-                <TouchableOpacity
-                  key={f.uid}
-                  activeOpacity={invited ? 1 : 0.7}
-                  onPress={() => inviteFriend(f)}
-                  disabled={invited}
-                  style={[styles.friendRow, {
-                    backgroundColor: theme.bgCard,
-                    borderColor: invited ? theme.success : theme.border,
-                  }]}
-                >
-                  <Text style={{ fontSize: 22 }}>🧑</Text>
-                  <Text style={[styles.friendName, { color: theme.textPrimary }]} numberOfLines={1}>
-                    {f.name}
-                  </Text>
-                  <Text style={[styles.friendInviteText, { color: invited ? theme.success : theme.accent }]}>
-                    {invited ? '✓ تمت الدعوة' : 'دعوة'}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
-
-        <ThemedButton
-          onPress={() => setFriendsModal(false)}
-          label="إغلاق"
-          variant="secondary"
-          size="medium"
-          style={{ marginTop: 14, width: '100%' }}
-        />
-      </ThemedModal>
+      <InviteFriendModal
+        visible={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        code={roomCode}
+        gameLabel="تحدي تخمين الصورة"
+        currentUser={currentUser}
+        isRTL={isRTL}
+      />
     </View>
   );
 }
@@ -1091,7 +964,7 @@ export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGam
     return (
       <View style={styles.flex}>
         <View style={[styles.lobbyHeader, { backgroundColor: 'transparent', borderColor: theme.border }]}>
-          <ExitButton onPress={onBack} icon='back' size={38} />
+          <ThemedButton onPress={onBack} label='←' variant='ghost' size='small' style={styles.backBtn} />
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>تحدي تخمين الصورة</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -1126,7 +999,7 @@ export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGam
     return (
       <View style={styles.flex}>
         <View style={[styles.lobbyHeader, { backgroundColor: 'transparent', borderColor: theme.border }]}>
-          <ExitButton onPress={() => setFlow('lobby')} icon='back' size={38} />
+          <ThemedButton onPress={() => setFlow('lobby')} label='←' variant='ghost' size='small' style={styles.backBtn} />
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>إنشاء غرفة</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -1139,7 +1012,7 @@ export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGam
     return (
       <View style={styles.flex}>
         <View style={[styles.lobbyHeader, { backgroundColor: 'transparent', borderColor: theme.border }]}>
-          <ExitButton onPress={() => setFlow('lobby')} icon='back' size={38} />
+          <ThemedButton onPress={() => setFlow('lobby')} label='←' variant='ghost' size='small' style={styles.backBtn} />
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>انضم لغرفة</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -1152,11 +1025,11 @@ export default function GuessImageScreen({ onBack, currentUser, onGameEnd, onGam
     return (
       <View style={styles.flex}>
         <View style={[styles.lobbyHeader, { backgroundColor: 'transparent', borderColor: theme.border }]}>
-          <ExitButton onPress={onBack} icon='back' size={38} />
+          <ThemedButton onPress={onBack} label='←' variant='ghost' size='small' style={styles.backBtn} />
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>انتظار الخصم</Text>
           <View style={{ width: 40 }} />
         </View>
-        <WaitScreen roomCode={roomCode} playerName={myName} playerUid={myUid} theme={theme} />
+        <WaitScreen roomCode={roomCode} playerName={myName} theme={theme} currentUser={currentUser} isRTL={true} />
       </View>
     );
   }
@@ -1283,13 +1156,6 @@ const styles = StyleSheet.create({
   codeBox:   { borderWidth: 2, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 40, alignItems: 'center', borderStyle: 'dashed' },
   codeLabel: { fontSize: 13, marginBottom: 6 },
   codeValue: { fontSize: 34, fontWeight: '900', letterSpacing: 6 },
-  copyHint:  { fontSize: 12, fontWeight: '700', marginTop: 6 },
-  shareRow:  { flexDirection: 'row', gap: 12 },
-  shareBtn:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 14, borderWidth: 1.5 },
-  shareBtnText: { fontSize: 14, fontWeight: '800' },
-  friendRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, borderWidth: 1.5, marginBottom: 8 },
-  friendName: { flex: 1, fontSize: 15, fontWeight: '700' },
-  friendInviteText: { fontSize: 14, fontWeight: '800' },
   playersRow: { flexDirection: 'row', gap: 20, alignItems: 'center' },
   playerSlot: { borderRadius: 14, borderWidth: 1.5, padding: 16, alignItems: 'center', minWidth: 110 },
   playerAvatar: { fontSize: 32, marginBottom: 6 },

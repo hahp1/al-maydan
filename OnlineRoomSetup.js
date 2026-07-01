@@ -193,6 +193,9 @@ export function OnlineWaitingLobby({
   const [friends,    setFriends]    = useState([]);
   const [loadingFr,  setLoadingFr]  = useState(false);
   const [invitedSet, setInvitedSet] = useState({}); // uid -> 'sending'|'sent'
+  const [copied,     setCopied]     = useState(false); // توست "تم النسخ" مُصمّم بالثيم
+  const copiedTimer  = useRef(null);
+  const copiedAnim   = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -216,10 +219,21 @@ export function OnlineWaitingLobby({
       .finally(() => setLoadingFr(false));
   }, [isFriend, friendCode, currentUser?.uid]);
 
+  const showCopiedToast = () => {
+    setCopied(true);
+    Animated.timing(copiedAnim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => {
+      Animated.timing(copiedAnim, { toValue: 0, duration: 220, useNativeDriver: true })
+        .start(() => setCopied(false));
+    }, 1500);
+  };
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+
   const handleCopy = () => {
     if (!friendCode) return;
     Clipboard.setStringAsync(friendCode);
-    Alert.alert(isRTL ? '✓ تم النسخ' : '✓ Copied', friendCode);
+    showCopiedToast();
   };
 
   const handleShare = async () => {
@@ -355,6 +369,27 @@ export function OnlineWaitingLobby({
           style={{ marginTop: 8, minWidth: 200 }}
         />
       </ScrollView>
+
+      {/* توست "تم النسخ" — مُصمّم بالثيم (بدل Alert الأبيض) */}
+      {copied && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            wl.toast,
+            {
+              backgroundColor: theme.bgCard,
+              borderColor: theme.accentBorder || theme.border,
+              opacity: copiedAnim,
+              transform: [{ translateY: copiedAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
+            },
+          ]}
+        >
+          <Text style={[wl.toastText, { color: theme.accent }]}>
+            {isRTL ? '✓ تم نسخ الكود' : '✓ Code copied'}
+          </Text>
+          <Text style={[wl.toastCode, { color: theme.textSecondary }]}>{friendCode}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -400,6 +435,9 @@ const s = StyleSheet.create({
 
 const wl = StyleSheet.create({
   container:   { flex: 1, paddingTop: 56 },
+  toast:       { position: 'absolute', bottom: 40, alignSelf: 'center', paddingHorizontal: 22, paddingVertical: 12, borderRadius: 16, borderWidth: 1.5, alignItems: 'center', gap: 2, elevation: 8, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  toastText:   { fontSize: 15, fontWeight: '800' },
+  toastCode:   { fontSize: 13, fontWeight: '600', letterSpacing: 2 },
   topBar:      { paddingHorizontal: 20 },
   scroll:      { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 40, gap: 12 },
   emoji:       { fontSize: 60, marginTop: 8, marginBottom: 8 },

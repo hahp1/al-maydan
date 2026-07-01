@@ -24,8 +24,43 @@ const TURNS_PER_PLAYER = 3;
 const TRUTH_PTS = 10;
 const DARE_PTS  = 15;
 
-const SLICE_COLORS_DARK  = ['#7c3aed','#db2777','#0891b2','#d97706','#059669','#dc2626','#2563eb','#7c3aed'];
-const SLICE_COLORS_LIGHT = ['#8b5cf6','#ec4899','#0ea5e9','#f59e0b','#10b981','#ef4444','#3b82f6','#a855f7'];
+// ── توليد ألوان قطاعات أحادية اللون مشتقة من لون الثيم (accent) ──
+// تتدرّج من فاتح إلى داكن قليلاً لتمييز القطاعات مع البقاء منسجمة مع الثيم.
+function hexToRgb(hex) {
+  let h = (hex || '#7c3aed').replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const n = parseInt(h, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function rgbToHex(r, g, b) {
+  const c = v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return '#' + c(r) + c(g) + c(b);
+}
+// يمزج اللون مع الأبيض (amount>0) أو الأسود (amount<0) بنسبة [-1..1]
+function shade(hex, amount) {
+  const { r, g, b } = hexToRgb(hex);
+  if (amount >= 0) return rgbToHex(r + (255 - r) * amount, g + (255 - g) * amount, b + (255 - b) * amount);
+  const a = 1 + amount;
+  return rgbToHex(r * a, g * a, b * a);
+}
+// يبني مصفوفة ألوان متدرّجة بعدد القطاعات حول لون الثيم
+function buildWheelColors(accent, count) {
+  if (count <= 1) return [accent];
+  const out = [];
+  // مدى التدرّج: من +0.28 (أفتح) إلى -0.28 (أغمق)
+  const top = 0.28, bottom = -0.28;
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 0 : top + (bottom - top) * (i / (count - 1));
+    out.push(shade(accent, t));
+  }
+  return out;
+}
+// نص أبيض أو أسود حسب سطوع لون القطاع لضمان التباين
+function textColorFor(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.62 ? '#10101f' : '#ffffff';
+}
 
 // ══════════════════════════════════════════════════════════════
 //  بنك المحتوى — التحديات
@@ -482,15 +517,24 @@ const SpinWheel = memo(({ players, excludeId, onDone, label, theme }) => {
   const { width: W } = useWindowDimensions();
   const WHEEL_SIZE = Math.min(W * 0.78, 300);
   const WHEEL_R    = WHEEL_SIZE / 2;
-  const COLORS = theme.isLight ? SLICE_COLORS_LIGHT : SLICE_COLORS_DARK;
   const eligible = players.filter(p => p.id !== excludeId);
   const names = eligible;
   const count = names.length;
+  const COLORS = buildWheelColors(theme.accent || '#7c3aed', count);
   const rotAnim  = useRef(new Animated.Value(0)).current;
   const totalRot = useRef(0);
   const [spinning, setSpinning] = useState(false);
   const [winner,   setWinner]   = useState(null);
-  const sliceAngle = 360 / count;
+  const sliceAngle = 360 / Math.max(count, 1);
+
+  // عند بقاء مرشّح واحد فقط (مثلاً لاعبان والسائل مستبعَد) — لا داعي للتدوير
+  useEffect(() => {
+    if (count === 1 && !winner) {
+      setWinner(names[0]);
+      const t = setTimeout(() => onDone(names[0]), 500);
+      return () => clearTimeout(t);
+    }
+  }, [count]);
 
   function polarToXY(angle, r) {
     const rad = ((angle - 90) * Math.PI) / 180;
@@ -545,7 +589,7 @@ const SpinWheel = memo(({ players, excludeId, onDone, label, theme }) => {
               return (
                 <G key={player.id}>
                   <Path d={buildSlicePath(i)} fill={color} stroke={theme.bg} strokeWidth={1.5} />
-                  <SvgText x={labelPos.x} y={labelPos.y} fill="#ffffff"
+                  <SvgText x={labelPos.x} y={labelPos.y} fill={textColorFor(color)}
                     fontSize={count > 6 ? 10 : count > 4 ? 12 : 14} fontWeight="bold"
                     textAnchor="middle" alignmentBaseline="middle"
                     rotation={midAngle - 90} origin={`${labelPos.x}, ${labelPos.y}`}>
@@ -559,7 +603,7 @@ const SpinWheel = memo(({ players, excludeId, onDone, label, theme }) => {
         </Animated.View>
         <View style={[styles.wheelRing, { width: WHEEL_SIZE + 8, height: WHEEL_SIZE + 8, borderRadius: (WHEEL_SIZE + 8) / 2, borderColor: theme.accentBorder }]} />
       </View>
-      {!winner && (
+      {!winner && count > 1 && (
         <ThemedButton onPress={spin} disabled={spinning}
           label={spinning ? '⏳ جاري الدوران...' : '🎰 دوّر العجلة'}
           variant={spinning ? 'secondary' : 'primary'} size='large' style={styles.spinBtn} />

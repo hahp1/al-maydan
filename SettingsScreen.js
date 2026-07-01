@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, Pressable,
   StatusBar, ScrollView, Switch, Linking,
-  Modal, Image,
+  Modal, Image, InteractionManager,
   useWindowDimensions} from 'react-native';
 import {
   getMusicEnabled, getSoundsEnabled,
@@ -532,6 +532,17 @@ export default function SettingsScreen({
   const [previewItem,    setPreviewItem]    = useState(null);
   const [previewVisible, setPreviewVisible] = useState(false);
 
+  // ── تأجيل قسم الثيمات الثقيل (24+ صف، الأثقل في الكريستال) ──
+  // نعرض هيكل الشاشة فوراً، ونؤجّل بناء قائمة الثيمات حتى ينتهي انتقال
+  // الشاشة. هذا يزيل تجميد الانتقال دون إخفاء العناصر الأساسية.
+  const [themesReady, setThemesReady] = useState(false);
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setThemesReady(true);
+    });
+    return () => task.cancel();
+  }, []);
+
   // ── مشتريات محلية فورية: تُدمج مع الـ prop القادم من App.js ──
   // تضمن أن الثيم المُشترى يُفتح في القائمة فوراً (حتى أوفلاين، قبل
   // أن تعود قراءة usePurchasedThemes من AsyncStorage).
@@ -645,7 +656,10 @@ export default function SettingsScreen({
     : t('settings.experienceArabic');
 
   return (
-    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: 'transparent' }]}>
+    <ScrollView
+      contentContainerStyle={[styles.container, { backgroundColor: 'transparent' }]}
+      removeClippedSubviews
+    >
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.statusBg} />
 
       {/* ─── هيدر ─── */}
@@ -781,20 +795,28 @@ Available at official launch.`,
           {t('settings.themeSection')}
         </Text>
 
-        {THEME_GROUPS.map(group => (
-          <ThemeGroup
-            key={group.groupId}
-            group={group}
-            themeId={themeId}
-            onSelect={handleSelectTheme}
-            onPreview={handlePreview}
-            onBuy={handleBuyTheme}
-            theme={theme}
-            lang={lang}
-            isPro={isPro}
-            purchased={effectivePurchased}
-          />
-        ))}
+        {themesReady ? (
+          THEME_GROUPS.map(group => (
+            <ThemeGroup
+              key={group.groupId}
+              group={group}
+              themeId={themeId}
+              onSelect={handleSelectTheme}
+              onPreview={handlePreview}
+              onBuy={handleBuyTheme}
+              theme={theme}
+              lang={lang}
+              isPro={isPro}
+              purchased={effectivePurchased}
+            />
+          ))
+        ) : (
+          <View style={styles.themesPlaceholder}>
+            <Text style={[styles.themesPlaceholderText, { color: theme.textMuted }]}>
+              {lang === 'ar' ? 'جارٍ تحميل الثيمات…' : 'Loading themes…'}
+            </Text>
+          </View>
+        )}
 
 
       </View>
@@ -920,6 +942,8 @@ const styles = StyleSheet.create({
 
   // ── Theme Groups ──
   themeGroup:   { gap: 8 },
+  themesPlaceholder:    { paddingVertical: 40, alignItems: 'center', justifyContent: 'center' },
+  themesPlaceholderText:{ fontSize: 14, fontWeight: '600' },
   groupHeader:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
   groupEmoji:   { fontSize: 16 },
   groupLabel:   { fontSize: 13, fontWeight: '700', letterSpacing: 1 },

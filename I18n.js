@@ -291,6 +291,11 @@ const T = {
   'leave.cancel':  { ar: 'إلغاء',                        en: 'Cancel' },
   'leave.confirm': { ar: 'مغادرة',                       en: 'Leave' },
 
+  'join.title':    { ar: 'دعوة للعب',                    en: 'Game Invite' },
+  'join.message':  { ar: 'تمت دعوتك للانضمام إلى غرفة. هل تريد الانضمام الآن؟', en: 'You have been invited to a room. Join now?' },
+  'join.confirm':  { ar: 'انضمام',                       en: 'Join' },
+  'join.code':     { ar: 'كود الغرفة',                   en: 'Room code' },
+
   // ── الأصدقاء ───────────────────────────────────────────────
   'friends.title':       { ar: '👥 الأصدقاء',             en: '👥 Friends' },
   'friends.addGroup':    { ar: '＋ مجموعة',               en: '＋ Group' },

@@ -429,27 +429,43 @@ function CustomSetupScreen({ onStart, theme, tx, lang, maxStatements }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// بطاقة أصابع لاعب
+// بطاقة أصابع لاعب — تصميم مدمج: اسم + نقاط حياة + عدّاد
 // ══════════════════════════════════════════════════════════════
-const PlayerFingersCard = memo(({ player, isActive, theme }) => (
-  <View style={[
-    styles.fingerCard,
-    { backgroundColor: theme.bgCard, borderColor: isActive ? GREEN : theme.border },
-    isActive && { borderColor: GREEN, backgroundColor: GREEN_SOFT },
-  ]}>
-    <Text style={[styles.fingerName, { color: isActive ? GREEN : theme.textSecondary }]} numberOfLines={1}>
-      {player.name}
-    </Text>
-    <View style={styles.fingersRow}>
-      {Array(5).fill(0).map((_, i) => (
-        <Text key={i} style={[styles.fingerEmoji, i >= player.fingers && styles.fingerDown]}>☝️</Text>
-      ))}
+const PlayerFingersCard = memo(({ player, isActive, theme }) => {
+  const out = player.fingers <= 0;
+  return (
+    <View style={[
+      styles.fingerCard,
+      { backgroundColor: theme.bgCard, borderColor: isActive ? GREEN : theme.border },
+      isActive && { borderColor: GREEN, backgroundColor: GREEN_SOFT },
+      out && { opacity: 0.45 },
+    ]}>
+      <Text
+        style={[styles.fingerName, { color: isActive ? GREEN : theme.textSecondary }]}
+        numberOfLines={1}
+      >
+        {player.name}
+      </Text>
+      <View style={styles.fingersRow}>
+        {Array(5).fill(0).map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.lifeDot,
+              {
+                backgroundColor: i < player.fingers ? GREEN : 'transparent',
+                borderColor: i < player.fingers ? GREEN : theme.border,
+              },
+            ]}
+          />
+        ))}
+      </View>
+      <Text style={[styles.fingerCount, { color: out ? '#ef4444' : (isActive ? GREEN : theme.textMuted) }]}>
+        {out ? '✗' : `${player.fingers}`}
+      </Text>
     </View>
-    <Text style={[styles.fingerCount, { color: player.fingers > 0 ? GREEN : '#ef4444' }]}>
-      {player.fingers}/5
-    </Text>
-  </View>
-));
+  );
+});
 
 // ══════════════════════════════════════════════════════════════
 // شاشة اللعب الفعلي
@@ -545,7 +561,16 @@ function GameScreen({ initialPlayers, statements, onBack, theme, tx }) {
               <Text style={[styles.finalName, { color: theme.textPrimary }]}>{p.name}</Text>
               <View style={styles.fingersRow}>
                 {Array(5).fill(0).map((_, fi) => (
-                  <Text key={fi} style={[styles.fingerEmoji, fi >= p.fingers && styles.fingerDown]}>☝️</Text>
+                  <View
+                    key={fi}
+                    style={[
+                      styles.lifeDot,
+                      {
+                        backgroundColor: fi < p.fingers ? GREEN : 'transparent',
+                        borderColor: fi < p.fingers ? GREEN : theme.border,
+                      },
+                    ]}
+                  />
                 ))}
               </View>
               <Text style={[styles.fingerCount, { color: p.fingers > 0 ? GREEN : '#ef4444' }]}>{p.fingers}</Text>
@@ -802,13 +827,14 @@ const styles = StyleSheet.create({
   progressLabel:    { fontSize: 12, textAlign: 'center', fontWeight: '700' },
   progressBar:      { height: 5, borderRadius: 3, overflow: 'hidden' },
   progressFill:     { height: '100%', backgroundColor: GREEN, borderRadius: 3 },
-  playersBar:       { paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
-  fingerCard:       { borderRadius: 14, borderWidth: 1.5, padding: 10, alignItems: 'center', gap: 5, minWidth: 75 },
-  fingerName:       { fontSize: 11, fontWeight: '700', maxWidth: 70, textAlign: 'center' },
-  fingersRow:       { flexDirection: 'row', gap: 1 },
+  playersBar:       { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center' },
+  fingerCard:       { borderRadius: 12, borderWidth: 1.5, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center', gap: 6, minWidth: 64 },
+  fingerName:       { fontSize: 11, fontWeight: '700', maxWidth: 72, textAlign: 'center' },
+  fingersRow:       { flexDirection: 'row', gap: 4, alignItems: 'center' },
+  lifeDot:          { width: 7, height: 7, borderRadius: 4, borderWidth: 1.5 },
   fingerEmoji:      { fontSize: 14 },
   fingerDown:       { opacity: 0.12 },
-  fingerCount:      { fontSize: 12, fontWeight: '800' },
+  fingerCount:      { fontSize: 13, fontWeight: '900' },
 
   stmtSection:      { flex: 1, paddingHorizontal: 20, paddingBottom: 24, gap: 14, justifyContent: 'center' },
   turnBadge:        { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', paddingHorizontal: 18, paddingVertical: 9, borderRadius: 99, borderWidth: 1.5 },

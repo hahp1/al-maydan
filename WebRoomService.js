@@ -21,6 +21,9 @@ import {
   StyleSheet, Pressable, Platform,
 } from 'react-native';
 
+// نطاق الموقع الذي يستقبل الشاشة الكبيرة
+const WEB_BASE = 'https://playarnex.com';
+
 // ══════════════════════════════════════════════════════════
 // توليد الكود:  W  +  6 عناصر عشوائية
 // ══════════════════════════════════════════════════════════
@@ -342,11 +345,29 @@ class WebRoomService {
     return this._rooms[playerUid]?.code || null;
   }
 
+  // رابط مباشر يحتوي الكود كجزء منه:  https://playarnex.com/#WK7MX3P
+  getLink(playerUid) {
+    const code = this.getCode(playerUid);
+    if (!code) return null;
+    return `${WEB_BASE}/#${code}`;
+  }
+
   async copyCode(playerUid) {
     const code = this.getCode(playerUid);
     if (!code) return;
     try {
       await Clipboard.setStringAsync(code);
+    } catch (_) {
+      // fallback
+    }
+  }
+
+  // ينسخ الرابط الكامل (المفضّل — يفتح الشاشة الكبيرة مباشرة)
+  async copyLink(playerUid) {
+    const link = this.getLink(playerUid);
+    if (!link) return;
+    try {
+      await Clipboard.setStringAsync(link);
     } catch (_) {
       // fallback
     }
@@ -530,7 +551,7 @@ function WebScreenModal({ visible, code, loading, gameType, playerUid, onGetCode
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    await webRoom.copyCode(playerUid);
+    await webRoom.copyLink(playerUid); // ينسخ الرابط الكامل المباشر
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -539,6 +560,8 @@ function WebScreenModal({ visible, code, loading, gameType, playerUid, onGetCode
   const displayCode = code
     ? code[0] + '·' + code.slice(1, 4) + '·' + code.slice(4)
     : null;
+  // الرابط المباشر المعروض/المنسوخ
+  const displayLink = code ? `playarnex.com/#${code}` : null;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -562,8 +585,8 @@ function WebScreenModal({ visible, code, loading, gameType, playerUid, onGetCode
 
           {/* ── الشرح دائماً ظاهر ── */}
           <View style={m.stepsWrap}>
-            <Step n="1" text="افتح playarnex.com على أي شاشة كبيرة" />
-            <Step n="2" text="اضغط «عرض الشاشة» وأدخل الكود" />
+            <Step n="1" text="انسخ الرابط وافتحه على أي شاشة كبيرة" />
+            <Step n="2" text="أو افتح playarnex.com وأدخل الكود يدوياً" />
             <Step n="3" text="اللعبة تظهر هناك — والتحكم يبقى بهاتفك" />
           </View>
 
@@ -591,23 +614,23 @@ function WebScreenModal({ visible, code, loading, gameType, playerUid, onGetCode
           {/* ── حالة ما بعد الكود ── */}
           {code && (
             <View style={m.codeSection}>
-              {/* الكود القابل للنسخ */}
+              {/* الرابط المباشر القابل للنسخ (يحتوي الكود) */}
               <TouchableOpacity
                 style={[m.codebox, copied && m.codeboxCopied]}
                 onPress={handleCopy}
                 activeOpacity={0.8}
               >
                 <Text style={m.codeHint}>
-                  {copied ? '✅ تم النسخ!' : 'اضغط للنسخ'}
+                  {copied ? '✅ تم نسخ الرابط!' : '🔗 اضغط لنسخ الرابط المباشر'}
                 </Text>
                 <Text style={m.codeText}>{displayCode}</Text>
-                <Text style={m.codeUrl}>playarnex.com</Text>
+                <Text style={m.codeUrl}>{displayLink}</Text>
               </TouchableOpacity>
 
               {/* تحذير */}
               <View style={m.warning}>
                 <Text style={m.warningText}>
-                  🔒 هذا الكود لهذه الجلسة فقط — لا تشاركه مع غيرك
+                  🔒 هذا الرابط لهذه الجلسة فقط — لا تشاركه مع غيرك
                 </Text>
               </View>
             </View>

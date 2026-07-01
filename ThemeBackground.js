@@ -12,13 +12,40 @@
  * تغيير الثيم → injectJavaScript فوري بدون reload
  */
 
-import { useRef, useEffect, useState, useCallback, memo } from 'react';
+import React, { useRef, useEffect, useState, useCallback, memo } from 'react';
 import { View, StyleSheet, ImageBackground, Animated, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CRASH_COUNT_KEY = 'arena_theme_crash_count';
+
+// ══════════════════════════════════════════════════════════
+//  🔬 أعلام تشخيص انهيار ثيمات المدن (native crash)
+//  اجعلها true لعزل الطبقة المسببة، ثم أعِدها false واحدة تلو
+//  الأخرى (build لكلٍّ) حتى يعود الانهيار = الجاني محدَّد.
+// ══════════════════════════════════════════════════════════
+const DIAG_NO_SKYLINE = false;  // يُخفي ImageBackground (skyline)
+const DIAG_NO_STARS   = false;  // يُخفي طبقة النجوم
+const DIAG_NO_FADES   = false;  // يُخفي تدرّجات الدمج المتراكبة
+
+// إضافة قناة ألفا بأمان: تعمل فقط مع hex سداسي صحيح (#RRGGBB)،
+// وإلا تُعيد اللون كما هو حتى لا يتعطّل LinearGradient على أندرويد.
+function withAlpha(hex, alphaHex) {
+  if (typeof hex !== 'string') return '#00000000';
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return hex; // لون غير سداسي (rgba/اسم/3-digit) — لا نلمسه
+  return '#' + m[1] + alphaHex;
+}
+
+// حدّ خطأ صامت حول السكاي لاين: إن فشل تحميل/رسم أصل المدينة (PNG تالف مثلاً)
+// لا نُسقط التطبيق — نكتفي بالسماء فقط.
+class SkylineBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch() { /* صامت — السماء وحدها كافية */ }
+  render() { return this.state.failed ? null : this.props.children; }
+}
 
 // ══════════════════════════════════════════════════════════
 //  بيانات الثيمات للـ WebView
@@ -316,14 +343,14 @@ const ThemeBackground = memo(({ theme }) => {
   }
 
   // ── City ──
-  const stars = theme.starCount ? getCityStars(theme, theme.starCount) : [];
+  const stars = (!DIAG_NO_STARS && theme.starCount) ? getCityStars(theme, theme.starCount) : [];
 
   const skyColors = (theme.skyGradient && theme.skyGradient.length >= 2)
     ? theme.skyGradient
     : [theme.bg || '#05070f', theme.bg || '#05070f'];
 
   const fadeColors = theme.skyBottom
-    ? [theme.skyBottom, theme.skyBottom + '00']
+    ? [theme.skyBottom, withAlpha(theme.skyBottom, '00')]
     : ['#07091a', '#07091a00'];
 
   // ارتفاع السكاي لاين: نسبة من الارتفاع الفعلي للشاشة
@@ -351,35 +378,41 @@ const ThemeBackground = memo(({ theme }) => {
           width: st.size,
           height: st.size,
           borderRadius: 99,
-          backgroundColor: (theme.accent || '#ffffff') + 'cc',
+          backgroundColor: withAlpha(theme.accent || '#ffffff', 'cc'),
           opacity: st.opacity,
         }} />
       ))}
 
       {/* ── السكاي لاين: ارتفاع نسبي يتكيف مع الاتجاه ── */}
-      {theme.skylineAsset ? (
-        <View style={[s.skylineWrap, { height: skylineHeight }]}>
-          <ImageBackground
-            source={theme.skylineAsset}
-            style={s.skylineImg}
-            resizeMode={isLandscape ? 'cover' : 'cover'}
-            onError={() => {}}
-          />
-          {/* تدرج يُدمج السكاي لاين مع السماء من الأسفل */}
-          <LinearGradient
-            colors={fadeColors}
-            style={[s.skylineFade, { height: skylineFadeH }]}
-            start={{ x: 0, y: 1 }}
-            end={{ x: 0, y: 0 }}
-          />
-          {/* تدرج علوي يُدمج السكاي لاين مع السماء من الأعلى */}
-          <LinearGradient
-            colors={[skyColors[0] + '00', skyColors[0]]}
-            style={[s.skylineTopFade, { height: skylineHeight * (isLandscape ? 0.35 : 0.22) }]}
-            start={{ x: 0, y: 1 }}
-            end={{ x: 0, y: 0 }}
-          />
-        </View>
+      {(!DIAG_NO_SKYLINE && theme.skylineAsset) ? (
+        <SkylineBoundary>
+          <View style={[s.skylineWrap, { height: skylineHeight }]}>
+            <ImageBackground
+              source={theme.skylineAsset}
+              style={s.skylineImg}
+              resizeMode={isLandscape ? 'cover' : 'cover'}
+              onError={() => {}}
+            />
+            {!DIAG_NO_FADES && (
+              <>
+                {/* تدرج يُدمج السكاي لاين مع السماء من الأسفل */}
+                <LinearGradient
+                  colors={fadeColors}
+                  style={[s.skylineFade, { height: skylineFadeH }]}
+                  start={{ x: 0, y: 1 }}
+                  end={{ x: 0, y: 0 }}
+                />
+                {/* تدرج علوي يُدمج السكاي لاين مع السماء من الأعلى */}
+                <LinearGradient
+                  colors={[withAlpha(skyColors[0], '00'), skyColors[0]]}
+                  style={[s.skylineTopFade, { height: skylineHeight * (isLandscape ? 0.35 : 0.22) }]}
+                  start={{ x: 0, y: 1 }}
+                  end={{ x: 0, y: 0 }}
+                />
+              </>
+            )}
+          </View>
+        </SkylineBoundary>
       ) : null}
     </View>
   );

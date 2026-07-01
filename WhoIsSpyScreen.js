@@ -369,6 +369,20 @@ function pickWord(categoryId) {
   return cat.words[Math.floor(Math.random() * cat.words.length)];
 }
 
+// خيارات تخمين الكاذب — متقاربة دلالياً: الصحيحة + كلمة الكاذب (fake) + مشتتان من الفئة
+function makeCloseOptions(commonWord, categoryId) {
+  const cat = CATEGORIES.find(c => c.id === categoryId);
+  if (!cat) return [commonWord];
+  const pair = cat.words.find(w => w.common === commonWord);
+  const closeFake = pair?.fake;
+  const others = cat.words
+    .map(w => w.common)
+    .filter(w => w !== commonWord && w !== closeFake);
+  const extra = shuffle(others).slice(0, closeFake ? 2 : 3);
+  const opts = [commonWord, ...(closeFake ? [closeFake] : []), ...extra];
+  return shuffle([...new Set(opts)]).slice(0, 4);
+}
+
 function genRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -640,13 +654,7 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
 
   // ── بناء خيارات تخمين الكاذب ────────────────────────
   const buildGuessOptions = useCallback((word, catId) => {
-    const cat = CATEGORIES.find(c => c.id === catId);
-    if (!cat) return [word];
-    const others = cat.words
-      .map(w => w.common)
-      .filter(w => w !== word);
-    const distractors = shuffle(others).slice(0, 3);
-    return shuffle([word, ...distractors]);
+    return makeCloseOptions(word, catId);
   }, []);
 
   // ── مؤقت التصويت ────────────────────────────────────
@@ -854,21 +862,16 @@ function LocalPlayPhase({ theme, players, initialScores, totalRounds, initialCat
 
           {/* بطاقة السؤال */}
           <View style={[s.revealCard, { backgroundColor: theme.bgCard, borderColor: ACCENT_B, width: '88%' }]}>
-            {/* السائل */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Text style={{ fontSize: 20 }}>🎤</Text>
-              <Text style={[s.revealInstruction, { color: theme.textMuted, flex: 1 }]}>السائل</Text>
-              <Text style={[s.revealPlayerName, { color: ACCENT }]}>{questionerName}</Text>
-            </View>
-
-            {/* السهم */}
-            <Text style={{ fontSize: 22, textAlign: 'center', marginVertical: 4 }}>↓</Text>
-
-            {/* المستهدف */}
-            <View style={[{ backgroundColor: ACCENT_S, borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: ACCENT_B }]}>
-              <Text style={[s.revealInstruction, { color: theme.textMuted }]}>اسألوه: كيف تصف الكلمة؟</Text>
-              <Text style={[s.revealPlayerName, { color: ACCENT, fontSize: 22, marginTop: 4 }]}>{targetName}</Text>
-            </View>
+            <Text style={{ fontSize: 28, textAlign: 'center', marginBottom: 10 }}>🎤</Text>
+            {/* جملة واضحة: فلان يسأل فلان */}
+            <Text style={[s.discussLine, { color: theme.textPrimary }]}>
+              <Text style={{ color: ACCENT, fontWeight: '900' }}>{questionerName}</Text>
+              <Text style={{ color: theme.textMuted, fontWeight: '700' }}>{'  يسأل  '}</Text>
+              <Text style={{ color: ACCENT, fontWeight: '900' }}>{targetName}</Text>
+            </Text>
+            <Text style={[s.discussHint, { color: theme.textMuted }]}>
+              صِف الكلمة دون أن تكشفها مباشرة
+            </Text>
           </View>
 
           <ThemedButton
@@ -1227,10 +1230,7 @@ function OnlineLobbyPhase({ theme, currentUser, onBack, onHeartSpent }) {
       wordPair: word,
       lyingUid,
       votes:    {},
-      guessOptions: shuffle([
-        word.common,
-        ...shuffle(CATEGORIES.find(c => c.id === catId)?.words.map(w => w.common).filter(w => w !== word.common) || []).slice(0, 3),
-      ]),
+      guessOptions: makeCloseOptions(word.common, catId),
     });
   }, [roomData, roomCode]);
 
@@ -1546,10 +1546,7 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
       liarCaught:     false,
       liarGuess:      null,
       liarGuessedRight: false,
-      guessOptions: shuffle([
-        word.common,
-        ...shuffle(CATEGORIES.find(c => c.id === catId)?.words.map(w => w.common).filter(w => w !== word.common) || []).slice(0, 3),
-      ]),
+      guessOptions: makeCloseOptions(word.common, catId),
     });
     setMyVote(null);
     setVoted(false);
@@ -1623,16 +1620,21 @@ function OnlinePlayPhase({ theme, roomCode, roomData: initialData, myUid, myName
             </View>
           )}
 
-          {/* تعليمات النقاش */}
+          {/* تعليمات النقاش — كل لاعب يسأل التالي */}
           <View style={[s.instructBox, { backgroundColor: theme.bgCard, borderColor: ACCENT_B, margin: 16 }]}>
             <Text style={[s.instructTitle, { color: ACCENT }]}>🎙️ ترتيب النقاش</Text>
-            {playerNames.map((name, i) => (
-              <Text key={name} style={[s.instructText, { color: theme.textSecondary }]}>
-                {i + 1}. {name} — اسألوه: كيف تصف الكلمة؟
-              </Text>
-            ))}
+            {playerNames.map((name, i) => {
+              const target = playerNames[(i + 1) % playerNames.length];
+              return (
+                <Text key={name} style={[s.instructText, { color: theme.textSecondary }]}>
+                  <Text style={{ color: ACCENT, fontWeight: '800' }}>{name}</Text>
+                  {' يسأل '}
+                  <Text style={{ color: ACCENT, fontWeight: '800' }}>{target}</Text>
+                </Text>
+              );
+            })}
             <Text style={[s.instructText, { color: theme.textMuted, marginTop: 8 }]}>
-              بعد النقاش يبدأ المضيف التصويت
+              كلٌّ يصف الكلمة دون كشفها — ثم يبدأ المضيف التصويت
             </Text>
           </View>
 
@@ -1936,6 +1938,10 @@ const s = StyleSheet.create({
   revealCard:        { width: '100%', borderRadius: 20, borderWidth: 1.5, padding: 24, alignItems: 'center', gap: 10 },
   revealPlayerName:  { fontSize: 22, fontWeight: '900' },
   revealInstruction: { fontSize: 14, textAlign: 'center' },
+  discussLine:       { fontSize: 22, fontWeight: '800', textAlign: 'center', lineHeight: 34 },
+  discussHint:       { fontSize: 13, textAlign: 'center', marginTop: 10 },
+  progressTrack:     { height: 6, borderRadius: 3, overflow: 'hidden', width: '100%' },
+  progressFill:      { height: 6, borderRadius: 3 },
   wordRevealBox:     { alignItems: 'center', gap: 8 },
   wordRevealLabel:   { fontSize: 12, fontWeight: '600' },
   wordRevealValue:   { fontSize: 36, fontWeight: '900' },

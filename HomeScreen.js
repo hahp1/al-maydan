@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated } from 'react-native';
-import { ThemedCard } from './ThemedComponents';
+import { ThemedCard, ThemedChip } from './ThemedComponents';
 import DailyRewardModal from './DailyRewardModal';
 import { checkDailyReward, claimDailyReward } from './DailyRewardService';
 import { useLanguage } from './I18n';
@@ -95,23 +95,24 @@ function HeartsWidget({ hearts, countdown, onPress, theme }) {
   }, [hearts]);
 
   const heartColor = hearts > 0 ? theme.accent : theme.textMuted;
-  const bgColor    = hearts > 0 ? theme.accentSoft : theme.bgElevated;
 
   return (
-    <TouchableOpacity
+    <ThemedChip
       onPress={onPress}
-      activeOpacity={0.75}
+      variant="heart"
+      colorOverride={heartColor}
+      radius={14}
       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-      style={[styles.topBarChip, { backgroundColor: bgColor, borderColor: heartColor + '55' }]}
+      style={styles.chipLayout}
     >
       <Animated.View style={{ transform: [{ scale: pulseHeart }] }}>
         <HeartIcon size={20} filled={hearts > 0} hearts={hearts} pulseWhenZero glow={false} />
       </Animated.View>
-      <Text style={[styles.chipText, { color: heartColor }]}>{hearts}</Text>
+      <Text style={[styles.chipText, { color: heartColor, zIndex: 5 }]}>{hearts}</Text>
       {countdown && hearts === 0 && (
-        <Text style={[styles.chipSub, { color: theme.textMuted }]}>{countdown}</Text>
+        <Text style={[styles.chipSub, { color: theme.textMuted, zIndex: 5 }]}>{countdown}</Text>
       )}
-    </TouchableOpacity>
+    </ThemedChip>
   );
 }
 
@@ -125,21 +126,23 @@ function ProfileChip({ user, theme, onPress }) {
   const displayName = isGuest ? guestId : (user?.name || user?.email?.split('@')[0] || 'Player');
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={[
-      styles.profileChip,
-      { backgroundColor: theme.bgElevated, borderColor: theme.borderCard },
-    ]}>
-      <Text style={[styles.profileChipIcon, { color: theme.accent }]}>
+    <ThemedChip
+      onPress={onPress}
+      variant="muted"
+      radius={14}
+      style={styles.profileChipLayout}
+    >
+      <Text style={[styles.profileChipIcon, { color: theme.accent, zIndex: 5 }]}>
         {isGuest ? '👤' : '⚡'}
       </Text>
       <Text
-        style={[styles.profileChipName, { color: theme.textPrimary }]}
+        style={[styles.profileChipName, { color: theme.textPrimary, zIndex: 5 }]}
         numberOfLines={1}
         ellipsizeMode="tail"
       >
         {displayName}
       </Text>
-    </TouchableOpacity>
+    </ThemedChip>
   );
 }
 
@@ -259,18 +262,16 @@ export default function HomeScreen({
         {/* يمين: القلوب + التوكنز */}
         <View style={styles.topRight}>
           <HeartsWidget hearts={hearts ?? 0} countdown={countdown} onPress={onOpenHeartsModal} theme={theme} />
-          <TouchableOpacity
+          <ThemedChip
             onPress={openTokenModal}
-            activeOpacity={0.75}
+            variant="accent"
+            radius={14}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            style={[styles.topBarChip, {
-              borderColor: theme.accentBorder,
-              backgroundColor: theme.accentSoft,
-            }]}
+            style={styles.chipLayout}
           >
-            <Text style={[styles.chipText, { color: theme.accent }]}>🪙</Text>
-            <Text style={[styles.chipText, { color: theme.accent }]}>{tokens}</Text>
-          </TouchableOpacity>
+            <Text style={[styles.chipText, { color: theme.accent, zIndex: 5 }]}>🪙</Text>
+            <Text style={[styles.chipText, { color: theme.accent, zIndex: 5 }]}>{tokens}</Text>
+          </ThemedChip>
         </View>
       </Animated.View>
 
@@ -358,17 +359,15 @@ export default function HomeScreen({
       <Animated.View style={[styles.friendsWrap, { opacity: fadeAnim, gap: 10 }]}>
         {/* زر البطولة — يظهر فقط إذا كانت بطولة نشطة */}
         {activeTournament?.isActive && (
-          <TouchableOpacity
+          <ThemedChip
             onPress={() => setScreen('knowledge')}
-            activeOpacity={0.75}
-            style={[styles.tournamentBtn, {
-              backgroundColor: '#f59e0b0e',
-              borderColor: '#f59e0b55',
-            }]}
+            variant="tournament"
+            radius={16}
+            style={styles.tournamentLayout}
           >
-            <Text style={{ fontSize: 18 }}>🏆</Text>
-            <Text style={[styles.tournamentText, { color: '#f59e0b' }]}>{t('home.tournament') || 'البطولة الأسبوعية'}</Text>
-          </TouchableOpacity>
+            <Text style={{ fontSize: 18, zIndex: 5 }}>🏆</Text>
+            <Text style={[styles.tournamentText, { color: '#f59e0b', zIndex: 5 }]}>{t('home.tournament') || 'البطولة الأسبوعية'}</Text>
+          </ThemedChip>
         )}
 
         {/* ── BottomNav — مربعات بدون دائرة داخلية ── */}
@@ -461,6 +460,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: TOP_BAR_H,
   },
+  // تخطيط chip للـ ThemedChip (بلا حد/خلفية — يتولاها ThemedChip)
+  chipLayout:      {
+    gap: 5,
+    paddingHorizontal: 12,
+    height: TOP_BAR_H,
+  },
   chipText:        { fontSize: 15, fontWeight: '800' },
   chipSub:         { fontSize: 9, marginLeft: 2 },
 
@@ -473,6 +478,13 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     borderRadius: 14,
     borderWidth: 1,
+    height: TOP_BAR_H,
+    maxWidth: 150,
+  },
+  // تخطيط ProfileChip للـ ThemedChip
+  profileChipLayout: {
+    gap: 6,
+    paddingHorizontal: 12,
     height: TOP_BAR_H,
     maxWidth: 150,
   },
@@ -551,6 +563,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 4,
+  },
+  // تخطيط البطولة للـ ThemedChip (بلا حد/خلفية)
+  tournamentLayout: {
+    gap: 8,
+    paddingVertical: 14,
+    width: '100%',
   },
   tournamentText:  { fontSize: 17, fontWeight: '800' },
 

@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { BackHandler, Alert, View, ActivityIndicator, Modal, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { BackHandler, Alert, View, ActivityIndicator, Modal, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCachedCategories } from './UseCachedCategories';
 import { auth } from './firebaseConfig';
@@ -74,6 +74,7 @@ const GuessImageScreen  = lazy(() => import('./GuessImageScreen'));
 import { loadHearts, spendHeart } from './HeartsService';
 import HeartsModal from './HeartsModal';
 import TokenModal from './TokenModal';
+import * as Clipboard from 'expo-clipboard';
 
 // ── البطولة ──
 import { getActiveTournament, addTournamentScore, autoCreateNextTournament } from './TournamentService';
@@ -184,7 +185,58 @@ const exitStyles = StyleSheet.create({
   msg:     { fontSize: 14, textAlign: 'center', lineHeight: 22 },
   btns:    { flexDirection: 'row', gap: 12, marginTop: 8, width: '100%' },
   btn:     { flex: 1 },
+  code:    { fontSize: 30, fontWeight: '900', letterSpacing: 6, marginVertical: 6 },
 });
+
+// ══════════════════════════════════════════════════════════════
+//  LeaveGameModal — مغادرة اللعبة (بالثيم، يستبدل Alert الأبيض)
+// ══════════════════════════════════════════════════════════════
+function LeaveGameModal({ visible, onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  if (!visible) return null;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
+      <View style={exitStyles.overlay}>
+        <View style={[exitStyles.box, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+          <Text style={[exitStyles.title, { color: theme.accent }]}>{tStatic('common.leave')}</Text>
+          <Text style={[exitStyles.msg, { color: theme.textMuted }]}>
+            {tStatic('leave.message') || 'هل تريد مغادرة اللعبة؟'}
+          </Text>
+          <View style={exitStyles.btns}>
+            <ThemedButton onPress={onCancel}  label={tStatic('common.cancel')} variant="ghost"  size="medium" style={exitStyles.btn} />
+            <ThemedButton onPress={onConfirm} label={tStatic('common.leave')}  variant="danger" size="medium" style={exitStyles.btn} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+//  JoinRoomModal — يظهر عند فتح رابط دعوة (deep link)
+// ══════════════════════════════════════════════════════════════
+function JoinRoomModal({ visible, code, onJoin, onDismiss }) {
+  const { theme } = useTheme();
+  if (!visible || !code) return null;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onDismiss} statusBarTranslucent>
+      <View style={exitStyles.overlay}>
+        <View style={[exitStyles.box, { backgroundColor: theme.bgCard, borderColor: theme.borderCard }]}>
+          <Text style={exitStyles.emoji}>🎮</Text>
+          <Text style={[exitStyles.title, { color: theme.accent }]}>{tStatic('join.title')}</Text>
+          <Text style={[exitStyles.msg, { color: theme.textMuted }]}>
+            {tStatic('join.message')}
+          </Text>
+          <Text style={[exitStyles.code, { color: theme.textPrimary }]}>{code}</Text>
+          <View style={exitStyles.btns}>
+            <ThemedButton onPress={onDismiss} label={tStatic('common.cancel')} variant="ghost"   size="medium" style={exitStyles.btn} />
+            <ThemedButton onPress={onJoin}    label={tStatic('join.confirm')}  variant="primary" size="medium" style={exitStyles.btn} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
 const nhStyles = StyleSheet.create({
   overlay:    { flex: 1, backgroundColor: '#00000099', justifyContent: 'center', alignItems: 'center', padding: 32 },
@@ -255,6 +307,8 @@ function MainApp() {
   const [noHeartsVisible, setNoHeartsVisible] = useState(false);
   const [noHeartsCost,    setNoHeartsCost]    = useState(1);
   const [exitVisible,     setExitVisible]     = useState(false);
+  const [leaveVisible,    setLeaveVisible]    = useState(false);
+  const [pendingJoin,     setPendingJoin]     = useState(null); // { code } من رابط الدعوة
 
   const activeTournamentRef = useRef(null);
   const userRef             = useRef(null);
@@ -484,10 +538,7 @@ function MainApp() {
     const handler = BackHandler.addEventListener('hardwareBackPress', () => {
       if (authStatus !== AUTH_STATUS.AUTHENTICATED) return false;
       if (GAME_SCREENS.includes(screen)) {
-        Alert.alert(tStatic('common.leave'), tStatic('leave.message'), [
-          { text: tStatic('common.cancel'), style: 'cancel' },
-          { text: tStatic('common.leave'), style: 'destructive', onPress: () => setScreen('games') },
-        ]);
+        setLeaveVisible(true);
         return true;
       }
       if (['games','knowledge','friends','settings','profile'].includes(screen)) {
@@ -501,6 +552,37 @@ function MainApp() {
     });
     return () => handler.remove();
   }, [screen, authStatus]);
+
+  // ── معالج روابط الدعوة (App Links / scheme) ──
+  // يقبل: https://playarnex.com/join/CODE  و  arena://join/CODE
+  useEffect(() => {
+    const extractCode = (url) => {
+      if (!url) return null;
+      // أمثلة: https://playarnex.com/join/KMNSQ  |  arena://join/KMNSQ  |  ...#KMNSQ
+      const m = url.match(/(?:join\/|#)([A-Za-z0-9]{4,8})/);
+      return m ? m[1].toUpperCase() : null;
+    };
+    const handleUrl = (url) => {
+      const code = extractCode(url);
+      if (code) setPendingJoin({ code });
+    };
+    // رابط فتح التطبيق من حالة مغلقة
+    Linking.getInitialURL().then(handleUrl).catch(() => {});
+    // روابط أثناء عمل التطبيق
+    const sub = Linking.addEventListener('url', (e) => handleUrl(e?.url));
+    return () => { try { sub.remove(); } catch (_) {} };
+  }, []);
+
+  // عند قبول الدعوة: انسخ الكود وادخل ميدان الألعاب أونلاين
+  const acceptJoin = useCallback((code) => {
+    setPendingJoin(null);
+    if (!code) return;
+    setGameMode('online');
+    setOnlineRoomMode('select');
+    setScreen('games');
+    // الكود متاح للّعبة عبر الحافظة + يمكن لصقه في حقل الانضمام
+    try { Clipboard.setStringAsync(code); } catch (_) {}
+  }, []);
 
   // ── LOADING ──
   if (authStatus === AUTH_STATUS.LOADING) {
@@ -543,6 +625,17 @@ function MainApp() {
         visible={exitVisible}
         onCancel={() => setExitVisible(false)}
         onConfirm={() => { setExitVisible(false); BackHandler.exitApp(); }}
+      />
+      <LeaveGameModal
+        visible={leaveVisible}
+        onCancel={() => setLeaveVisible(false)}
+        onConfirm={() => { setLeaveVisible(false); setScreen('games'); }}
+      />
+      <JoinRoomModal
+        visible={!!pendingJoin}
+        code={pendingJoin?.code}
+        onJoin={() => acceptJoin(pendingJoin?.code)}
+        onDismiss={() => setPendingJoin(null)}
       />
       <HeartsModal
         visible={showHeartsModal}

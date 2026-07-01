@@ -512,6 +512,93 @@ export const ThemedInput = memo(function ThemedInput({ style, inputStyle, label,
 });
 
 // ════════════════════════════════════════════════════════════════
+//  ThemedChip — صفّ أفقي موحّد (topBar chips, البطولة, أي زر صفّي)
+// ────────────────────────────────────────────────────────────────
+//  لماذا مكوّن منفصل عن ThemedPill؟
+//   • يدعم flexDirection:'row' أصيلاً: المحتوى يوضع مباشرة داخل الـ
+//     LinearGradient (الذي هو صف)، وطبقة الكريستال مطلقة فوقه فلا
+//     تكسر الصف (عيب ThemedCard المعروف مع row).
+//   • يقبل height ثابتاً (للارتفاع الموحّد TOP_BAR_H في الـ topBar).
+//   • مصدر واحد لتطبيق الثيم → يستحيل أن "يُنسى" عنصر بلا كريستال.
+//
+//  variant: 'default' | 'accent' | 'heart' | 'tournament' | 'muted'
+//  لون النص/الحد يُحسب من الثيم؛ مرّر colorOverride للحالات الخاصة
+//  (مثل القلوب التي تتغيّر حسب العدد، أو البطولة الذهبية الثابتة).
+// ════════════════════════════════════════════════════════════════
+export const ThemedChip = memo(function ThemedChip({
+  children, onPress, style,
+  variant = 'default',
+  radius = 14,
+  colorOverride,            // يتجاوز لون الحد/التوهّج (للقلوب/البطولة)
+  activeOpacity = 0.75,
+  hitSlop,
+  disabled = false,
+}) {
+  const { theme } = useTheme();
+
+  // اللون الأساسي للحد والخلفية حسب الـ variant
+  const baseColor =
+    colorOverride                  ? colorOverride :
+    variant === 'accent'           ? theme.accent  :
+    variant === 'tournament'       ? '#f59e0b'     :
+    variant === 'muted'            ? theme.textMuted :
+                                     theme.accent;
+
+  // خلفية/حدّ غير الكريستال
+  const solidBg =
+    variant === 'accent'     ? theme.accentSoft :
+    variant === 'muted'      ? theme.bgElevated :
+    variant === 'tournament' ? hexToRgba(baseColor, 0.06) :
+                               theme.bgElevated;
+  const solidBorder =
+    variant === 'muted'      ? theme.borderCard :
+                               hexToRgba(baseColor, theme.isLight ? 0.34 : 0.34);
+
+  const inner = (
+    <LinearGradient
+      colors={theme.isCrystal ? ['transparent', 'transparent'] :
+              theme.isMist    ? [theme.bgElevated, theme.bgCard] :
+              [solidBg, solidBg]}
+      start={{x:0, y:0}} end={{x:0.8, y:1}}
+      style={[cs.chip, {
+        borderRadius: radius,
+        borderWidth: theme.isCrystal ? 0 : 1,
+        borderColor: theme.isCrystal ? 'transparent' : solidBorder,
+        shadowColor: baseColor,
+        shadowOffset: {width:0, height:0},
+        shadowOpacity: theme.isCrystal ? 0 : (theme.isNeon ? 0.18 : 0.08),
+        shadowRadius: 6,
+      }, style]}
+    >
+      {theme.isCrystal && (
+        <View pointerEvents="none" style={cs.themeLayer}>
+          <CrystalSurface theme={theme} radius={radius} tier="mini" />
+        </View>
+      )}
+      {theme.isMist && (
+        <View pointerEvents="none" style={[cs.sheen, {zIndex:0, borderRadius:radius,
+          backgroundColor: theme.isLight ? 'rgba(255,255,255,0.55)' : hexToRgba(theme.accent, 0.10)}]}/>
+      )}
+      {children}
+    </LinearGradient>
+  );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity
+        onPress={disabled ? undefined : onPress}
+        activeOpacity={activeOpacity}
+        hitSlop={hitSlop}
+        disabled={disabled}
+      >
+        {inner}
+      </TouchableOpacity>
+    );
+  }
+  return inner;
+});
+
+// ════════════════════════════════════════════════════════════════
 //  styles مشتركة
 // ════════════════════════════════════════════════════════════════
 const cs = StyleSheet.create({
@@ -524,6 +611,7 @@ const cs = StyleSheet.create({
   fillInner: { flex:1, width:'100%', height:'100%', alignSelf:'stretch' },
   fillChild: { flex:1, width:'100%' },
   pill:      { overflow:'hidden', position:'relative', flexDirection:'row', alignItems:'center' },
+  chip:      { overflow:'hidden', position:'relative', flexDirection:'row', alignItems:'center', justifyContent:'center' },
   overlay:   { flex:1, alignItems:'center', justifyContent:'center', padding:24 },
   modalCard: { width:'100%', overflow:'hidden', position:'relative' },
   modalTitle:{ fontSize:20, fontWeight:'900', textAlign:'center' },
@@ -533,4 +621,4 @@ const cs = StyleSheet.create({
 });
 
 // default export للتوافق
-export default { ThemedButton, ThemedCard, ThemedPill, ThemedModal, ThemedRow, ThemedInput };
+export default { ThemedButton, ThemedCard, ThemedPill, ThemedChip, ThemedModal, ThemedRow, ThemedInput };

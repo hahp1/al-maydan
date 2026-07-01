@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
-  StatusBar, Alert, Image
+  StatusBar, Alert, Image, useWindowDimensions
 } from 'react-native';
 import { useOnlineGame } from './useOnlineGame';
 import { useTheme } from './ThemeContext';
@@ -93,6 +93,11 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
   const { theme, themeId } = useTheme();
   const { lang } = useLanguage();
   const isRTL = lang === 'ar';
+  const { width: winW, height: winH } = useWindowDimensions();
+
+  // حجم اللوح: أكبر مربع يتسع للشاشة (يأخذ بالحسبان الأشرطة العلوية)
+  const boardSize = Math.min(winW - 32, winH - 220, 560);
+  const cellSize  = Math.floor((boardSize - 2 * 12) / 3); // 12 = الفجوة بين الخلايا
 
   // ── اختيار الوضع قبل البدء ──
   const [selectedMode,  setSelectedMode]  = useState(null);
@@ -407,7 +412,7 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
       <XOEngraving theme={theme} />
       <StatusBar barStyle={theme.statusBar} />
 
-      {/* ── TopBar: زر خروج + بروفايل الخصم ── */}
+      {/* ── TopBar: زر خروج + رمز اللاعب (بدون أسماء) ── */}
       <View style={s.topBar}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <ExitButton onPress={handleQuit} />
@@ -422,28 +427,14 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
           />
         </View>
 
-        <View style={[s.opponentBar, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
-          <View style={s.avatarWrap}>
-            {opponentPhoto ? (
-              <Image source={{ uri: opponentPhoto }} style={s.avatar} onError={(e) => e.target.setNativeProps({ src: [] })} />
-            ) : (
-              <View style={[s.avatarFallback, { backgroundColor: theme.bgElevated }]}>
-                <Text style={{ fontSize: 16 }}>
-                  {isVsBot ? '🤖' : (isWaiting ? '?' : opponentName.charAt(0))}
-                </Text>
-              </View>
-            )}
-            <View style={s.onlineDot} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[s.opponentName, { color: theme.textPrimary }]} numberOfLines={1}>
-              {isWaiting ? 'بانتظار خصم...' : opponentName}
-            </Text>
-            <Text style={[s.opponentSub, { color: theme.textSecondary }]}>
-              {isVsBot ? 'بوت' : 'متصل'}
-            </Text>
-          </View>
-          <Text style={{ fontSize: 20 }}>{mySymbol === 'X' ? '⭕' : '❌'}</Text>
+        <View style={{ flex: 1 }} />
+
+        {/* رمزي فقط — بلا أسماء */}
+        <View style={[s.symbolPill, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+          <Text style={[s.symbolPillText, { color: theme.textSecondary }]}>
+            {isRTL ? 'رمزك' : 'You'}
+          </Text>
+          <Text style={{ fontSize: 22 }}>{mySymbol === 'X' ? '❌' : '⭕'}</Text>
         </View>
       </View>
 
@@ -497,25 +488,28 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
       )}
 
       {/* ── اللوحة ── */}
-      <View style={s.board}>
-        {board.map((cell, index) => {
-          const isWinCell = winLine.includes(index);
-          return (
-            <ThemedCard
-              key={index}
-              onPress={() => handleMove(index)}
-              style={[
-                s.cell,
-                isWinCell && s.cellWin,
-              ]}
-              disabled={!!roundResult || isWaiting || matchOver}
-            >
-              <Text style={[s.cellText, { opacity: cell ? 1 : 0.04 }]}>
-                {cell === 'X' ? '❌' : '⭕'}
-              </Text>
-            </ThemedCard>
-          );
-        })}
+      <View style={[s.boardWrap, { marginTop: 8 }]}>
+        <View style={[s.board, { width: boardSize }]}>
+          {board.map((cell, index) => {
+            const isWinCell = winLine.includes(index);
+            return (
+              <ThemedCard
+                key={index}
+                onPress={() => handleMove(index)}
+                style={[
+                  s.cell,
+                  { width: cellSize, height: cellSize },
+                  isWinCell && s.cellWin,
+                ]}
+                disabled={!!roundResult || isWaiting || matchOver}
+              >
+                <Text style={[s.cellText, { fontSize: Math.floor(cellSize * 0.5), opacity: cell ? 1 : 0.04 }]}>
+                  {cell === 'X' ? '❌' : '⭕'}
+                </Text>
+              </ThemedCard>
+            );
+          })}
+        </View>
       </View>
 
       {/* ── رسالة انتظار الخصم ── */}
@@ -534,6 +528,10 @@ export default function XOGameScreen({ onBack, currentUser, onGameEnd, onGameRea
 //  XOLocalGame — اللعب على جهاز واحد (تبادل الجهاز كل دور)
 // ══════════════════════════════════════════════════════════
 function XOLocalGame({ theme, isRTL, onBack }) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  const boardSize = Math.min(winW - 32, winH - 260, 520);
+  const cellSize  = Math.floor((boardSize - 2 * 12) / 3);
+
   const [board, setBoard]       = useState(Array(9).fill(null));
   const [turn, setTurn]         = useState('X');          // X يبدأ
   const [scores, setScores]     = useState({ X: 0, O: 0 });
@@ -611,8 +609,8 @@ function XOLocalGame({ theme, isRTL, onBack }) {
       </View>
 
       {/* اللوح */}
-      <View style={s.localBoardWrap}>
-        <View style={s.board}>
+      <View style={s.boardWrap}>
+        <View style={[s.board, { width: boardSize }]}>
           {board.map((cell, i) => {
             const isWin = winLine.includes(i);
             return (
@@ -623,13 +621,14 @@ function XOLocalGame({ theme, isRTL, onBack }) {
                 disabled={!!cell || !!result}
                 style={[
                   s.cell,
+                  { width: cellSize, height: cellSize },
                   {
                     backgroundColor: isWin ? (theme.accentSoft || theme.accent + '22') : theme.bgCard,
                     borderColor: isWin ? theme.accent : theme.border,
                   },
                 ]}
               >
-                <Text style={[s.cellText, { opacity: cell ? 1 : 0.05 }]}>
+                <Text style={[s.cellText, { fontSize: Math.floor(cellSize * 0.5), opacity: cell ? 1 : 0.05 }]}>
                   {cell === 'X' ? '❌' : cell === 'O' ? '⭕' : '❌'}
                 </Text>
               </TouchableOpacity>
@@ -692,15 +691,18 @@ const s = StyleSheet.create({
   vsText:     { fontSize: 14, fontWeight: '700', marginBottom: 6 },
 
   // Board
+  boardWrap:  { alignItems: 'center', justifyContent: 'center' },
   localBoardWrap:  { width: '100%', maxWidth: 380, alignSelf: 'center', marginTop: 8 },
+  symbolPill: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, borderWidth: 1 },
+  symbolPillText: { fontSize: 12, fontWeight: '700' },
   localScorePill:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, borderWidth: 1 },
   localScoreText:  { fontSize: 15, fontWeight: '800' },
   localTurnWrap:   { alignItems: 'center', marginTop: 18, marginBottom: 6, gap: 4 },
   localTurnText:   { fontSize: 22, fontWeight: '900' },
   localRoundText:  { fontSize: 13, fontWeight: '600' },
   localBtnsRow:    { flexDirection: 'row', gap: 12, width: '100%', maxWidth: 380, alignSelf: 'center', marginTop: 8 },
-  board:      { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 12 },
-  cell:       { width: '31%', aspectRatio: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 1 },
+  board:      { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, marginBottom: 12 },
+  cell:       { borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   cellWin:    { borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.15)' },
   cellText:   { fontSize: 38 },
 

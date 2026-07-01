@@ -244,7 +244,10 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
   const rotate = tiltAnim.interpolate({ inputRange: [0, 1], outputRange: ['-5deg', '5deg'] });
 
   // ─── شريط تقدم اللعبة + زر خروج (مشترك في الأعلى) ─────────
-  const TopBar = ({ showProgress = true }) => (
+  // ملاحظة مهمة: لا نُعرّف TopBar كمكوّن (function) داخل جسم المكوّن الأب،
+  // لأن ذلك يُنشئ نوعاً جديداً في كل render فيُعيد React تركيبه (unmount/remount)
+  // ويسبب وميض المودال. بدلاً من ذلك نُرجع عنصراً (element) يُوفّق بالموضع.
+  const renderTopBar = (showProgress = true) => (
     <View style={styles.topBar}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
         <ExitButton
@@ -257,7 +260,7 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
           playerUid={`mana_${playerNames?.[0] || 'p0'}`}
           playerName={currentPlayerName || ''}
           gameType="man_ana"
-          getPublicData={() => ({ currentWord: word, turnIndex, currentPlayer: currentPlayerName })}
+          getPublicData={() => ({ currentWord: words[wordIndex] || '', turnIndex, currentPlayer: currentPlayerName })}
           themeName={themeId || 'dark'}
         />
       </View>
@@ -271,13 +274,16 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
           </View>
         </View>
       )}
-
-      <LeaveModal
-        visible={leaveVisible}
-        onCancel={() => setLeaveVisible(false)}
-        onConfirm={() => { setLeaveVisible(false); onBack(); }}
-      />
     </View>
+  );
+
+  // مودال المغادرة — يُركّب مرّة واحدة على مستوى الجذر (لا داخل TopBar)
+  const leaveModalEl = (
+    <LeaveModal
+      visible={leaveVisible}
+      onCancel={() => setLeaveVisible(false)}
+      onConfirm={() => { setLeaveVisible(false); onBack(); }}
+    />
   );
 
   // ══════════════════════════════════════════════════════════════
@@ -290,7 +296,8 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
     const medals = ['🥇','🥈','🥉'];
     return (
       <View style={[styles.screen, { backgroundColor: 'transparent' }]}>
-        <TopBar showProgress={false} />
+        {renderTopBar(false)}
+        {leaveModalEl}
         <ScrollView contentContainerStyle={styles.finishedContent}>
           <Text style={styles.trophyEmoji}>🏆</Text>
           <Text style={[styles.winnerName, { color: theme.accent }]}>{ranked[0].name}</Text>
@@ -326,7 +333,8 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
 
     return (
       <View style={[styles.screen, { backgroundColor: 'transparent' }]}>
-        <TopBar />
+        {renderTopBar()}
+        {leaveModalEl}
         <ScrollView contentContainerStyle={styles.betweenContent}>
           <Text style={styles.phoneEmoji}>📱</Text>
           <Text style={[styles.roundTitle, { color: theme.textPrimary }]}>
@@ -367,7 +375,8 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
   if (phase === 'countdown') {
     return (
       <View style={[styles.screen, { backgroundColor: 'transparent' }]}>
-        <TopBar />
+        {renderTopBar()}
+        {leaveModalEl}
         <View style={styles.centeredContent}>
           <Text style={[styles.countdownNumber, { color: theme.accent }]}>
             {revealCount > 0 ? revealCount : ''}
@@ -387,7 +396,8 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
     const isLast = turnIndex + 1 >= totalTurns;
     return (
       <View style={[styles.screen, { backgroundColor: 'transparent' }]}>
-        <TopBar />
+        {renderTopBar()}
+        {leaveModalEl}
         <View style={styles.centeredContent}>
           <Text style={styles.phoneEmoji}>⏱️</Text>
           <Text style={[styles.roundTitle, { color: theme.textPrimary }]}>
@@ -418,7 +428,8 @@ function PlayScreen({ playerCount, timeLimit, playerNames, onBack, theme, t, isG
 
   return (
     <View style={[styles.screen, { backgroundColor: 'transparent' }]}>
-      <TopBar />
+      {renderTopBar()}
+      {leaveModalEl}
 
       {/* شريط الوقت */}
       <View style={[styles.timerTrack, { backgroundColor: theme.border }]}>

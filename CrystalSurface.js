@@ -3,11 +3,22 @@
  * ════════════════════════════════════════════════════════════
  *  ترجمة أمينة لدالة drawSurface (canvas) إلى SVG ثابت.
  *
+ *  ★ إصلاح الاحتراق (v2):
+ *    أُعيد ضبط ميزانية الإضاءة لتطابق drawSurface في العرض الأولي:
+ *      1) النواة (core) صُغّرت من r=0.5 (نصف السطح) إلى نواة صغيرة
+ *         r≈0.30 وخُفّضت شفافيتها — كانت تغمر السطح بضباب أبيض.
+ *      2) ذروة الأوجه خُفّضت: 0.05+wl*0.20 → 0.04+wl*0.13 (مثل canvas
+ *         بعد ضرب pulse الذي يُبقي أغلب الأوجه خافتة).
+ *      3) الـ vignette قُوّي (0.55→0.66) ويُطبّق الآن على mini أيضاً
+ *         ليحتضن الأطراف ويمنع الانفجار الضوئي.
+ *      4) الانعكاس (refl) خُفّف 0.18→0.12 لتقليل البريق الأبيض العلوي.
+ *      5) الحدود تُرسم أخيراً فوق كل الطبقات (كما في canvas).
+ *
  *  نسختان عبر prop "tier":
  *   • tier="full" (افتراضي) — السطح الكامل بالأوجه الست + الحواف
  *       + التوهّج + الانعكاس + الحافة. للأزرار/البطاقات/المودالات الكبيرة.
- *   • tier="mini" — تدرّج زجاجي + توهّج خفيف + حافة لامعة فقط (بلا أوجه).
- *       للـ pills والصفوف والحقول الصغيرة حيث الأوجه لا تُرى ويزيد الحمل.
+ *   • tier="mini" — تدرّج زجاجي + توهّج خفيف + حافة لامعة + vignette فقط
+ *       (بلا أوجه). للـ pills والصفوف والحقول الصغيرة.
  *
  *  مبادئ الأداء:
  *   ✅ ثابت 100% — لا animation/canvas/WebView/rAF. يُحسب مرة واحدة.
@@ -47,6 +58,10 @@ function rgba(hex, a) {
 const CX = 50, CY = 50, FAR = 170;
 const LIGHT_DIR = -Math.PI * 0.25;
 
+// ── هندسة الأوجه الست — محسوبة مرة واحدة على مستوى الموديول ──
+// ملاحظة الإصلاح #2: في canvas كانت شدّة كل وجه = base * pulse، و pulse
+// متذبذب يُبقي أغلب الأوجه خافتة. في النسخة الثابتة نأخذ متوسطاً معتدلاً
+// (0.04 + wl*0.13) بدل الذروة (0.05 + wl*0.20) لتفادي إضاءة كل الأوجه دفعة.
 const FACETS = (() => {
   const out = [];
   for (let f = 0; f < 6; f++) {
@@ -64,7 +79,7 @@ const FACETS = (() => {
       points: `${CX},${CY} ${x1.toFixed(1)},${y1.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`,
       ex: x1.toFixed(1),
       ey: y1.toFixed(1),
-      fillOp: +(0.05 + wl * 0.20).toFixed(3),
+      fillOp: +(0.04 + wl * 0.13).toFixed(3),
     });
   }
   return out;
@@ -73,6 +88,9 @@ const FACETS = (() => {
 const EDGE_PATH = FACETS.map(f => `M${CX},${CY}L${f.ex},${f.ey}`).join('');
 
 function CrystalSurface({ theme, radius = 16, tier = 'full', style }) {
+  // ⚠️ الـ hooks يجب أن تُستدعى دائماً قبل أي return مشروط (قاعدة الـ Hooks)
+  const uid = useMemo(() => 'cs' + Math.random().toString(36).slice(2, 8), []);
+
   if (!theme?.isCrystal) return null;
 
   const accent = theme.accent      || '#94a3b8';
@@ -82,7 +100,6 @@ function CrystalSurface({ theme, radius = 16, tier = 'full', style }) {
   const c1     = theme.crystalC1    || '#0c1428';
   const light  = cLight;
 
-  const uid = useMemo(() => 'cs' + Math.random().toString(36).slice(2, 8), []);
   const isMini = tier === 'mini';
 
   return (
@@ -105,16 +122,19 @@ function CrystalSurface({ theme, radius = 16, tier = 'full', style }) {
           <Stop offset="1"   stopColor="#000000" />
         </RadialGradient>
 
-        <RadialGradient id={`core_${uid}`} cx="0.5" cy="0.5" r="0.5">
-          <Stop offset="0"   stopColor="#ffffff" stopOpacity={isMini ? '0.18' : '0.25'} />
-          <Stop offset="0.3" stopColor={rgba(light, 0.10)} />
+        {/* الإصلاح #1: النواة صغيرة (r=0.30) وخافتة بدل r=0.5 الغامرة.
+            في canvas كانت النواة بنصف قطر ≈ 0.06W فقط — هنا نُبقيها مركزية
+            صغيرة حتى لا تتحول إلى ضباب أبيض يغطي السطح. */}
+        <RadialGradient id={`core_${uid}`} cx="0.5" cy="0.5" r="0.30">
+          <Stop offset="0"   stopColor="#ffffff" stopOpacity={isMini ? '0.10' : '0.14'} />
+          <Stop offset="0.4" stopColor={rgba(light, 0.06)} />
           <Stop offset="1"   stopColor="#ffffff" stopOpacity="0" />
         </RadialGradient>
 
         <LinearGradient id={`bord_${uid}`} x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0"   stopColor="#ffffff" stopOpacity="0.5" />
-          <Stop offset="0.4" stopColor={rgba(light, 0.28)} />
-          <Stop offset="1"   stopColor="#000000" stopOpacity="0.25" />
+          <Stop offset="0"   stopColor="#ffffff" stopOpacity="0.45" />
+          <Stop offset="0.4" stopColor={rgba(light, 0.24)} />
+          <Stop offset="1"   stopColor="#000000" stopOpacity="0.28" />
         </LinearGradient>
 
         {!isMini && (
@@ -133,23 +153,26 @@ function CrystalSurface({ theme, radius = 16, tier = 'full', style }) {
         )}
         {!isMini && (
           <LinearGradient id={`refl_${uid}`} x1="0" y1="0" x2="0.55" y2="0.42">
-            <Stop offset="0"    stopColor="#ffffff" stopOpacity="0.18" />
-            <Stop offset="0.28" stopColor="#ffffff" stopOpacity="0.04" />
+            <Stop offset="0"    stopColor="#ffffff" stopOpacity="0.12" />
+            <Stop offset="0.28" stopColor="#ffffff" stopOpacity="0.03" />
             <Stop offset="1"    stopColor="#ffffff" stopOpacity="0" />
           </LinearGradient>
         )}
-        {!isMini && (
-          <RadialGradient id={`vig_${uid}`} cx="0.5" cy="0.5" r="0.75">
-            <Stop offset="0"    stopColor="#000000" stopOpacity="0" />
-            <Stop offset="0.55" stopColor="#000000" stopOpacity="0" />
-            <Stop offset="0.85" stopColor="#000000" stopOpacity="0.28" />
-            <Stop offset="1"    stopColor="#000000" stopOpacity="0.55" />
-          </RadialGradient>
-        )}
+
+        {/* الإصلاح #3: الـ vignette أقوى (0.66) ومتاح لكل الأحجام (mini أيضاً)
+            ليحتضن الأطراف. هذا ما يمنع الانفجار الضوئي في canvas. */}
+        <RadialGradient id={`vig_${uid}`} cx="0.5" cy="0.5" r="0.78">
+          <Stop offset="0"    stopColor="#000000" stopOpacity="0" />
+          <Stop offset="0.50" stopColor="#000000" stopOpacity="0" />
+          <Stop offset="0.82" stopColor="#000000" stopOpacity="0.30" />
+          <Stop offset="1"    stopColor="#000000" stopOpacity="0.66" />
+        </RadialGradient>
       </Defs>
 
+      {/* 1) خلفية غامقة */}
       <Rect x="0" y="0" width="100" height="100" rx={radius} ry={radius} fill={`url(#bg_${uid})`} />
 
+      {/* 2) الأوجه الست (full فقط) */}
       {!isMini && FACETS.map(f => (
         <Polygon
           key={'f' + f.key}
@@ -163,7 +186,7 @@ function CrystalSurface({ theme, radius = 16, tier = 'full', style }) {
         <Path
           d={EDGE_PATH}
           stroke={`url(#edge_${uid})`}
-          strokeOpacity="0.22"
+          strokeOpacity="0.20"
           strokeWidth="0.6"
           strokeLinecap="round"
           fill="none"
@@ -171,15 +194,18 @@ function CrystalSurface({ theme, radius = 16, tier = 'full', style }) {
         />
       )}
 
+      {/* 3) النواة الصغيرة */}
       <Rect x="0" y="0" width="100" height="100" rx={radius} ry={radius} fill={`url(#core_${uid})`} />
 
+      {/* 4) الانعكاس العلوي الخفيف (full فقط) */}
       {!isMini && (
         <Rect x="0" y="0" width="100" height="100" rx={radius} ry={radius} fill={`url(#refl_${uid})`} />
       )}
-      {!isMini && (
-        <Rect x="0" y="0" width="100" height="100" rx={radius} ry={radius} fill={`url(#vig_${uid})`} />
-      )}
 
+      {/* 5) الـ vignette — يحتضن الأطراف (كل الأحجام) */}
+      <Rect x="0" y="0" width="100" height="100" rx={radius} ry={radius} fill={`url(#vig_${uid})`} />
+
+      {/* 6) الحدود اللامعة — أخيراً فوق كل شيء (كما في canvas) */}
       <Rect
         x="0.8" y="0.8" width="98.4" height="98.4"
         rx={radius} ry={radius}
